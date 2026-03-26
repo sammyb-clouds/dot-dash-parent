@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Parent Dash">
+
+  <title>Dot Dash Parent</title>
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js"></script>
+
+  <style>
+    :root { --bg-color: #f2f2f7; --card-bg: #ffffff; --blue: #007aff; --text-main: #000000; --text-muted: #8e8e93; }
+    body { font-family: -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom) 16px; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+    h1 { font-size: 34px; font-weight: 700; margin: 20px 0 10px 0; letter-spacing: -0.5px; }
+    .section-title { font-size: 13px; text-transform: uppercase; color: var(--text-muted); margin: 20px 0 8px 16px; font-weight: 400; }
+    .card { background: var(--card-bg); border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+    .input-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 0.5px solid #c6c6c8; }
+    .input-row:last-child { border-bottom: none; }
+    .input-row label { width: 100px; font-size: 17px; }
+    .input-row input { flex: 1; border: none; font-size: 17px; outline: none; background: transparent; text-transform: uppercase; }
+    button { width: 100%; background: var(--card-bg); color: var(--blue); border: none; font-size: 17px; padding: 14px; text-align: center; border-bottom: 0.5px solid #c6c6c8; cursor: pointer; font-weight: 600; }
+    button:last-child { border-bottom: none; }
+    button:active { background: #e5e5ea; }
+    #status { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 20px; }
+    
+    /* Utility class to hide screens */
+    .hidden { display: none !important; }
+    
+    /* Setup Screen text */
+    p.instructions { color: var(--text-muted); font-size: 15px; line-height: 1.4; margin: 0 0 20px 0; }
+  </style>
+</head>
+<body>
+
+  <h1>Dot Dash</h1>
+  <div id="status">🔴 Disconnected</div>
+
+  <div id="view-setup" class="hidden">
+    <div class="section-title">Welcome</div>
+    <p class="instructions">Set up your parent identity to start messaging your child's device.</p>
+    
+    <div class="card">
+      <div class="input-row">
+        <label>Your ID</label>
+        <input type="text" id="setup-parent-id" placeholder="e.g. MOM0101">
+      </div>
+      <div class="input-row">
+        <label>Child ID</label>
+        <input type="text" id="setup-child-id" placeholder="e.g. ARTHUR0505">
+      </div>
+    </div>
+    <div class="card">
+      <button onclick="saveSetup()">Save & Connect</button>
+    </div>
+  </div>
+
+  <div id="view-main" class="hidden">
+    
+    <div class="section-title">Send Message</div>
+    <div class="card">
+      <div class="input-row">
+        <input type="text" id="message-text" placeholder="Type a message..." style="text-transform: none;">
+      </div>
+      <button onclick="sendText()">Send Text</button>
+    </div>
+
+    <div class="section-title">Quick Actions</div>
+    <div class="card">
+      <button onclick="sendPulse()">Send Pulse (Buzzer)</button>
+    </div>
+
+    <div class="section-title">Settings</div>
+    <div class="card">
+      <div class="input-row">
+        <label style="width: auto; flex: 1;">Sending as:</label>
+        <span id="display-parent-id" style="color: var(--text-muted);">...</span>
+      </div>
+      <div class="input-row">
+        <label style="width: auto; flex: 1;">Sending to:</label>
+        <span id="display-child-id" style="color: var(--text-muted);">...</span>
+      </div>
+      <button onclick="showSetup()" style="color: red;">Edit IDs</button>
+    </div>
+
+  </div>
+
+  <script>
+    // --- 1. Memory & UI Logic ---
+    let parentId = "";
+    let childId = "";
+
+    window.onload = function() {
+      // Check if IDs are already saved on the iPhone
+      parentId = localStorage.getItem("dotdash_parent");
+      childId = localStorage.getItem("dotdash_child");
+
+      if (parentId && childId) {
+        showMain();
+      } else {
+        showSetup();
+      }
+    };
+
+    function showSetup() {
+      document.getElementById('view-main').classList.add('hidden');
+      document.getElementById('view-setup').classList.remove('hidden');
+      
+      // Pre-fill inputs if editing existing settings
+      if (parentId) document.getElementById('setup-parent-id').value = parentId;
+      if (childId) document.getElementById('setup-child-id').value = childId;
+    }
+
+    function showMain() {
+      document.getElementById('view-setup').classList.add('hidden');
+      document.getElementById('view-main').classList.remove('hidden');
+      
+      // Update the settings display
+      document.getElementById('display-parent-id').innerText = parentId;
+      document.getElementById('display-child-id').innerText = childId;
+    }
+
+    function saveSetup() {
+      const pInput = document.getElementById('setup-parent-id').value.trim().toUpperCase();
+      const cInput = document.getElementById('setup-child-id').value.trim().toUpperCase();
+
+      if (!pInput || !cInput) {
+        alert("Please fill out both IDs.");
+        return;
+      }
+
+      // Save to device storage
+      localStorage.setItem("dotdash_parent", pInput);
+      localStorage.setItem("dotdash_child", cInput);
+      
+      parentId = pInput;
+      childId = cInput;
+      
+      showMain();
+    }
+
+    // --- 2. MQTT Configuration ---
+    const brokerUrl = 'wss://23a96ac625b148278417e7b320194976.s1.eu.hivemq.cloud:8884/mqtt';
+    const options = {
+      username: 'DigitalDoorbell',
+      password: 'Ringring1',
+      clientId: 'parent_web_' + Math.random().toString(16).substr(2, 8)
+    };
+
+    let client = mqtt.connect(brokerUrl, options);
+    const statusEl = document.getElementById('status');
+
+    client.on('connect', () => { statusEl.innerText = '🟢 Connected to HiveMQ'; });
+    client.on('error', (err) => { statusEl.innerText = '🔴 Connection Error'; console.error(err); });
+
+    // --- 3. Messaging Functions ---
+    function publishMessage(action, payload, retain = false) {
+      if (!parentId || !childId) {
+        alert("Please set up your IDs first.");
+        return;
+      }
+
+      const hashedId = sha256(childId.toLowerCase());
+      const topic = `doorbell/msg/${hashedId}`;
+      const messageString = `${action},${payload},${parentId}`;
+      
+      client.publish(topic, messageString, { qos: 1, retain: retain }, (err) => {
+        if (err) alert('Failed to send message');
+        else alert('Message Sent!');
+      });
+    }
+
+    function sendText() {
+      const text = document.getElementById('message-text').value.trim();
+      if (!text) return alert("Type a message first.");
+      publishMessage('TEXT', text, true);
+      document.getElementById('message-text').value = ''; 
+    }
+
+    function sendPulse() {
+      publishMessage('PULSE', '2000', false);
+    }
+  </script>
+</body>
+</html>
