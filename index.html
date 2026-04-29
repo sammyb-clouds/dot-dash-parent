@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -176,11 +177,11 @@
 
       return (
         <div className="flex flex-col h-screen overflow-hidden">
-          <div className="flex-1 overflow-y-auto pb-24 pt-12 px-4">
+          <div className="flex-1 flex flex-col pb-24 pt-12 px-4 overflow-hidden">
             {activeTab === 'chat' && <ChatView client={client} messages={messages} setMessages={setMessages} parentId={parentId} childId={childId} childOnline={childOnline} connectionStatus={connectionStatus} setActiveTab={setActiveTab} />}
-            {activeTab === 'setup' && <DeviceSetupView />}
-            {activeTab === 'tutorials' && <TutorialsView />}
-            {activeTab === 'settings' && <SettingsView parentId={parentId} setParentId={setParentId} childId={childId} setChildId={setChildId} />}
+            {activeTab === 'setup' && <div className="h-full overflow-y-auto pb-4"><DeviceSetupView /></div>}
+            {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
+            {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4"><SettingsView parentId={parentId} setParentId={setParentId} childId={childId} setChildId={setChildId} /></div>}
           </div>
           <div className="absolute bottom-0 w-full bg-[#f8f8f8]/90 backdrop-blur-md border-t border-gray-300 pb-8 pt-2 px-6 flex justify-between items-center h-24">
             <TabButton icon={<IconMessageCircle className="w-6 h-6"/>} label="Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
@@ -230,7 +231,7 @@
 
       return (
         <div className="flex flex-col h-full relative">
-          <div className="flex flex-col items-center mb-6">
+          <div className="flex flex-col items-center mb-6 shrink-0">
             <h1 className="text-2xl font-bold">{childId || 'Virtual Device'}</h1>
             <div className="flex items-center space-x-2 text-sm mt-1">
               <span className={`w-2.5 h-2.5 rounded-full ${childOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,89,0.8)]' : 'bg-gray-400'}`}></span>
@@ -238,7 +239,7 @@
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pb-32">
+          <div className="flex-1 overflow-y-auto space-y-4 pb-4">
             {messages.length === 0 && <p className="text-center text-gray-400 mt-10">No messages yet.</p>}
             {messages.map((msg) => (
               <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
@@ -253,7 +254,7 @@
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 bg-[#f2f2f7] pt-2">
+          <div className="shrink-0 bg-[#f2f2f7] pt-2">
             <div className="flex space-x-2 mb-3">
               <button onClick={() => handleSend('PULSE')} className="flex-1 bg-white shadow-sm py-2 rounded-xl text-blue-500 font-semibold flex items-center justify-center space-x-2 active:bg-gray-100">
                 <IconVolume2 className="w-5 h-5" /><span>Send Pulse</span>
