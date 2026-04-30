@@ -332,15 +332,25 @@
       return (
         <div className="space-y-6">
           <h1 className="text-3xl font-bold mb-2">Device Setup</h1>
+
+          <div className="bg-white p-6 rounded-3xl shadow-sm space-y-4 border border-gray-100">
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
+                 <IconActivity className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold">1. Enter Setup Mode</h2>
+            </div>
+            <p className="text-gray-500 leading-relaxed">Turn on your Dot Dash Device. Hold down both arcade buttons until the screen says "Release".</p>
+          </div>
           
           <div className="bg-white p-6 rounded-3xl shadow-sm space-y-4 border border-gray-100">
             <div className="flex items-center space-x-3 mb-2">
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
                  <IconWifi className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold">1. Connect to Wi-Fi</h2>
+              <h2 className="text-xl font-bold">2. Connect to Wi-Fi</h2>
             </div>
-            <p className="text-gray-500 leading-relaxed">Turn on your Dot Dash device. Then, go to your iPhone's Wi-Fi settings and connect to the network named <strong>Dot Dash Setup</strong>. If you don't see the network, turn your WiFI off and back on.</p>
+            <p className="text-gray-500 leading-relaxed">Go to your iPhone's Wi-Fi settings and connect to the network named <strong>Dot Dash Setup</strong>. If you don't see the network, turn your WiFI off and back on.</p>
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm space-y-4 border border-gray-100">
@@ -348,7 +358,7 @@
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
                  <IconBookOpen className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold">2. Follow the Portal</h2>
+              <h2 className="text-xl font-bold">3. Follow the Portal</h2>
             </div>
             <p className="text-gray-500 leading-relaxed">A setup screen should automatically pop up.</p>
           </div>
@@ -358,7 +368,7 @@
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
                  <IconSettings className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold">3. Setup Dot Dash</h2>
+              <h2 className="text-xl font-bold">4. Setup Dot Dash</h2>
             </div>
             <p className="text-gray-500 leading-relaxed">Follow the instructions to enter your home WiFi info, create your username and add friends.</p>
           </div>
@@ -368,7 +378,7 @@
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
                  <IconSend className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold">4. Send Messages!</h2>
+              <h2 className="text-xl font-bold">5. Send Messages!</h2>
             </div>
             <p className="text-gray-500 leading-relaxed">After completing the setup, your Dot Dash will restart and be ready to use!</p>
           </div>
@@ -376,9 +386,9 @@
           <div className="bg-white p-6 rounded-3xl shadow-sm space-y-4 border border-gray-100">
             <div className="flex items-center space-x-3 mb-2">
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
-                 <IconActivity className="w-6 h-6" />
+                 <IconCheckCircle2 className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold">5. Return to Setup</h2>
+              <h2 className="text-xl font-bold">6. Return to Setup</h2>
             </div>
             <p className="text-gray-500 leading-relaxed">You can always return to the setup mode by holding both arcade buttons for 3 seconds. Join the Dot Dash Setup WiFi network to add more friends and change your messages.</p>
           </div>
@@ -407,7 +417,8 @@
             "Dash: Long tap the front SELECT button.",
             "Commit Letter: Tap ENTER.",
             "Add Space: Tap ENTER alone.",
-            "Send Message: Long press ENTER."
+            "Send Message: Long press ENTER.",
+            "Delete: 8 dots and press ENTER"
           ]
         },
         { 
