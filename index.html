@@ -95,8 +95,21 @@
       const [children, setChildren] = useState([]);
       const [activeChild, setActiveChild] = useState('');
       
-      const [messages, setMessages] = useState([]);
+      // Load saved messages from the phone's storage on startup
+      const [messages, setMessages] = useState(() => {
+        try {
+          const saved = localStorage.getItem('dotdash_messages');
+          return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+          return [];
+        }
+      });
       const isAppActiveRef = useRef(true); 
+
+      // Save messages to the phone's storage whenever a new one is sent or received
+      useEffect(() => {
+        localStorage.setItem('dotdash_messages', JSON.stringify(messages));
+      }, [messages]);
       
       useEffect(() => {
         setParentId(localStorage.getItem('dotdash_parent') || '');
@@ -204,7 +217,15 @@
                   id: Date.now(), type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
                   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 };
-                setMessages(prev => [...prev, newMsg]);
+                
+                // Add the new message to state (and the useEffect will automatically back it up to localStorage)
+                setMessages(prev => {
+                  // Small check to prevent identical rapid-fire duplicate retained messages from messing up the chat view
+                  const isDuplicate = prev.length > 0 && prev[prev.length - 1].text === newMsg.text && prev[prev.length - 1].sender === newMsg.sender && (Date.now() - prev[prev.length - 1].id < 2000);
+                  if (isDuplicate) return prev;
+                  return [...prev, newMsg];
+                });
+
                 if (!isAppActiveRef.current) {
                    triggerNotification(`Dot Dash from ${newMsg.sender}`, newMsg.type === 'PULSE' ? 'Sent a Buzzer Pulse' : newMsg.text);
                 }
