@@ -85,12 +85,6 @@
       return window.sha256(message.toLowerCase().trim());
     }
 
-    // --- Morse Code Dictionary ---
-    const MORSE_DICT = {
-      'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.', 'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 'Y': '-.--', 'Z': '--..', '0': '-----', '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', '9': '----.', ' ': ' '
-    };
-    function textToMorse(text) { return text.toUpperCase().split('').map(char => MORSE_DICT[char] || '').join(' '); }
-
     function App() {
       const [activeTab, setActiveTab] = useState('chat');
       const [client, setClient] = useState(null);
@@ -258,12 +252,10 @@
 
       useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeMessages]);
 
-      const handleSend = async (type, payloadOverride = null) => {
+      const handleSend = async (type = 'MORSE') => {
         if (!client || !parentId || !activeChild) { alert("Please select a child or configure Settings."); setActiveTab('settings'); return; }
-        let payload = payloadOverride || inputText.trim();
-        if (!payload && type !== 'PULSE') return;
-        if (type === 'MORSE') payload = textToMorse(payload);
-        if (type === 'PULSE') payload = '2000'; 
+        let payload = inputText.trim();
+        if (!payload) return;
         
         const hashedChild = await hashId(activeChild);
         const topic = `doorbell/msg/${hashedChild}`;
@@ -271,7 +263,7 @@
         
         client.publish(topic, messageString, { qos: 1, retain: true });
         setMessages(prev => [...prev, {
-          id: Date.now(), type: type, text: type === 'PULSE' ? 'Sent Buzzer Pulse' : payload, sender: parentId, target: activeChild, isMe: true,
+          id: Date.now(), type: type, text: payload, sender: parentId, target: activeChild, isMe: true,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
         setInputText('');
@@ -316,8 +308,7 @@
               <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.isMe ? 'bg-blue-500 text-white' : 'bg-white text-black shadow-sm border border-gray-100'}`}>
                   {msg.type === 'PULSE' && <IconVolume2 className="inline mr-2 w-5 h-5" />}
-                  {msg.type === 'MORSE' && <span className="font-mono tracking-widest">{msg.text}</span>}
-                  {msg.type === 'TEXT' && <span>{msg.text}</span>}
+                  {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
                 </div>
                 <span className="text-xs text-gray-400 mt-1 px-1">{msg.timestamp}</span>
               </div>
@@ -326,17 +317,9 @@
           </div>
 
           <div className="shrink-0 bg-[#f2f2f7] pt-2 pb-2">
-            <div className="flex space-x-2 mb-3">
-              <button onClick={() => handleSend('PULSE')} className="flex-1 bg-white shadow-sm py-2 rounded-xl text-blue-500 font-semibold flex items-center justify-center space-x-2 border border-gray-100 active:bg-gray-50">
-                <IconVolume2 className="w-5 h-5" /><span>Send Pulse</span>
-              </button>
-              <button onClick={() => handleSend('MORSE')} disabled={!inputText} className="flex-1 bg-white shadow-sm py-2 rounded-xl text-blue-500 font-semibold flex items-center justify-center disabled:opacity-50 border border-gray-100 active:bg-gray-50">
-                <IconActivity className="w-5 h-5 mr-2" /><span>Send Morse</span>
-              </button>
-            </div>
             <div className="flex items-center space-x-2 bg-white rounded-full px-4 py-2 shadow-sm border border-gray-200">
-              <input type="text" placeholder="Text Message..." value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend('TEXT')} className="flex-1 outline-none bg-transparent py-1 text-lg" />
-              <button onClick={() => handleSend('TEXT')} disabled={!inputText} className="bg-blue-500 text-white p-2 rounded-full disabled:bg-blue-300 flex-shrink-0 transition-opacity">
+              <input type="text" placeholder="Text Message..." value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend('MORSE')} className="flex-1 outline-none bg-transparent py-1 text-lg" />
+              <button onClick={() => handleSend('MORSE')} disabled={!inputText} className="bg-blue-500 text-white p-2 rounded-full disabled:bg-blue-300 flex-shrink-0 transition-opacity">
                 <IconSend className="w-5 h-5 ml-0.5" />
               </button>
             </div>
