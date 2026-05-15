@@ -68,6 +68,7 @@
 
     // --- Inline SVG Icons ---
     const IconMessageCircle = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg>;
+    const IconShield = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
     const IconWifi = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>;
     const IconBookOpen = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
     const IconSettings = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
@@ -76,9 +77,8 @@
     const IconSend = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
     const IconPlus = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
     const IconTrash2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
-    const IconVideo = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>;
     const IconCheckCircle2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
-    const IconAlertCircle = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+    const IconArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
 
     // --- SHA256 Hashing Utility ---
     async function hashId(message) {
@@ -97,19 +97,18 @@
       
       // Load saved messages from the phone's storage on startup
       const [messages, setMessages] = useState(() => {
-        try {
-          const saved = localStorage.getItem('dotdash_messages');
-          return saved ? JSON.parse(saved) : [];
-        } catch (e) {
-          return [];
-        }
+        try { const saved = localStorage.getItem('dotdash_messages'); return saved ? JSON.parse(saved) : []; } catch (e) { return []; }
       });
+      // Load God Mode Monitor messages
+      const [monitorMessages, setMonitorMessages] = useState(() => {
+        try { const saved = localStorage.getItem('dotdash_monitor'); return saved ? JSON.parse(saved) : []; } catch (e) { return []; }
+      });
+      
       const isAppActiveRef = useRef(true); 
 
-      // Save messages to the phone's storage whenever a new one is sent or received
-      useEffect(() => {
-        localStorage.setItem('dotdash_messages', JSON.stringify(messages));
-      }, [messages]);
+      // Save messages to the phone's storage
+      useEffect(() => { localStorage.setItem('dotdash_messages', JSON.stringify(messages)); }, [messages]);
+      useEffect(() => { localStorage.setItem('dotdash_monitor', JSON.stringify(monitorMessages)); }, [monitorMessages]);
       
       useEffect(() => {
         setParentId(localStorage.getItem('dotdash_parent') || '');
@@ -133,52 +132,53 @@
           const brokerUrl = 'wss://23a96ac625b148278417e7b320194976.s1.eu.hivemq.cloud:8884/mqtt';
           const hashedParent = await hashId(parentId);
           
+          // Map hashes back to child names for easy routing
           const childHashMap = {};
+          const inboxTopics = {};
+          const monitorTopics = {};
+          
           for (const c of children) {
-            childHashMap[await hashId(c)] = c;
+            const hash = await hashId(c);
+            childHashMap[hash] = c;
+            inboxTopics[`doorbell/msg/${hash}`] = c;
+            monitorTopics[`doorbell/monitor/${hash}`] = c;
           }
 
           let isCanvasBlocked = false;
-          try {
-            const testWs = new WebSocket(brokerUrl);
-            testWs.close();
-          } catch (err) {
-            console.warn("WebSocket blocked by environment. Using Simulated Mode.");
-            isCanvasBlocked = true;
-          }
+          try { const testWs = new WebSocket(brokerUrl); testWs.close(); } 
+          catch (err) { isCanvasBlocked = true; }
 
           let mqttClient;
 
           if (isCanvasBlocked) {
+            // Simulated Client for Canvas Environment
             mqttClient = {
               handlers: {},
               on(event, handler) { if (!this.handlers[event]) this.handlers[event] = []; this.handlers[event].push(handler); },
               emit(event, ...args) { if (this.handlers[event]) this.handlers[event].forEach(h => h(...args)); },
-              subscribe() {}, publish(topic) {
-                const firstHashedChild = Object.keys(childHashMap)[0];
-                if (firstHashedChild && topic === `doorbell/msg/${firstHashedChild}`) {
-                  const targetName = childHashMap[firstHashedChild];
-                  setTimeout(() => { this.emit('message', `doorbell/msg/${hashedParent}`, `TEXT,Hello from ${targetName}!,${targetName}`); }, 1500);
-                }
-              }, end() {}
+              subscribe() {}, publish() {}, end() {}
             };
             setClient(mqttClient);
             setTimeout(() => { 
-              setConnectionStatus('Simulated'); 
-              mqttClient.emit('connect'); 
-              const firstHash = Object.keys(childHashMap)[0];
-              if(firstHash) mqttClient.emit('message', `doorbell/presence/${firstHash}`, "ONLINE"); 
+              setConnectionStatus('Simulated'); mqttClient.emit('connect'); 
             }, 800);
           } else {
+            // Real MQTT Client
             const options = { username: 'DigitalDoorbell', password: 'Ringring1', clientId: 'parent_ios_' + Math.random().toString(16).substr(2, 8) };
             mqttClient = window.mqtt.connect(brokerUrl, options);
             setClient(mqttClient);
 
             mqttClient.on('connect', () => {
               setConnectionStatus('Connected');
+              // Subscribe to Parent's Inbox
               mqttClient.subscribe(`doorbell/msg/${hashedParent}`, { qos: 1 });
+              mqttClient.subscribe(`doorbell/msg/${hashedParent}/#`, { qos: 1 });
+              
+              // Subscribe to Children's Presence, Inboxes, and Monitors
               Object.keys(childHashMap).forEach(hash => {
                  mqttClient.subscribe(`doorbell/presence/${hash}`);
+                 mqttClient.subscribe(`doorbell/msg/${hash}/#`, { qos: 1 }); // Intercept Incoming
+                 mqttClient.subscribe(`doorbell/monitor/${hash}/#`, { qos: 1 }); // Intercept Outgoing
               });
             });
             mqttClient.on('error', () => setConnectionStatus('Error'));
@@ -199,30 +199,36 @@
 
           mqttClient.on('message', (topic, message) => {
             const payload = message.toString();
-            
+            if (!payload) return;
+
+            // --- PRESENCE HANDLER ---
             if (topic.startsWith('doorbell/presence/')) {
                const incomingHash = topic.split('/').pop();
                const cId = childHashMap[incomingHash];
-               if (cId) {
-                  setChildOnlineStatus(prev => ({...prev, [cId]: payload === "ONLINE"}));
-               }
+               if (cId) setChildOnlineStatus(prev => ({...prev, [cId]: payload === "ONLINE"}));
+               return;
             }
 
-            if (topic === `doorbell/msg/${hashedParent}`) {
-              if (!payload) return;
-              if (!isCanvasBlocked) mqttClient.publish(topic, "", { retain: true });
+            // Extract topic components to handle timestamps appended by the queue
+            const topicParts = topic.split('/');
+            const baseTopic = topicParts.slice(0, 3).join('/');
+            
+            // Use the topic's timestamp as the definitive ID to prevent duplicates if the app restarts
+            let msgId = Date.now();
+            if (topicParts.length > 3) msgId = parseInt(topicParts[3]); 
+            
+            // --- 1. PARENT INBOX HANDLER (Direct Chat) ---
+            if (baseTopic === `doorbell/msg/${hashedParent}`) {
+              if (!isCanvasBlocked) mqttClient.publish(topic, "", { retain: true }); // Parent clears its own inbox
               const parts = payload.split(',');
               if (parts.length >= 3) {
                 const newMsg = {
-                  id: Date.now(), type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
-                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  id: msgId, type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
+                  timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 };
                 
-                // Add the new message to state (and the useEffect will automatically back it up to localStorage)
                 setMessages(prev => {
-                  // Small check to prevent identical rapid-fire duplicate retained messages from messing up the chat view
-                  const isDuplicate = prev.length > 0 && prev[prev.length - 1].text === newMsg.text && prev[prev.length - 1].sender === newMsg.sender && (Date.now() - prev[prev.length - 1].id < 2000);
-                  if (isDuplicate) return prev;
+                  if (prev.some(m => m.id === msgId)) return prev; // Bulletproof Queue Deduplication
                   return [...prev, newMsg];
                 });
 
@@ -230,7 +236,52 @@
                    triggerNotification(`Dot Dash from ${newMsg.sender}`, newMsg.type === 'PULSE' ? 'Sent a Buzzer Pulse' : newMsg.text);
                 }
               }
+              return;
             }
+
+            // --- 2. GOD MODE: MONITOR INCOMING (Someone sent message TO Child) ---
+            if (inboxTopics[baseTopic]) {
+              const targetChild = inboxTopics[baseTopic];
+              // IMPORTANT: Do NOT clear the retained message! The child's device still needs to download it when it wakes up.
+              const parts = payload.split(',');
+              if (parts.length >= 3) {
+                const senderId = parts[2];
+                if (senderId !== parentId) { // Ignore messages sent by Parent (already in Chat view)
+                  const newMonMsg = {
+                    id: msgId, type: parts[0], text: parts[1], direction: 'in', child: targetChild, otherParty: senderId,
+                    timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  };
+                  setMonitorMessages(prev => {
+                    if (prev.some(m => m.id === msgId)) return prev;
+                    return [...prev, newMonMsg];
+                  });
+                }
+              }
+              return;
+            }
+
+            // --- 3. GOD MODE: MONITOR OUTGOING (Message sent BY Child) ---
+            if (monitorTopics[baseTopic]) {
+              const sourceChild = monitorTopics[baseTopic];
+              // Safe to clear this topic because the Parent App is the sole consumer of the Monitor feed
+              if (!isCanvasBlocked) mqttClient.publish(topic, "", { retain: true }); 
+              
+              const parts = payload.split(',');
+              if (parts.length >= 3) {
+                const targetId = parts[2]; // Using the new 3rd parameter added to Arduino code
+                if (targetId !== parentId) { // Ignore messages sent to Parent (already in Chat view)
+                  const newMonMsg = {
+                    id: msgId, type: parts[0], text: parts[1], direction: 'out', child: sourceChild, otherParty: targetId,
+                    timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  };
+                  setMonitorMessages(prev => {
+                    if (prev.some(m => m.id === msgId)) return prev;
+                    return [...prev, newMonMsg];
+                  });
+                }
+              }
+            }
+            
           });
         };
 
@@ -245,16 +296,19 @@
             style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}
           >
             {activeTab === 'chat' && <ChatView client={client} messages={messages} setMessages={setMessages} parentId={parentId} children={children} activeChild={activeChild} setActiveChild={setActiveChild} childOnlineStatus={childOnlineStatus} connectionStatus={connectionStatus} setActiveTab={setActiveTab} />}
+            {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} children={children} activeChild={activeChild} setActiveChild={setActiveChild} setActiveTab={setActiveTab} />}
             {activeTab === 'setup' && <div className="h-full overflow-y-auto pb-4"><DeviceSetupView /></div>}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4"><SettingsView parentId={parentId} setParentId={setParentId} children={children} setChildren={setChildren} activeChild={activeChild} setActiveChild={setActiveChild} /></div>}
           </div>
 
+          {/* Bottom Tab Bar */}
           <div 
-            className="shrink-0 w-full bg-[#f8f8f8]/90 backdrop-blur-md border-t border-gray-300 pt-2 px-6 flex justify-between items-center"
+            className="shrink-0 w-full bg-[#f8f8f8]/90 backdrop-blur-md border-t border-gray-300 pt-2 px-4 flex justify-between items-center"
             style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
           >
             <TabButton icon={<IconMessageCircle className="w-6 h-6"/>} label="Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
+            <TabButton icon={<IconShield className="w-6 h-6"/>} label="Monitor" active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} />
             <TabButton icon={<IconWifi className="w-6 h-6"/>} label="Setup" active={activeTab === 'setup'} onClick={() => setActiveTab('setup')} />
             <TabButton icon={<IconBookOpen className="w-6 h-6"/>} label="Tutorials" active={activeTab === 'tutorials'} onClick={() => setActiveTab('tutorials')} />
             <TabButton icon={<IconSettings className="w-6 h-6"/>} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
@@ -263,13 +317,16 @@
       );
     }
 
+    // ==============================================
+    //               CHAT VIEW
+    // ==============================================
     function ChatView({ client, messages, setMessages, parentId, children, activeChild, setActiveChild, childOnlineStatus, connectionStatus, setActiveTab }) {
       const [inputText, setInputText] = useState('');
       const messagesEndRef = useRef(null);
 
       const activeMessages = messages.filter(m => 
         (m.isMe && m.target === activeChild) || (!m.isMe && m.sender === activeChild)
-      );
+      ).sort((a, b) => a.id - b.id); // Ensure chronological order
 
       useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeMessages]);
 
@@ -279,10 +336,14 @@
         if (!payload) return;
         
         const hashedChild = await hashId(activeChild);
-        const topic = `doorbell/msg/${hashedChild}`;
+        const baseTopic = `doorbell/msg/${hashedChild}`;
+        const queueTopic = `${baseTopic}/${Date.now()}`;
         const messageString = `${type},${payload},${parentId}`;
         
-        client.publish(topic, messageString, { qos: 1, retain: true });
+        // Publish to both legacy single-slot and the new timestamped queue slot
+        client.publish(baseTopic, messageString, { qos: 1, retain: true });
+        client.publish(queueTopic, messageString, { qos: 1, retain: true });
+        
         setMessages(prev => [...prev, {
           id: Date.now(), type: type, text: payload, sender: parentId, target: activeChild, isMe: true,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -301,11 +362,8 @@
         );
       }
 
-      const isOnline = childOnlineStatus[activeChild] || false;
-
       return (
         <div className="flex flex-col h-full relative">
-          
           <div className="shrink-0 flex space-x-3 overflow-x-auto pb-4 pt-2 hide-scrollbar mb-2">
             {children.map(child => {
                const online = childOnlineStatus[child] || false;
@@ -349,6 +407,89 @@
       );
     }
 
+    // ==============================================
+    //            GOD MODE: MONITOR VIEW
+    // ==============================================
+    function MonitorView({ monitorMessages, children, activeChild, setActiveChild, setActiveTab }) {
+      if (children.length === 0) {
+        return (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+            <IconShield className="w-16 h-16 text-gray-300" />
+            <h2 className="text-xl font-bold">God Mode</h2>
+            <p className="text-gray-500">Configure a Child ID in Settings to start monitoring activity.</p>
+            <button onClick={() => setActiveTab('settings')} className="bg-blue-500 text-white px-6 py-3 rounded-xl font-semibold mt-4">Go to Settings</button>
+          </div>
+        );
+      }
+
+      // Filter to the currently selected child, and sort Newest First
+      const activeMonitorMsgs = monitorMessages.filter(m => m.child === activeChild).sort((a, b) => b.id - a.id);
+
+      return (
+        <div className="flex flex-col h-full overflow-hidden">
+          <h1 className="text-3xl font-bold mb-4 shrink-0">God Mode</h1>
+          
+          <div className="shrink-0 flex space-x-3 overflow-x-auto pb-4 hide-scrollbar mb-2 border-b border-gray-200">
+            {children.map(child => {
+               const isActive = activeChild === child;
+               return (
+                 <button 
+                   key={child}
+                   onClick={() => setActiveChild(child)}
+                   className={`px-5 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center space-x-2 transition-all duration-200 shadow-sm ${isActive ? 'bg-indigo-500 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
+                 >
+                   <span>{child}</span>
+                 </button>
+               )
+            })}
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-4 pb-4 pt-2">
+            {activeMonitorMsgs.length === 0 && (
+               <div className="text-center mt-10">
+                 <IconShield className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                 <p className="text-gray-400">Monitoring is active.<br/>Intercepted messages will appear here.</p>
+               </div>
+            )}
+            
+            {activeMonitorMsgs.map((msg) => {
+              const isOutgoing = msg.direction === 'out';
+              return (
+                <div key={msg.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2 text-sm font-bold">
+                       {isOutgoing ? (
+                         <>
+                           <span className="text-indigo-600">{msg.child}</span>
+                           <IconArrowRight className="w-4 h-4 text-gray-400" />
+                           <span className="text-gray-600">{msg.otherParty}</span>
+                         </>
+                       ) : (
+                         <>
+                           <span className="text-gray-600">{msg.otherParty}</span>
+                           <IconArrowRight className="w-4 h-4 text-gray-400" />
+                           <span className="text-green-600">{msg.child}</span>
+                         </>
+                       )}
+                    </div>
+                    <span className="text-xs text-gray-400">{msg.timestamp}</span>
+                  </div>
+                  
+                  <div className={`p-3 rounded-xl text-black ${isOutgoing ? 'bg-indigo-50' : 'bg-green-50'}`}>
+                    {msg.type === 'PULSE' && <div className="flex items-center text-gray-500"><IconVolume2 className="w-4 h-4 mr-2" /> Buzz / Notification</div>}
+                    {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ==============================================
+    //                SETUP VIEW
+    // ==============================================
     function DeviceSetupView() {
       return (
         <div className="space-y-6">
@@ -419,7 +560,6 @@
     }
 
     function TutorialsView() {
-      // Restructured to use arrays for clean step-by-step formatting
       const tutorials = [
         { 
           title: "Sending a Quick Message", 
@@ -451,7 +591,6 @@
         }
       ];
 
-      // Video configuration
       const videos = [
         {
           id: 1,
@@ -466,32 +605,14 @@
         <div className="space-y-6">
           <h1 className="text-3xl font-bold mb-4">Tutorials</h1>
           
-          {/* Horizontal Video Scroll Area */}
           <div className="flex space-x-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
             {videos.map(video => (
               <div key={video.id} className="min-w-[280px] h-48 bg-gray-800 rounded-2xl relative snap-center overflow-hidden shadow-md flex-shrink-0 border border-gray-200">
-                
-                {/* Dynamically render an iframe for Drive, or a video tag for raw MP4s */}
                 {video.type === "drive" ? (
-                  <iframe 
-                    src={video.url} 
-                    className="w-full h-full" 
-                    frameBorder="0" 
-                    allow="autoplay" 
-                    allowFullScreen
-                  ></iframe>
+                  <iframe src={video.url} className="w-full h-full" frameBorder="0" allow="autoplay" allowFullScreen></iframe>
                 ) : (
-                  <video 
-                    src={video.url} 
-                    poster={video.poster} 
-                    controls 
-                    playsInline 
-                    preload="metadata" 
-                    className="w-full h-full object-cover" 
-                  />
+                  <video src={video.url} poster={video.poster} controls playsInline preload="metadata" className="w-full h-full object-cover" />
                 )}
-                
-                {/* Video Title Overlay (pointer-events-none allows clicks to pass through to the video play button) */}
                 <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-3 pointer-events-none">
                   <span className="text-white font-semibold text-sm drop-shadow-md">{video.title}</span>
                 </div>
@@ -499,22 +620,18 @@
             ))}
           </div>
 
-          {/* Formatted Text Instructions */}
           <div className="space-y-4">
             {tutorials.map((tut, i) => (
               <div key={i} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-lg mb-2">{tut.title}</h3>
-                
                 {tut.desc && <p className="text-gray-500 mb-3 text-sm">{tut.desc}</p>}
                 
-                {/* Render Numbered Steps */}
                 {tut.steps && (
                   <ol className="list-decimal list-inside text-gray-500 space-y-2 text-sm leading-relaxed">
                     {tut.steps.map((step, j) => <li key={j}>{step}</li>)}
                   </ol>
                 )}
 
-                {/* Render Bullet Points (Auto-bolds the text before the colon) */}
                 {tut.bullets && (
                   <ul className="text-gray-500 space-y-2 text-sm leading-relaxed">
                     {tut.bullets.map((bullet, j) => {
@@ -616,7 +733,7 @@
 
     function TabButton({ icon, label, active, onClick }) {
       return (
-        <button onClick={onClick} className={`flex flex-col items-center justify-center w-16 space-y-1 transition-colors ${active ? 'text-blue-500' : 'text-gray-400'}`}>
+        <button onClick={onClick} className={`flex flex-col items-center justify-center w-[60px] space-y-1 transition-colors ${active ? 'text-blue-500' : 'text-gray-400'}`}>
           <div className={`${active ? 'scale-110' : 'scale-100'} transition-transform duration-200`}>{icon}</div>
           <span className="text-[10px] font-medium">{label}</span>
         </button>
