@@ -268,17 +268,15 @@
               
               const parts = payload.split(',');
               if (parts.length >= 3) {
-                const targetId = parts[2]; // Using the new 3rd parameter added to Arduino code
-                if (targetId !== parentId) { // Ignore messages sent to Parent (already in Chat view)
-                  const newMonMsg = {
-                    id: msgId, type: parts[0], text: parts[1], direction: 'out', child: sourceChild, otherParty: targetId,
-                    timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  };
-                  setMonitorMessages(prev => {
-                    if (prev.some(m => m.id === msgId)) return prev;
-                    return [...prev, newMonMsg];
-                  });
-                }
+                // The ESP32 payload does not include the target friend's ID, so we label it generically
+                const newMonMsg = {
+                  id: msgId, type: parts[0], text: parts[1], direction: 'out', child: sourceChild, otherParty: "A Friend",
+                  timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+                setMonitorMessages(prev => {
+                  if (prev.some(m => m.id === msgId)) return prev;
+                  return [...prev, newMonMsg];
+                });
               }
             }
             
@@ -462,7 +460,7 @@
                          <>
                            <span className="text-indigo-600">{msg.child}</span>
                            <IconArrowRight className="w-4 h-4 text-gray-400" />
-                           <span className="text-gray-600">{msg.otherParty}</span>
+                           <span className="text-gray-500 italic">{msg.otherParty}</span>
                          </>
                        ) : (
                          <>
