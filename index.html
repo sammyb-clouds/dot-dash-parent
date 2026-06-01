@@ -108,7 +108,6 @@
       const [parentId, setParentId] = useState('');
       const [children, setChildren] = useState([]);
       const [activeChild, setActiveChild] = useState('');
-      const [authToken, setAuthToken] = useState('');
       
       const [messages, setMessages] = useState(() => {
         try { const saved = localStorage.getItem('dotdash_messages'); return saved ? JSON.parse(saved) : []; } catch (e) { return []; }
@@ -132,7 +131,6 @@
         const savedChildren = JSON.parse(localStorage.getItem('dotdash_children') || '[]');
         setChildren(savedChildren);
         if (savedChildren.length > 0) setActiveChild(savedChildren[0]);
-        setAuthToken(localStorage.getItem('dotdash_token') || '');
 
         if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
           Notification.requestPermission();
@@ -327,11 +325,11 @@
             className="flex-1 flex flex-col px-4 overflow-hidden"
             style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}
           >
-            {activeTab === 'chat' && <ChatView client={client} messages={messages} setMessages={setMessages} parentId={parentId} children={children} activeChild={activeChild} setActiveChild={setActiveChild} authToken={authToken} childOnlineStatus={childOnlineStatus} connectionStatus={connectionStatus} setActiveTab={setActiveTab} />}
+            {activeTab === 'chat' && <ChatView client={client} messages={messages} setMessages={setMessages} parentId={parentId} children={children} activeChild={activeChild} setActiveChild={setActiveChild} childOnlineStatus={childOnlineStatus} connectionStatus={connectionStatus} setActiveTab={setActiveTab} />}
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} children={children} activeChild={activeChild} setActiveChild={setActiveChild} setActiveTab={setActiveTab} />}
             {activeTab === 'setup' && <div className="h-full overflow-y-auto pb-4"><DeviceSetupView /></div>}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
-            {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4"><SettingsView parentId={parentId} setParentId={setParentId} children={children} setChildren={setChildren} activeChild={activeChild} setActiveChild={setActiveChild} authToken={authToken} setAuthToken={setAuthToken} /></div>}
+            {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4"><SettingsView parentId={parentId} setParentId={setParentId} children={children} setChildren={setChildren} activeChild={activeChild} setActiveChild={setActiveChild} /></div>}
           </div>
 
           <div 
@@ -451,7 +449,7 @@
     // ==============================================
     //               MAIN APP VIEWS
     // ==============================================
-    function ChatView({ client, messages, setMessages, parentId, children, activeChild, setActiveChild, authToken, childOnlineStatus, connectionStatus, setActiveTab }) {
+    function ChatView({ client, messages, setMessages, parentId, children, activeChild, setActiveChild, childOnlineStatus, connectionStatus, setActiveTab }) {
       const [inputText, setInputText] = useState('');
       const messagesEndRef = useRef(null);
 
@@ -469,7 +467,7 @@
         const hashedChild = await hashId(activeChild);
         const baseTopic = `doorbell/msg/${hashedChild}`;
         const queueTopic = `${baseTopic}/${Date.now()}`;
-        const messageString = `${type},${payload},${parentId},${authToken}`;
+        const messageString = `${type},${payload},${parentId}`;
         
         client.publish(baseTopic, messageString, { qos: 1, retain: true });
         client.publish(queueTopic, messageString, { qos: 1, retain: true });
@@ -542,7 +540,7 @@
         return (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
             <Shield className="w-16 h-16 text-gray-300" />
-            <h2 className="text-xl font-bold">God Mode</h2>
+            <h2 className="text-xl font-bold">Monitor Mode</h2>
             <p className="text-gray-500">Configure a Child ID in Settings to start monitoring activity.</p>
             <button onClick={() => setActiveTab('settings')} className="bg-blue-500 text-white px-6 py-3 rounded-xl font-semibold mt-4">Go to Settings</button>
           </div>
@@ -553,7 +551,7 @@
 
       return (
         <div className="flex flex-col h-full overflow-hidden">
-          <h1 className="text-3xl font-bold mb-4 shrink-0">God Mode</h1>
+          <h1 className="text-3xl font-bold mb-4 shrink-0">Monitor Mode</h1>
           
           <div className="shrink-0 flex space-x-3 overflow-x-auto pb-4 hide-scrollbar mb-2 border-b border-gray-200">
             {children.map(child => {
@@ -772,10 +770,9 @@
       );
     }
 
-    function SettingsView({ parentId, setParentId, children, setChildren, activeChild, setActiveChild, authToken, setAuthToken }) {
+    function SettingsView({ parentId, setParentId, children, setChildren, activeChild, setActiveChild }) {
       const [pId, setPId] = useState(parentId);
       const [kids, setKids] = useState([...children]);
-      const [aToken, setAToken] = useState(authToken);
       
       if (kids.length === 0) setKids(['']);
 
@@ -785,21 +782,23 @@
         setKids(newKids);
       };
       
-      const addKid = () => setKids([...kids, '']);
+      const addKid = () => {
+        const confirmMsg = "Are you adding another one of YOUR children?\n\nIf you want to add a FRIEND for your child to talk to, you must do that in the 'Setup' tab by connecting directly to the device.";
+        if (window.confirm(confirmMsg)) {
+          setKids([...kids, '']);
+        }
+      };
       const removeKid = (index) => setKids(kids.filter((_, i) => i !== index));
 
       const saveSettings = () => {
         const p = pId.toUpperCase().trim(); 
         const cArray = kids.map(k => k.toUpperCase().trim()).filter(k => k); 
-        const a = aToken.trim();
         
         localStorage.setItem('dotdash_parent', p); 
         localStorage.setItem('dotdash_children', JSON.stringify(cArray));
-        localStorage.setItem('dotdash_token', a);
         
         setParentId(p); 
         setChildren(cArray);
-        setAuthToken(a);
         
         if (cArray.length > 0 && !cArray.includes(activeChild)) {
            setActiveChild(cArray[0]);
@@ -811,6 +810,18 @@
         <div className="space-y-6">
           <h1 className="text-3xl font-bold mb-4">Settings</h1>
           
+          <div className="bg-blue-50 p-5 rounded-3xl mb-4 border border-blue-100 shadow-sm">
+            <h2 className="text-blue-800 font-bold text-base mb-2 flex items-center">
+              <Shield className="w-5 h-5 mr-2" /> App Purpose
+            </h2>
+            <p className="text-blue-700 text-sm leading-relaxed">
+              This companion app is for <strong>parents</strong> to chat with and monitor their own kids. Enter your Virtual ID (e.g. MOM0101) and your child's Dot Dash ID below.
+            </p>
+            <p className="text-blue-700 text-sm leading-relaxed mt-3 font-semibold">
+              Note: Do not add your child's friends here. Friends must be added directly to the device via the Setup tab.
+            </p>
+          </div>
+
           <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-gray-100">
             <div className="p-5 border-b border-gray-100 bg-gray-50/50">
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Your Virtual ID</label>
@@ -818,7 +829,7 @@
             </div>
             
             <div className="p-5 border-b border-gray-100">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-3">Child IDs</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-3">Your Children's IDs</label>
               <div className="space-y-3">
                 {kids.map((kid, i) => (
                   <div key={i} className="flex space-x-2">
@@ -838,11 +849,6 @@
               <button onClick={addKid} className="w-full mt-4 py-3 text-blue-500 font-bold flex items-center justify-center bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
                  <Plus className="w-5 h-5 mr-1"/> Add Child
               </button>
-            </div>
-
-            <div className="p-5 border-b border-gray-100">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Device Auth Token (Optional)</label>
-              <input type="text" placeholder="e.g. ABC123XYZ" className="w-full text-xl outline-none font-semibold font-mono bg-transparent" value={aToken} onChange={(e) => setAToken(e.target.value)} />
             </div>
             
             <button onClick={saveSettings} className="w-full bg-blue-500 text-white font-bold py-5 active:bg-blue-600 transition-colors">Save Identity</button>
