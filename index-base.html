@@ -106,6 +106,7 @@
       const [parentProfile, setParentProfile] = useState(null);
       const [devices, setDevices] = useState([]);
       const [loading, setLoading] = useState(true);
+      const [devicesLoaded, setDevicesLoaded] = useState(false);
       const [mqttClient, setMqttClient] = useState(null);
       
       const [isWizardActive, setIsWizardActive] = useState(false);
@@ -158,7 +159,10 @@
 
       // 2. Firestore Devices Listener
       useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            setDevicesLoaded(false);
+            return;
+        }
         const devicesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'devices');
         const unsubscribe = onSnapshot(devicesRef, (snapshot) => {
           const loadedDevices = [];
@@ -169,8 +173,10 @@
           if (loadedDevices.length > 0 && !loadedDevices.find(d => d.id === activeChildId)) {
              setActiveChildId(loadedDevices[0].id);
           }
+          setDevicesLoaded(true);
         }, (error) => {
           console.error("Firestore Listen Error:", error);
+          setDevicesLoaded(true);
         });
         return () => unsubscribe();
       }, [user, activeChildId]);
@@ -313,12 +319,12 @@
 
       // --- AUTO-LAUNCH WIZARD ---
       useEffect(() => {
-        if (!loading && user && (!parentProfile?.virtualId || devices.length === 0) && !isWizardActive) {
+        if (!loading && user && devicesLoaded && (!parentProfile?.virtualId || devices.length === 0) && !isWizardActive) {
            setIsWizardActive(true);
         }
-      }, [loading, user, parentProfile, devices, isWizardActive]);
+      }, [loading, user, parentProfile, devices, devicesLoaded, isWizardActive]);
 
-      if (loading) return <div className="flex h-screen items-center justify-center"><Activity className="w-12 h-12 text-blue-500 animate-pulse" /></div>;
+      if (loading || (user && !devicesLoaded)) return <div className="flex h-screen items-center justify-center"><Activity className="w-12 h-12 text-blue-500 animate-pulse" /></div>;
 
       if (!user) return <AuthScreen />;
 
