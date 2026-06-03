@@ -89,15 +89,15 @@
     const CheckCircle2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
     const Share = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>;
 
-    // --- Safe Hashing Utility (FIXED: No longer lowercases the string!) ---
+    // --- Safe Hashing Utility (Lowercased to match ESP32 exactly) ---
     async function hashId(message) {
       if (window.crypto && window.crypto.subtle) {
-        const msgBuffer = new TextEncoder().encode(message.trim()); 
+        const msgBuffer = new TextEncoder().encode(message.toLowerCase().trim()); 
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       } else {
-        return window.sha256(message.trim());
+        return window.sha256(message.toLowerCase().trim());
       }
     }
 
@@ -122,6 +122,12 @@
       });
       
       const isAppActiveRef = useRef(true); 
+      
+      // Refs to prevent MQTT from dropping connection during state changes
+      const parentProfileRef = useRef(parentProfile);
+      useEffect(() => { parentProfileRef.current = parentProfile; }, [parentProfile]);
+      const devicesRef = useRef(devices);
+      useEffect(() => { devicesRef.current = devices; }, [devices]);
 
       // 1. Firebase Auth Listener
       useEffect(() => {
@@ -194,127 +200,161 @@
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
       }, []);
 
-      // 3. Global MQTT Connection
+      // 3. Global MQTT Connection (Lifecycle based ONLY on user login)
       useEffect(() => {
         if (!user) return;
 
         const brokerUrl = 'wss://23a96ac625b148278417e7b320194976.s1.eu.hivemq.cloud:8884/mqtt';
         let client = null;
 
-        const connectMqtt = async () => {
-          const parentId = parentProfile?.virtualId || 'PENDING';
+        let isCanvasBlocked = false;
+        try { const testWs = new WebSocket(brokerUrl); testWs.close(); } 
+        catch (err) { isCanvasBlocked = true; }
+
+        if (isCanvasBlocked) {
+          client = {
+            handlers: {},
+            on(event, handler) { if (!this.handlers[event]) this.handlers[event] = []; this.handlers[event].push(handler); },
+            emit(event, ...args) { if (this.handlers[event]) this.handlers[event].forEach(h => h(...args)); },
+            subscribe() {}, publish() {}, unsubscribe() {}, removeListener() {}, end() {}
+          };
+          setMqttClient(client);
+          setTimeout(() => { client.emit('connect'); }, 800);
+        } else {
+          const options = { username: 'DigitalDoorbell', password: 'Ringring1', clientId: 'web_' + Math.random().toString(16).substr(2, 8) };
+          client = window.mqtt.connect(brokerUrl, options);
+          setMqttClient(client);
+        }
+
+        // We use refs inside the callback so it always reads fresh data without needing a reconnect
+        client.on('message', async (topic, message) => {
+          const payload = message.toString();
+          if (!payload) return;
+
+          const currentProfile = parentProfileRef.current;
+          const currentDevices = devicesRef.current;
+          const parentId = currentProfile?.virtualId || 'PENDING';
           const hashedParent = await hashId(parentId);
+          
           const childHashMap = {};
           const inboxTopics = {};
           const monitorTopics = {};
           
-          for (const d of devices) {
+          for (const d of currentDevices) {
             const hash = d.hashedId || await hashId(d.identity.name + d.identity.pin);
             childHashMap[hash] = d.id;
             inboxTopics[`doorbell/msg/${hash}`] = d.id;
             monitorTopics[`doorbell/monitor/${hash}`] = d.id;
           }
 
-          let isCanvasBlocked = false;
-          try { const testWs = new WebSocket(brokerUrl); testWs.close(); } 
-          catch (err) { isCanvasBlocked = true; }
-
-          if (isCanvasBlocked) {
-            client = {
-              handlers: {},
-              on(event, handler) { if (!this.handlers[event]) this.handlers[event] = []; this.handlers[event].push(handler); },
-              emit(event, ...args) { if (this.handlers[event]) this.handlers[event].forEach(h => h(...args)); },
-              subscribe() {}, publish() {}, unsubscribe() {}, removeListener() {}, end() {}
-            };
-            setMqttClient(client);
-            setTimeout(() => { client.emit('connect'); }, 800);
-          } else {
-            const options = { username: 'DigitalDoorbell', password: 'Ringring1', clientId: 'web_' + Math.random().toString(16).substr(2, 8) };
-            client = window.mqtt.connect(brokerUrl, options);
-            setMqttClient(client);
-
-            client.on('connect', () => {
-              client.subscribe(`doorbell/msg/${hashedParent}`, { qos: 1 });
-              client.subscribe(`doorbell/msg/${hashedParent}/#`, { qos: 1 });
-              
-              Object.keys(childHashMap).forEach(hash => {
-                 client.subscribe(`doorbell/presence/${hash}`);
-                 client.subscribe(`doorbell/msg/${hash}/#`, { qos: 1 });
-                 client.subscribe(`doorbell/monitor/${hash}/#`, { qos: 1 });
-              });
-            });
+          if (topic.startsWith('doorbell/presence/')) {
+             const incomingHash = topic.split('/').pop();
+             const cId = childHashMap[incomingHash];
+             if (cId) setChildOnlineStatus(prev => ({...prev, [cId]: payload === "ONLINE"}));
+             return;
           }
 
-          client.on('message', (topic, message) => {
-            const payload = message.toString();
-            if (!payload) return;
-
-            if (topic.startsWith('doorbell/presence/')) {
-               const incomingHash = topic.split('/').pop();
-               const cId = childHashMap[incomingHash];
-               if (cId) setChildOnlineStatus(prev => ({...prev, [cId]: payload === "ONLINE"}));
-               return;
+          const topicParts = topic.split('/');
+          const baseTopic = topicParts.slice(0, 3).join('/');
+          let msgId = Date.now();
+          if (topicParts.length > 3) msgId = parseInt(topicParts[3]); 
+          if (isNaN(msgId)) msgId = Date.now();
+          
+          if (baseTopic === `doorbell/msg/${hashedParent}`) {
+            if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
+            const parts = payload.split(',');
+            if (parts.length >= 3) {
+              const newMsg = {
+                id: msgId, type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
+                timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              };
+              setMessages(prev => {
+                if (prev.some(m => m.id === msgId)) return prev;
+                return [...prev, newMsg];
+              });
             }
+            return;
+          }
 
-            const topicParts = topic.split('/');
-            const baseTopic = topicParts.slice(0, 3).join('/');
-            let msgId = Date.now();
-            if (topicParts.length > 3) msgId = parseInt(topicParts[3]); 
-            if (isNaN(msgId)) msgId = Date.now();
-            
-            if (baseTopic === `doorbell/msg/${hashedParent}`) {
-              if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
-              const parts = payload.split(',');
-              if (parts.length >= 3) {
-                const newMsg = {
-                  id: msgId, type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
-                  timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                };
-                setMessages(prev => {
-                  if (prev.some(m => m.id === msgId)) return prev;
-                  return [...prev, newMsg];
-                });
-              }
-              return;
-            }
-
-            if (inboxTopics[baseTopic]) {
-              const targetChildMac = inboxTopics[baseTopic];
-              const parts = payload.split(',');
-              if (parts.length >= 3 && parts[2] !== parentId) {
-                  const newMonMsg = {
-                    id: msgId, type: parts[0], text: parts[1], direction: 'in', childMac: targetChildMac, otherParty: parts[2],
-                    timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  };
-                  setMonitorMessages(prev => {
-                    if (prev.some(m => m.id === msgId)) return prev;
-                    return [...prev, newMonMsg];
-                  });
-              }
-              return;
-            }
-
-            if (monitorTopics[baseTopic]) {
-              const sourceChildMac = monitorTopics[baseTopic];
-              if (!isCanvasBlocked) client.publish(topic, "", { retain: true }); 
-              const parts = payload.split(',');
-              if (parts.length >= 3) {
+          if (inboxTopics[baseTopic]) {
+            const targetChildMac = inboxTopics[baseTopic];
+            const parts = payload.split(',');
+            if (parts.length >= 3 && parts[2] !== parentId) {
                 const newMonMsg = {
-                  id: msgId, type: parts[0], text: parts[1], direction: 'out', childMac: sourceChildMac, otherParty: "A Friend",
+                  id: msgId, type: parts[0], text: parts[1], direction: 'in', childMac: targetChildMac, otherParty: parts[2],
                   timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 };
                 setMonitorMessages(prev => {
                   if (prev.some(m => m.id === msgId)) return prev;
                   return [...prev, newMonMsg];
                 });
-              }
             }
-          });
+            return;
+          }
+
+          if (monitorTopics[baseTopic]) {
+            const sourceChildMac = monitorTopics[baseTopic];
+            if (!isCanvasBlocked) client.publish(topic, "", { retain: true }); 
+            const parts = payload.split(',');
+            if (parts.length >= 3) {
+              
+              let targetFriend = "A Friend";
+              
+              // NEW SECURE REVERSE LOOKUP
+              if (parts.length > 3) {
+                 const targetData = parts[3];
+                 if (targetData.length === 64) { // It's a secure SHA-256 hash!
+                     for (const d of currentDevices) {
+                         if (d.friends) {
+                             for (const f of d.friends) {
+                                 if (await hashId(f) === targetData) {
+                                     targetFriend = f;
+                                     break;
+                                 }
+                             }
+                         }
+                         if (targetFriend !== "A Friend") break;
+                     }
+                 } else {
+                     targetFriend = targetData; // Fallback for old firmware sending raw text
+                 }
+              }
+
+              const newMonMsg = {
+                id: msgId, type: parts[0], text: parts[1], direction: 'out', childMac: sourceChildMac, otherParty: targetFriend,
+                timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              };
+              setMonitorMessages(prev => {
+                if (prev.some(m => m.id === msgId)) return prev;
+                return [...prev, newMonMsg];
+              });
+            }
+          }
+        });
+
+        return () => { if (client && typeof client.end === 'function') client.end(); };
+      }, [user]); // Notice we only run this once when the user logs in!
+
+      // 4. Dynamic Subscriptions (updates smoothly as you add/remove devices)
+      useEffect(() => {
+        if (!mqttClient) return;
+
+        const updateSubscriptions = async () => {
+           if (parentProfile?.virtualId) {
+               const hashedParent = await hashId(parentProfile.virtualId);
+               mqttClient.subscribe(`doorbell/msg/${hashedParent}`, { qos: 1 });
+               mqttClient.subscribe(`doorbell/msg/${hashedParent}/#`, { qos: 1 });
+           }
+           for (const d of devices) {
+               const hash = d.hashedId || await hashId(d.identity.name + d.identity.pin);
+               mqttClient.subscribe(`doorbell/presence/${hash}`);
+               mqttClient.subscribe(`doorbell/msg/${hash}/#`, { qos: 1 });
+               mqttClient.subscribe(`doorbell/monitor/${hash}/#`, { qos: 1 });
+           }
         };
 
-        connectMqtt();
-        return () => { if (client && typeof client.end === 'function') client.end(); };
-      }, [user, parentProfile, devices]); 
+        updateSubscriptions();
+      }, [mqttClient, devices, parentProfile]);
 
 
       // --- AUTO-LAUNCH WIZARD ---
@@ -508,11 +548,16 @@
                   const mac = parts[0];
                   
                   const childHash = await hashId(childName + childPin);
+                  
+                  // 🔥 CRITICAL FIX: Pre-fill the array with the Parent ID if it exists!
+                  const initialFriends = parentProfile?.virtualId ? [parentProfile.virtualId] : [];
+                  
                   await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', mac), {
                      pairingCode: cleanCode,
                      hashedId: childHash,
                      identity: { name: childName, pin: childPin },
-                     friends: [], phrases: []
+                     friends: initialFriends, // <-- Fixed
+                     phrases: []
                   });
 
                   await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', childHash), {
@@ -522,8 +567,12 @@
                   setClaimedMac(mac);
                   setLoading(false);
                   
-                  if (!parentProfile?.virtualId) setStep('PARENT_ID');
-                  else setStep('ADD_FRIENDS');
+                  if (!parentProfile?.virtualId) {
+                      setStep('PARENT_ID');
+                  } else {
+                      setFriends(initialFriends); // Make sure the UI knows the parent is added
+                      setStep('ADD_FRIENDS');
+                  }
                }
                mqttClient.unsubscribe(replyTopic);
                mqttClient.removeListener('message', messageHandler);
@@ -593,7 +642,7 @@
              {step === 'WIFI_CHECK' && (
                 <div className="w-full max-w-sm space-y-6">
                    <h2 className="text-xl font-bold mb-8">Have you connected your Dot Dash to your home Wi-Fi?</h2>
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Yes, it's connected</button>
+                   <button onClick={()=>setStep('UPDATE_FIRMWARE')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Yes, it's connected</button>
                    <button onClick={()=>setStep('WIFI_INSTRUCT')} className="w-full bg-white text-gray-700 font-bold py-4 rounded-xl border border-gray-200 shadow-sm">No, I need to do that</button>
                 </div>
              )}
@@ -606,7 +655,17 @@
                    <p className="text-gray-600">3. Press ENTER, then select &lt;ON PHONE&gt;.</p>
                    <p className="text-gray-600">4. Go to your phone's Wi-Fi settings and join the network named <strong>Dot Dash Setup</strong>.</p>
                    <p className="text-gray-600">5. Follow the pop-up to join your home Wi-Fi, then come back here!</p>
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-6">Done, let's continue</button>
+                   <button onClick={()=>setStep('UPDATE_FIRMWARE')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-6">Done, let's continue</button>
+                </div>
+             )}
+
+             {step === 'UPDATE_FIRMWARE' && (
+                <div className="w-full max-w-sm text-left space-y-4">
+                   <h2 className="text-xl font-bold mb-4">Update Firmware</h2>
+                   <p className="text-gray-600 leading-relaxed">To ensure your device can pair with this app, let's update it to the latest software.</p>
+                   <p className="text-gray-600">1. On your Dot Dash, navigate to <strong>SETUP &gt; ON DEVICE &gt; UPDATE</strong>.</p>
+                   <p className="text-gray-600">2. Wait for the update to download and the device to restart.</p>
+                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-6">My device is updated</button>
                 </div>
              )}
 
@@ -626,7 +685,7 @@
              {step === 'PAIRING' && (
                 <div className="w-full max-w-sm space-y-4">
                    <h2 className="text-xl font-bold mb-2">Link Your Device</h2>
-                   <p className="text-gray-500 mb-6 text-left">Navigate to <strong>SETUP &gt; ON DEVICE &gt; APP PAIRING CODE</strong> on your Dot Dash and enter the 6-character code below.</p>
+                   <p className="text-gray-500 mb-6 text-left">Navigate to <strong>SETUP &gt; PAIRING</strong> on your Dot Dash and enter the 6-character code below.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
                    <input type="text" placeholder="AB-12-CD" maxLength="8" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-2xl tracking-widest border border-gray-200 focus:border-blue-400" value={pairingCode} onChange={e=>setPairingCode(e.target.value.toUpperCase())} />
                    <button onClick={handlePairingSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
@@ -725,7 +784,7 @@
              <div className="p-6 h-full flex flex-col">
                 <button onClick={()=>setUnlinkMode(false)} className="flex items-center text-gray-500 font-bold mb-6"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
                 <h2 className="text-2xl font-bold mb-4">Unlink Device</h2>
-                <p className="text-gray-600 mb-6">Navigate to <strong>SETUP &gt; ON DEVICE &gt; APP PAIRING CODE</strong> on your child's Dot Dash and enter the code below to confirm unlinking.</p>
+                <p className="text-gray-600 mb-6">Navigate to <strong>SETUP &gt; PAIRING</strong> on your child's Dot Dash and enter the code below to confirm unlinking.</p>
                 <input type="text" placeholder="Pairing Code" className="w-full bg-white px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-xl tracking-widest border border-gray-200 focus:border-red-400 mb-6" value={unlinkCode} onChange={e=>setUnlinkCode(e.target.value)} />
                 <button onClick={handleUnlink} className="w-full py-4 text-white font-bold bg-red-500 rounded-xl shadow-sm active:bg-red-600">Confirm Unlink</button>
              </div>
