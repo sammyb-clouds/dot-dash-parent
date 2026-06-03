@@ -89,7 +89,7 @@
     const CheckCircle2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
     const Share = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>;
 
-    // --- Safe Hashing Utility (Lowercased to match ESP32 exactly) ---
+    // --- Safe Hashing Utility ---
     async function hashId(message) {
       if (window.crypto && window.crypto.subtle) {
         const msgBuffer = new TextEncoder().encode(message.toLowerCase().trim()); 
@@ -123,7 +123,6 @@
       
       const isAppActiveRef = useRef(true); 
       
-      // Refs to prevent MQTT from dropping connection during state changes
       const parentProfileRef = useRef(parentProfile);
       useEffect(() => { parentProfileRef.current = parentProfile; }, [parentProfile]);
       const devicesRef = useRef(devices);
@@ -200,7 +199,7 @@
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
       }, []);
 
-      // 3. Global MQTT Connection (Lifecycle based ONLY on user login)
+      // 3. Global MQTT Connection
       useEffect(() => {
         if (!user) return;
 
@@ -226,7 +225,6 @@
           setMqttClient(client);
         }
 
-        // We use refs inside the callback so it always reads fresh data without needing a reconnect
         client.on('message', async (topic, message) => {
           const payload = message.toString();
           if (!payload) return;
@@ -299,25 +297,18 @@
             if (parts.length >= 3) {
               
               let targetFriend = "A Friend";
-              
-              // NEW SECURE REVERSE LOOKUP
               if (parts.length > 3) {
                  const targetData = parts[3];
-                 if (targetData.length === 64) { // It's a secure SHA-256 hash!
+                 if (targetData.length === 64) {
                      for (const d of currentDevices) {
                          if (d.friends) {
                              for (const f of d.friends) {
-                                 if (await hashId(f) === targetData) {
-                                     targetFriend = f;
-                                     break;
-                                 }
+                                 if (await hashId(f) === targetData) { targetFriend = f; break; }
                              }
                          }
                          if (targetFriend !== "A Friend") break;
                      }
-                 } else {
-                     targetFriend = targetData; // Fallback for old firmware sending raw text
-                 }
+                 } else { targetFriend = targetData; }
               }
 
               const newMonMsg = {
@@ -333,12 +324,11 @@
         });
 
         return () => { if (client && typeof client.end === 'function') client.end(); };
-      }, [user]); // Notice we only run this once when the user logs in!
+      }, [user]); 
 
-      // 4. Dynamic Subscriptions (updates smoothly as you add/remove devices)
+      // 4. Dynamic Subscriptions 
       useEffect(() => {
         if (!mqttClient) return;
-
         const updateSubscriptions = async () => {
            if (parentProfile?.virtualId) {
                const hashedParent = await hashId(parentProfile.virtualId);
@@ -352,7 +342,6 @@
                mqttClient.subscribe(`doorbell/monitor/${hash}/#`, { qos: 1 });
            }
         };
-
         updateSubscriptions();
       }, [mqttClient, devices, parentProfile]);
 
@@ -546,17 +535,16 @@
                const parts = payload.split(',');
                if (parts.length >= 3) {
                   const mac = parts[0];
-                  
                   const childHash = await hashId(childName + childPin);
                   
-                  // 🔥 CRITICAL FIX: Pre-fill the array with the Parent ID if it exists!
+                  // 🔥 SELF-HEALING: Rigidly insert the Parent ID at the top of the new device DB array
                   const initialFriends = parentProfile?.virtualId ? [parentProfile.virtualId] : [];
                   
                   await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', mac), {
                      pairingCode: cleanCode,
                      hashedId: childHash,
                      identity: { name: childName, pin: childPin },
-                     friends: initialFriends, // <-- Fixed
+                     friends: initialFriends, 
                      phrases: []
                   });
 
@@ -570,8 +558,10 @@
                   if (!parentProfile?.virtualId) {
                       setStep('PARENT_ID');
                   } else {
-                      setFriends(initialFriends); // Make sure the UI knows the parent is added
+                      setFriends(initialFriends); 
                       setStep('ADD_FRIENDS');
+                      // Auto-sync that initialized list instantly
+                      mqttClient.publish(`doorbell/cmd/${childHash}`, `CMD,SYNC_FRIENDS,${parentProfile.virtualId}`, {qos: 1, retain: true});
                   }
                }
                mqttClient.unsubscribe(replyTopic);
@@ -601,9 +591,10 @@
             owner: user.uid, idString: pId, type: 'parent'
          });
 
-         // NEW FULL-SYNC LOGIC: Initialize the list with the Parent ID
          const childHash = await hashId(childName + childPin);
          const devRef = doc(db, 'artifacts', appId, 'users', user.uid, 'devices', claimedMac);
+         
+         // Self-healing check
          await updateDoc(devRef, { friends: [pId] });
          mqttClient.publish(`doorbell/cmd/${childHash}`, `CMD,SYNC_FRIENDS,${pId}`, {qos: 1, retain: true});
 
@@ -619,17 +610,22 @@
          const snap = await getDoc(devRef);
          const currentFriends = snap.exists() ? (snap.data().friends || []) : [];
          
-         if (!currentFriends.includes(fId)) {
-             const updatedFriends = [...currentFriends, fId];
+         // 🔥 SELF-HEALING: Always guarantee Parent ID is included and pushed!
+         let updatedFriends = [...new Set([parentProfile.virtualId, ...currentFriends].filter(Boolean))];
+         
+         if (!updatedFriends.includes(fId)) {
+             updatedFriends.push(fId);
              await updateDoc(devRef, { friends: updatedFriends });
              
-             // NEW FULL-SYNC LOGIC: Beam the complete array to the device
              const childHash = await hashId(childName + childPin);
              mqttClient.publish(`doorbell/cmd/${childHash}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, {qos: 1, retain: true});
              setFriends(updatedFriends);
          }
          setFriendId('');
       };
+
+      // Ensure parent ID is displayed even if state lags
+      const displayFriends = [...new Set([parentProfile?.virtualId, ...friends].filter(Boolean))];
 
       return (
         <div className="fixed inset-0 z-50 bg-white overflow-y-auto flex flex-col min-h-screen">
@@ -642,7 +638,7 @@
              {step === 'WIFI_CHECK' && (
                 <div className="w-full max-w-sm space-y-6">
                    <h2 className="text-xl font-bold mb-8">Have you connected your Dot Dash to your home Wi-Fi?</h2>
-                   <button onClick={()=>setStep('UPDATE_FIRMWARE')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Yes, it's connected</button>
+                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Yes, it's connected</button>
                    <button onClick={()=>setStep('WIFI_INSTRUCT')} className="w-full bg-white text-gray-700 font-bold py-4 rounded-xl border border-gray-200 shadow-sm">No, I need to do that</button>
                 </div>
              )}
@@ -655,17 +651,7 @@
                    <p className="text-gray-600">3. Press ENTER, then select &lt;ON PHONE&gt;.</p>
                    <p className="text-gray-600">4. Go to your phone's Wi-Fi settings and join the network named <strong>Dot Dash Setup</strong>.</p>
                    <p className="text-gray-600">5. Follow the pop-up to join your home Wi-Fi, then come back here!</p>
-                   <button onClick={()=>setStep('UPDATE_FIRMWARE')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-6">Done, let's continue</button>
-                </div>
-             )}
-
-             {step === 'UPDATE_FIRMWARE' && (
-                <div className="w-full max-w-sm text-left space-y-4">
-                   <h2 className="text-xl font-bold mb-4">Update Firmware</h2>
-                   <p className="text-gray-600 leading-relaxed">To ensure your device can pair with this app, let's update it to the latest software.</p>
-                   <p className="text-gray-600">1. On your Dot Dash, navigate to <strong>SETUP &gt; ON DEVICE &gt; UPDATE</strong>.</p>
-                   <p className="text-gray-600">2. Wait for the update to download and the device to restart.</p>
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-6">My device is updated</button>
+                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-6">Done, let's continue</button>
                 </div>
              )}
 
@@ -712,7 +698,11 @@
                    <p className="text-gray-500 mb-6">Enter a friend's User ID to add them to your child's approved list.</p>
                    
                    <ul className="space-y-2 mb-4 text-left">
-                     {friends.map((f, i) => <li key={i} className="font-bold text-gray-700 bg-gray-100 p-3 rounded-xl">{f}</li>)}
+                     {displayFriends.map((f, i) => (
+                       <li key={i} className="font-bold text-gray-700 bg-gray-100 p-3 rounded-xl">
+                          {f} {f === parentProfile?.virtualId && <span className="text-xs text-blue-500 font-normal ml-1">(You)</span>}
+                       </li>
+                     ))}
                    </ul>
 
                    <div className="flex space-x-2">
@@ -753,29 +743,41 @@
          if (!newFriendId.trim()) return;
          const fId = newFriendId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
          
-         const updatedFriends = [...(activeDevice.friends || [])];
+         // 🔥 SELF-HEALING: Guarantee Parent ID is always in the array being read and pushed!
+         let updatedFriends = [...new Set([parentProfile.virtualId, ...(activeDevice.friends || [])].filter(Boolean))];
+         
          if (!updatedFriends.includes(fId)) {
              updatedFriends.push(fId);
              await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: updatedFriends });
-             
-             // NEW FULL-SYNC LOGIC: Beam the complete array to the device
              mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, {qos: 1, retain: true});
          }
          setNewFriendId('');
        };
 
        const handleRemoveFriend = async (fIdToRemove) => {
+         if (fIdToRemove === parentProfile.virtualId) return; // Hard-lock parent from deleting themselves
          if (!window.confirm(`Remove ${fIdToRemove} from friends?`)) return;
-         const updatedFriends = (activeDevice.friends || []).filter(f => f !== fIdToRemove);
-         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: updatedFriends });
          
+         let updatedFriends = [...new Set([parentProfile.virtualId, ...(activeDevice.friends || [])].filter(Boolean))];
+         updatedFriends = updatedFriends.filter(f => f !== fIdToRemove);
+         
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: updatedFriends });
          mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, {qos: 1, retain: true});
        };
 
        const handleManualSync = () => {
          setSyncing(true);
          const currentFriends = activeDevice.friends || [];
-         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${currentFriends.join('|')}`, {qos: 1, retain: true});
+         
+         // 🔥 SELF-HEALING
+         const updatedFriends = [...new Set([parentProfile.virtualId, ...currentFriends].filter(Boolean))];
+         
+         // If we self-healed, sync it back to the DB to fix it permanently
+         if (updatedFriends.length !== currentFriends.length) {
+             updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: updatedFriends });
+         }
+
+         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, {qos: 1, retain: true});
          setTimeout(() => setSyncing(false), 2000);
        };
 
@@ -790,6 +792,9 @@
              </div>
           );
        }
+
+       // Map array strictly to guarantee UI presence of Parent ID
+       const displayFriends = [...new Set([parentProfile?.virtualId, ...(activeDevice?.friends || [])].filter(Boolean))];
 
        return (
          <div className="p-6">
@@ -815,12 +820,18 @@
               
               <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider">Approved Friends</h3>
               <ul className="space-y-2 mb-4">
-                {(activeDevice?.friends || []).map((f, i) => (
+                {displayFriends.map((f, i) => (
                    <li key={i} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                     <span className="font-bold text-gray-700">{f}</span>
-                     <button onClick={() => handleRemoveFriend(f)} className="text-red-400 hover:text-red-600 p-1 active:scale-95 transition-transform">
-                       <Trash2 className="w-5 h-5"/>
-                     </button>
+                     <span className="font-bold text-gray-700">
+                        {f} {f === parentProfile.virtualId && <span className="text-xs text-blue-500 font-normal ml-2">(You)</span>}
+                     </span>
+                     
+                     {/* Do not show the trash can for the parent ID! */}
+                     {f !== parentProfile.virtualId && (
+                         <button onClick={() => handleRemoveFriend(f)} className="text-red-400 hover:text-red-600 p-1 active:scale-95 transition-transform">
+                           <Trash2 className="w-5 h-5"/>
+                         </button>
+                     )}
                    </li>
                 ))}
               </ul>
@@ -1014,21 +1025,11 @@
           <div className="bg-white p-6 rounded-3xl shadow-sm space-y-4 border border-gray-100">
             <div className="flex items-center space-x-3 mb-2">
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
-                 <BookOpen className="w-6 h-6" />
+                 <Cpu className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold">3. Follow the Portal</h2>
+              <h2 className="text-xl font-bold">3. Update Firmware</h2>
             </div>
-            <p className="text-gray-500 leading-relaxed">A setup screen should automatically pop up. (If it doesn't, navigate to 192.168.4.1 in your browser).</p>
-          </div>
-
-          <div className="bg-white p-6 rounded-3xl shadow-sm space-y-4 border border-gray-100">
-            <div className="flex items-center space-x-3 mb-2">
-              <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
-                 <SettingsIcon className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl font-bold">4. Enter Wi-Fi Details</h2>
-            </div>
-            <p className="text-gray-500 leading-relaxed">Enter your home Wi-Fi name and password. You can skip the Name and Friend sections, as you will manage those from the App!</p>
+            <p className="text-gray-500 leading-relaxed">If the setup portal doesn't pop up automatically, navigate to 192.168.4.1 in your browser. Connect to your Wi-Fi, then click the "Advanced Settings (Firmware Update)" link to ensure your device is running the latest software!</p>
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-sm space-y-4 border border-gray-100">
@@ -1036,9 +1037,9 @@
               <div className="flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-500 rounded-full shrink-0">
                  <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold">5. Pair Device to App</h2>
+              <h2 className="text-xl font-bold">4. Pair Device to App</h2>
             </div>
-            <p className="text-gray-500 leading-relaxed">Once the device restarts and connects to Wi-Fi, return to the App's Settings tab and click "Pair New Device".</p>
+            <p className="text-gray-500 leading-relaxed">Once the device restarts and connects to Wi-Fi, return to the App's Settings tab and click "Add another device". Follow the prompts to enter your child's Pairing Code!</p>
           </div>
         </div>
       );
