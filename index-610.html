@@ -760,7 +760,9 @@
                      </div>
                    </div>
 
-                   <div className="mt-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-left shadow-sm">
+                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-8 mb-4">Done, let's continue</button>
+
+                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left shadow-sm">
                      <div className="flex items-start">
                         <div className="shrink-0 mt-0.5">
                            <Info className="w-5 h-5 text-amber-500" />
@@ -773,8 +775,6 @@
                         </div>
                      </div>
                    </div>
-
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-8">Done, let's continue</button>
                 </div>
              )}
 
