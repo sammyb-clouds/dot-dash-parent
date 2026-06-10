@@ -230,7 +230,7 @@
         }
 
         // =========================================================================
-        // ✅ NEW DIGITALOCEAN MQTT SERVER CONFIGURATION ✅
+        // ✅ HIVEMQ SERVER CONFIGURATION ✅
         // =========================================================================
         const brokerUrl = 'wss://23a96ac625b148278417e7b320194976.s1.eu.hivemq.cloud:8884/mqtt';
         let client = null;
@@ -253,7 +253,7 @@
           // UPDATE YOUR PASSWORD HERE 👇
           const options = { 
             username: 'DigitalDoorbell', 
-            password: 'Ringring1', // <--- REPLACE THIS WITH YOUR PHASE 6 PASSWORD
+            password: 'Ringring1', 
             clientId: 'web_' + Math.random().toString(16).substr(2, 8) 
           };
           client = window.mqtt.connect(brokerUrl, options);
