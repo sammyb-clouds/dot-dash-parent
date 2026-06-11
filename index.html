@@ -91,6 +91,7 @@
     const Wifi = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>;
     const CheckCircle2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
     const Share = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>;
+    const Info = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
 
     // --- Safe Hashing Utility ---
     async function hashId(message) {
@@ -228,6 +229,9 @@
            return;
         }
 
+        // =========================================================================
+        // ✅ HIVEMQ SERVER CONFIGURATION ✅
+        // =========================================================================
         const brokerUrl = 'wss://23a96ac625b148278417e7b320194976.s1.eu.hivemq.cloud:8884/mqtt';
         let client = null;
 
@@ -246,10 +250,16 @@
           setMqttClient(client);
           setTimeout(() => { client.connected = true; client.emit('connect'); }, 800);
         } else {
-          const options = { username: 'DigitalDoorbell', password: 'Ringring1', clientId: 'web_' + Math.random().toString(16).substr(2, 8) };
+          // UPDATE YOUR PASSWORD HERE 👇
+          const options = { 
+            username: 'DigitalDoorbell', 
+            password: 'Ringring1', 
+            clientId: 'web_' + Math.random().toString(16).substr(2, 8) 
+          };
           client = window.mqtt.connect(brokerUrl, options);
           setMqttClient(client);
         }
+        // =========================================================================
 
         client.on('message', async (topic, message) => {
           const payload = message.toString();
@@ -402,6 +412,13 @@
                    mqttClient={mqttClient} 
                    appId={appId}
                    onComplete={() => setIsWizardActive(false)} 
+                   onCancel={() => {
+                       if (devices.length > 0 && parentProfile?.virtualId) {
+                           setIsWizardActive(false); // Just cancel adding a 2nd device
+                       } else {
+                           signOut(auth); // First time setup trap: log out to return to login screen
+                       }
+                   }}
                 />;
       }
 
@@ -431,7 +448,7 @@
     }
 
     // ==============================================
-    //               AUTHENTICATION
+    //                AUTHENTICATION
     // ==============================================
     function AuthScreen() {
       const [view, setView] = useState('LANDING'); 
@@ -515,9 +532,50 @@
     }
 
     // ==============================================
+    //           VIRTUAL ID / PROFILE SETUP
+    // ==============================================
+    function ProfileSetupScreen({ user, setParentProfile, appId }) {
+      const [parentName, setParentName] = useState('');
+      const [parentPin, setParentPin] = useState('');
+      
+      const handleSave = async () => {
+        const pName = parentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const pPin = parentPin.trim();
+        if (pName.length < 2 || pPin.length !== 4 || isNaN(pPin)) return alert("Enter a valid name and 4-digit PIN.");
+        const vid = pName + pPin;
+        
+        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'parent');
+        await setDoc(profileRef, {
+          email: user.email || 'anonymous@canvas.local',
+          virtualId: vid
+        });
+        setParentProfile({ virtualId: vid });
+      };
+
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
+          <h1 className="text-3xl font-bold mb-4">Create Your ID</h1>
+          <p className="text-gray-500 mb-8 max-w-sm leading-relaxed">This is the ID your child will see when you send them messages (e.g. MOM0101, DAD99).</p>
+
+          <div className="w-full max-w-sm bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+            <input type="text" placeholder="Dad, Mama or Your Name" required maxLength="10"
+              className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-100 focus:border-blue-300"
+              value={parentName} onChange={e => setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+            <input type="text" placeholder="Birthday PIN (MMDD)" required maxLength="4"
+              className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-100 focus:border-blue-300"
+              value={parentPin} onChange={e => setParentPin(e.target.value.replace(/\D/g, ''))} />
+            <button onClick={handleSave} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl active:bg-blue-600 transition-colors mt-2">
+              Save and Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ==============================================
     //           ONBOARDING & PAIRING WIZARD
     // ==============================================
-    function OnboardingWizard({ user, parentProfile, setParentProfile, mqttClient, appId, onComplete }) {
+    function OnboardingWizard({ user, parentProfile, setParentProfile, mqttClient, appId, onComplete, onCancel }) {
       const [step, setStep] = useState('WIFI_CHECK');
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState('');
@@ -525,7 +583,8 @@
       const [childName, setChildName] = useState('');
       const [childPin, setChildPin] = useState('');
       const [pairingCode, setPairingCode] = useState('');
-      const [parentId, setParentId] = useState(parentProfile?.virtualId || '');
+      const [parentName, setParentName] = useState('');
+      const [parentPin, setParentPin] = useState('');
       const [friendId, setFriendId] = useState('');
       const [friends, setFriends] = useState([]);
       const [claimedMac, setClaimedMac] = useState(null);
@@ -614,8 +673,12 @@
 
       const handleParentIdSubmit = async () => {
          setError(''); setLoading(true);
-         const pId = parentId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-         if (pId.length < 3) { setLoading(false); return setError("Virtual ID must be at least 3 characters."); }
+         const pName = parentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+         const pPin = parentPin.trim();
+         if (pName.length < 2 || pPin.length !== 4 || isNaN(pPin)) {
+             setLoading(false); return setError("Enter a valid name and 4-digit PIN.");
+         }
+         const pId = pName + pPin;
 
          const isUnique = await checkUniqueness(pId);
          if (!isUnique) { setLoading(false); return setError("This Parent ID is taken. Please add a number to the end (e.g. DAD99)."); }
@@ -663,14 +726,17 @@
 
       return (
         <div className="fixed inset-0 z-50 bg-white overflow-y-auto flex flex-col min-h-screen">
-           <div className="p-4 pt-12 shrink-0">
+           <div className="p-4 pt-12 shrink-0 relative flex items-center justify-center">
+               <button onClick={onCancel} className="absolute left-4 p-2 text-gray-500 hover:text-gray-700 font-bold flex items-center transition-colors">
+                  <ArrowLeft className="w-5 h-5 mr-1"/> Back
+               </button>
                <h1 className="text-3xl font-bold text-center">Setup Dot Dash</h1>
            </div>
            
            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
              
              {step === 'WIFI_CHECK' && (
-                <div className="w-full max-w-sm space-y-6">
+                <div className="w-full max-w-sm my-auto space-y-6">
                    <h2 className="text-xl font-bold mb-8">Have you connected your Dot Dash to your home Wi-Fi?</h2>
                    <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Yes, it's connected</button>
                    <button onClick={()=>setStep('WIFI_INSTRUCT')} className="w-full bg-white text-gray-700 font-bold py-4 rounded-xl border border-gray-200 shadow-sm">No, I need to do that</button>
@@ -678,19 +744,52 @@
              )}
 
              {step === 'WIFI_INSTRUCT' && (
-                <div className="w-full max-w-sm text-left space-y-4">
-                   <h2 className="text-xl font-bold mb-4">Connect to Wi-Fi</h2>
-                   <p className="text-gray-600">1. Turn on your Dot Dash.</p>
-                   <p className="text-gray-600">2. Press SELECT until you see &lt;SETUP&gt;.</p>
-                   <p className="text-gray-600">3. Press ENTER, then select &lt;ON PHONE&gt;.</p>
-                   <p className="text-gray-600">4. Go to your phone's Wi-Fi settings and join the network named <strong>Dot Dash Setup</strong>.</p>
-                   <p className="text-gray-600">5. Follow the pop-up to join your home Wi-Fi, then come back here!</p>
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-6">Done, let's continue</button>
+                <div className="w-full max-w-sm my-auto text-left space-y-4">
+                   <h2 className="text-2xl font-bold mb-6 text-center">Connect to Wi-Fi</h2>
+                   
+                   <div className="space-y-3">
+                     <div className="flex items-start">
+                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">1</div>
+                       <p className="ml-3 text-gray-700">Turn on your Dot Dash.</p>
+                     </div>
+                     <div className="flex items-start">
+                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">2</div>
+                       <p className="ml-3 text-gray-700">Press <strong>SELECT</strong> (front arcade button) until you see &lt;SETUP&gt; on the screen.</p>
+                     </div>
+                     <div className="flex items-start">
+                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">3</div>
+                       <p className="ml-3 text-gray-700">Press <strong>ENTER</strong> (top arcade button) and then <strong>ENTER</strong> again to choose &lt;ON PHONE&gt;.</p>
+                     </div>
+                     <div className="flex items-start">
+                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">4</div>
+                       <p className="ml-3 text-gray-700">Get your phone or computer and open Wi-Fi settings. Join the network named <strong>Dot Dash Setup</strong>.</p>
+                     </div>
+                     <div className="flex items-start">
+                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">5</div>
+                       <p className="ml-3 text-gray-700">Wait a few seconds for a window to pop up, follow the setup instructions, then come back here!</p>
+                     </div>
+                   </div>
+
+                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-8 mb-4">Done, let's continue</button>
+
+                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left shadow-sm">
+                     <div className="flex items-start">
+                        <div className="shrink-0 mt-0.5">
+                           <Info className="w-5 h-5 text-amber-500" />
+                        </div>
+                        <div className="ml-3">
+                           <h3 className="text-sm font-bold text-amber-800">Don't see the Dot Dash Setup network?</h3>
+                           <p className="text-sm text-amber-700 mt-1 leading-relaxed">
+                             Sometimes phones hold onto old network lists. Try turning your phone's Wi-Fi <strong>off and back on</strong> to force it to rescan!
+                           </p>
+                        </div>
+                     </div>
+                   </div>
                 </div>
              )}
 
              {step === 'CHILD_ID' && (
-                <div className="w-full max-w-sm space-y-4">
+                <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Create Device ID</h2>
                    <p className="text-gray-500 mb-6">Choose a screen name and 4-digit PIN for your child.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
@@ -703,7 +802,7 @@
              )}
 
              {step === 'PAIRING' && (
-                <div className="w-full max-w-sm space-y-4">
+                <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Link Your Device</h2>
                    <p className="text-gray-500 mb-6 text-left">Navigate to <strong>SETUP &gt; PAIRING</strong> on your Dot Dash and enter the 6-character code below.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
@@ -711,18 +810,30 @@
                    <button onClick={handlePairingSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
                      {loading ? 'Searching for device...' : 'Link Device'}
                    </button>
-                   <p className="text-sm italic text-gray-500 mt-4 px-2 leading-relaxed">
-                     Can't find the Pairing code? Make sure your device is up to date. Go to <strong>&lt;SETUP&gt; &rarr; ON DEVICE &rarr; UPDATE</strong> to download the latest firmware.
-                   </p>
+                   
+                   <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 text-left shadow-sm">
+                     <div className="flex items-start">
+                        <div className="shrink-0 mt-0.5">
+                           <Info className="w-5 h-5 text-blue-500" />
+                        </div>
+                        <div className="ml-3">
+                           <h3 className="text-sm font-bold text-blue-800">Can't find the Pairing code?</h3>
+                           <p className="text-sm text-blue-700 mt-1 leading-relaxed">
+                             Make sure your device is up to date. Go to <strong>&lt;SETUP&gt; &rarr; ON DEVICE &rarr; UPDATE</strong> to download the latest firmware.
+                           </p>
+                        </div>
+                     </div>
+                   </div>
                 </div>
              )}
 
              {step === 'PARENT_ID' && (
-                <div className="w-full max-w-sm space-y-4">
+                <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Set Up Parent ID</h2>
                    <p className="text-gray-500 mb-6">This is the ID your child will see when you message them (e.g., MOM0101).</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
-                   <input type="text" placeholder="Parent ID" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentId} onChange={e=>setParentId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                   <input type="text" placeholder="Dad, Mama or Your Name" maxLength="10" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentName} onChange={e=>setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                   <input type="text" placeholder="Birthday PIN (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentPin} onChange={e=>setParentPin(e.target.value.replace(/\D/g, ''))} />
                    <button onClick={handleParentIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
                      {loading ? 'Checking...' : 'Save Parent ID'}
                    </button>
@@ -730,7 +841,7 @@
              )}
 
              {step === 'ADD_FRIENDS' && (
-                <div className="w-full max-w-sm space-y-4">
+                <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Add Friends</h2>
                    <p className="text-gray-500 mb-6">Enter a friend's User ID to add them to your child's approved list.</p>
                    
@@ -848,9 +959,20 @@
                 <p className="text-gray-600 mb-6">Navigate to <strong>SETUP &gt; PAIRING</strong> on your child's Dot Dash and enter the code below to confirm unlinking.</p>
                 <input type="text" placeholder="Pairing Code" className="w-full bg-white px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-xl tracking-widest border border-gray-200 focus:border-red-400 mb-6" value={unlinkCode} onChange={e=>setUnlinkCode(e.target.value)} />
                 <button onClick={handleUnlink} className="w-full py-4 text-white font-bold bg-red-500 rounded-xl shadow-sm active:bg-red-600">Confirm Unlink</button>
-                <p className="text-sm italic text-gray-500 mt-6 text-center leading-relaxed">
-                  Can't find the Pairing code? Make sure your device is up to date. Go to <strong>&lt;SETUP&gt; &rarr; ON DEVICE &rarr; UPDATE</strong> to download the latest firmware.
-                </p>
+                
+                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 text-left shadow-sm">
+                  <div className="flex items-start">
+                     <div className="shrink-0 mt-0.5">
+                        <Info className="w-5 h-5 text-blue-500" />
+                     </div>
+                     <div className="ml-3">
+                        <h3 className="text-sm font-bold text-blue-800">Can't find the Pairing code?</h3>
+                        <p className="text-sm text-blue-700 mt-1 leading-relaxed">
+                          Make sure your device is up to date. Go to <strong>&lt;SETUP&gt; &rarr; ON DEVICE &rarr; UPDATE</strong> to download the latest firmware.
+                        </p>
+                     </div>
+                  </div>
+                </div>
              </div>
           );
        }
@@ -1124,34 +1246,9 @@
         }
       ];
 
-      const videos = [
-        {
-          id: 1,
-          title: "Getting Started & Setup",
-          type: "drive", 
-          url: "https://drive.google.com/file/d/1ZXEaguX_TlaZChutw_DYpwdNfIs8DHDp/preview",
-          poster: "" 
-        }
-      ];
-
       return (
         <div className="space-y-6 px-2">
           <h1 className="text-3xl font-bold mb-4">Tutorials</h1>
-          
-          <div className="flex space-x-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
-            {videos.map(video => (
-              <div key={video.id} className="min-w-[280px] h-48 bg-gray-800 rounded-2xl relative snap-center overflow-hidden shadow-md flex-shrink-0 border border-gray-200">
-                {video.type === "drive" ? (
-                  <iframe src={video.url} className="w-full h-full" frameBorder="0" allow="autoplay" allowFullScreen></iframe>
-                ) : (
-                  <video src={video.url} poster={video.poster} controls playsInline preload="metadata" className="w-full h-full object-cover" />
-                )}
-                <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/60 to-transparent p-3 pointer-events-none">
-                  <span className="text-white font-semibold text-sm drop-shadow-md">{video.title}</span>
-                </div>
-              </div>
-            ))}
-          </div>
 
           <div className="space-y-4">
             {tutorials.map((tut, i) => (
