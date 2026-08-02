@@ -296,8 +296,14 @@
           const topicParts = topic.split('/');
           const baseTopic = topicParts.slice(0, 3).join('/');
           let msgId = Date.now();
-          if (topicParts.length > 3) msgId = parseInt(topicParts[3]); 
-          if (isNaN(msgId)) msgId = Date.now();
+          if (topicParts.length > 3) msgId = parseInt(topicParts[3]);
+          // Devices that haven't taken the epoch-timestamp update yet put millis()
+          // here -- uptime, not wall clock. It renders as a 1970 time, and being
+          // ~1e6 against our ~1e12 epoch ids it sorts every device message ahead
+          // of every parent message. The two ranges never overlap (millis() rolls
+          // over at 4.3e9), so anything below a plausible epoch is uptime: fall
+          // back to arrival time rather than trusting it.
+          if (isNaN(msgId) || msgId < 1600000000000) msgId = Date.now();
           
           if (baseTopic === `doorbell/msg/${hashedParent}`) {
             if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
