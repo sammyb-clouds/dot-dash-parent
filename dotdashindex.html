@@ -1153,8 +1153,12 @@
         const baseTopic = `doorbell/msg/${activeDevice.hashedId}`;
         const queueTopic = `${baseTopic}/${Date.now()}`;
         const messageString = `${type},${payload},${parentProfile.virtualId}`;
-        
-        mqttClient.publish(baseTopic, messageString, { qos: 1, retain: true });
+
+        // Publish ONLY to the per-message queue topic. Its unique id lets the
+        // device's persistent replay guard dedupe reliably. (Previously we also
+        // published to the id-less base topic, which the device receives via its
+        // overlapping `.../#` subscription -- that second copy is only guarded by
+        // a 3s window and slips through when message handling blocks, arriving twice.)
         mqttClient.publish(queueTopic, messageString, { qos: 1, retain: true });
         
         setMessages(prev => [...prev, {
