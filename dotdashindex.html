@@ -786,15 +786,15 @@
                    <div className="space-y-3">
                      <div className="flex items-start">
                        <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">1</div>
-                       <p className="ml-3 text-gray-700">Turn on your Dot Dash.</p>
+                       <p className="ml-3 text-gray-700">Turn on your Dot Dash. It will say <strong>HELLO!</strong> — press any button to begin.</p>
                      </div>
                      <div className="flex items-start">
                        <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">2</div>
-                       <p className="ml-3 text-gray-700">Press <strong>SELECT</strong> (front arcade button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong> on the screen.</p>
+                       <p className="ml-3 text-gray-700">Press <strong>SELECT</strong> (front arcade button) until you see <strong>1.WIFI</strong> on the screen.</p>
                      </div>
                      <div className="flex items-start">
                        <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">3</div>
-                       <p className="ml-3 text-gray-700">Press <strong>ENTER</strong> (top arcade button), then <strong>ENTER</strong> again to choose <strong>DOT DASH SETUP</strong>.</p>
+                       <p className="ml-3 text-gray-700">Press <strong>ENTER</strong> (top arcade button) to start Wi-Fi setup.</p>
                      </div>
                      <div className="flex items-start">
                        <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">4</div>
@@ -840,7 +840,7 @@
              {step === 'PAIRING' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Link Your Device</h2>
-                   <p className="text-gray-500 mb-6 text-left">Navigate to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> on your Dot Dash and enter the 6-character code below.</p>
+                   <p className="text-gray-500 mb-6 text-left">On your Dot Dash, press <strong>SELECT</strong> until you see <strong>2.PAIRING</strong>, then press <strong>ENTER</strong>. Enter the 6-character code it shows below.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
                    <input type="text" placeholder="AB-12-CD" maxLength="8" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-2xl tracking-widest border border-gray-200 focus:border-blue-400" value={pairingCode} onChange={e=>setPairingCode(e.target.value.toUpperCase())} />
                    <button onClick={handlePairingSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
@@ -1419,15 +1419,12 @@
           title: "Changing Wi-Fi Networks",
           icon: "rss",
           steps: [
-            { text: "Moving your Dot Dash somewhere new? There are two ways to switch Wi-Fi networks — from your phone, or on the device itself." },
-            { title: "From your phone", text: "On your Dot Dash, open {{gear}} TOOLS and select DOT DASH SETUP." },
-            { title: "From your phone", text: "On your phone, open Wi-Fi settings and join the network called Dot Dash Setup." },
-            { title: "From your phone", text: "A setup page should pop up automatically. If it doesn't, open a browser and go to 192.168.4.1." },
-            { title: "From your phone", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
-            { title: "On the device", text: "On your Dot Dash, open {{gear}} TOOLS and select CHANGE WI-FI." },
-            { title: "On the device", text: "Wait for the scan to finish, then tap SELECT to highlight your network and ENTER to choose it." },
-            { title: "On the device", text: "Type the password: tap SELECT to cycle through letters, tap ENTER to lock in each one, and double-tap ENTER to backspace." },
-            { title: "On the device", text: "Hold ENTER when you're finished to save and connect." }
+            { text: "Moving your Dot Dash somewhere new? Add the new network from your phone — the Dot Dash remembers up to five, and picks whichever one it finds." },
+            { title: "Step 1", text: "On your Dot Dash, open {{gear}} TOOLS and select WIFI." },
+            { title: "Step 2", text: "On your phone, open Wi-Fi settings and join the network called Dot Dash Setup." },
+            { title: "Step 3", text: "A setup page should pop up automatically. If it doesn't, open a browser and go to 192.168.4.1." },
+            { title: "Step 4", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
+            { title: "Good to know", text: "Old networks are kept, not replaced. Back at a previous location, the Dot Dash reconnects on its own." }
           ]
         }
       ];
