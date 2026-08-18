@@ -922,6 +922,13 @@
        const handleUnlink = async () => {
          if (unlinkCode.toUpperCase() !== activeDevice.pairingCode) return alert("Incorrect pairing code.");
          if (window.confirm("Are you sure you want to unlink this device from your account?")) {
+            // Tell the device first, and while we still hold its hash. Removing
+            // the records alone left it believing it was still paired: it kept the
+            // name and PIN, so every friend's device carried on publishing to an
+            // identity nobody was listening on any more, and messages vanished
+            // silently. Retained so a device that is switched off is released the
+            // next time it connects rather than being orphaned for good.
+            try { mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,UNPAIR`, {qos: 1, retain: true}); } catch(e){}
             await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id));
             try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', activeDevice.hashedId)); } catch(e){}
             setUnlinkMode(false);
