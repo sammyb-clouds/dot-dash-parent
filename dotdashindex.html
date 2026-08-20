@@ -805,11 +805,11 @@
                      </div>
                      <div className="flex items-start">
                        <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">2</div>
-                       <p className="ml-3 text-gray-700">Press <strong>SELECT</strong> (front arcade button) until you see <strong>1.WIFI</strong> on the screen.</p>
+                       <p className="ml-3 text-gray-700">Press <strong>SELECT</strong> (front arcade button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong> on the screen.</p>
                      </div>
                      <div className="flex items-start">
                        <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">3</div>
-                       <p className="ml-3 text-gray-700">Press <strong>ENTER</strong> (top arcade button) to start Wi-Fi setup.</p>
+                       <p className="ml-3 text-gray-700">Press <strong>ENTER</strong> (top arcade button) to open Tools, then <strong>ENTER</strong> again on <strong>WIFI</strong>.</p>
                      </div>
                      <div className="flex items-start">
                        <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">4</div>
@@ -855,7 +855,7 @@
              {step === 'PAIRING' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Link Your Device</h2>
-                   <p className="text-gray-500 mb-6 text-left">On your Dot Dash, press <strong>SELECT</strong> until you see <strong>2.PAIRING</strong>, then press <strong>ENTER</strong>. Enter the 6-character code it shows below.</p>
+                   <p className="text-gray-500 mb-6 text-left">On your Dot Dash, go to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> and enter the 6-character code it shows below.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
                    <input type="text" placeholder="AB-12-CD" maxLength="8" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-2xl tracking-widest border border-gray-200 focus:border-blue-400" value={pairingCode} onChange={e=>setPairingCode(e.target.value.toUpperCase())} />
                    <button onClick={handlePairingSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
