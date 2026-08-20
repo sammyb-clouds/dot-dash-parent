@@ -266,10 +266,14 @@
           setMqttClient(client);
           setTimeout(() => { client.connected = true; client.emit('connect'); }, 800);
         } else {
-          // UPDATE YOUR PASSWORD HERE 👇
+          // Broker credentials. These are PUBLIC by necessity -- this file is served
+          // to every parent, so treat them as an identity, not a secret. Security
+          // comes from the broker ACL: this account may command and claim devices
+          // and read Monitor, and nothing outside doorbell/. Devices use a separate
+          // account that cannot read Monitor or claim a device.
           const options = { 
-            username: 'DigitalDoorbell', 
-            password: 'Ringring1', 
+            username: 'dotdash-app', 
+            password: 'sqEh8Vx6hNE5ZaBKDG2LP1X', 
             clientId: 'web_' + Math.random().toString(16).substr(2, 8) 
           };
           client = window.mqtt.connect(brokerUrl, options);

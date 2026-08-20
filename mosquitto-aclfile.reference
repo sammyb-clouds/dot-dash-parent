@@ -1,0 +1,47 @@
+# Dot Dash broker ACL
+#
+# With an acl_file present, mosquitto denies everything not listed here, so both
+# accounts must be described in full.
+#
+# Both credentials are effectively public -- the device one is recoverable from
+# the firmware images, the app one sits in a public HTML file -- so this limits
+# what a leaked credential CAN DO rather than keeping it secret.
+#
+# What a shared device credential cannot express is "only my own topics". That
+# needs one username per device (username = hashedMyID, plus pattern ACLs).
+# Until then, devices can still read each other's msg/ and cmd/ topics.
+
+# ---------------- Parent application ----------------
+# The moderator: sends commands, claims devices, relays messages, reads Monitor.
+user dotdash-app
+topic write     doorbell/cmd/+
+topic write     doorbell/pairing/+
+topic read      doorbell/pairing/reply/+
+topic readwrite doorbell/msg/+
+topic readwrite doorbell/msg/+/#
+topic readwrite doorbell/monitor/+/#
+topic read      doorbell/presence/+
+
+# ---------------- Devices ----------------
+user DigitalDoorbell
+topic readwrite doorbell/msg/+
+topic readwrite doorbell/msg/+/#
+topic readwrite doorbell/presence/+
+topic readwrite doorbell/score/+/+
+
+# Monitor is WRITE ONLY. Devices never subscribe to it, and it carries message
+# text plus the recipient hash -- so a leaked device credential must not be able
+# to read that stream back.
+topic write     doorbell/monitor/+/#
+
+# cmd stays readwrite: a device clears its own retained command by publishing an
+# empty payload to it, which is what stops a retained GRANT_TIMER being
+# re-awarded on every reconnect. Cannot be narrowed without per-device usernames.
+topic readwrite doorbell/cmd/+
+
+# Pairing: devices READ their own pairing topic and WRITE only to reply/.
+# Deliberately no write on doorbell/pairing/+ -- that is the CLAIM topic, and a
+# leaked credential must not be able to claim an unpaired device out from under
+# its parent. The two sit at different depths, so the ACL can tell them apart.
+topic read      doorbell/pairing/+
+topic write     doorbell/pairing/reply/+
