@@ -55,7 +55,7 @@ self.addEventListener('notificationclick', (event) => {
           // An app that is ALREADY open will not re-read the URL, so the tab
           // has to be handed over directly. Without this, tapping a timer
           // approval focuses whatever screen the parent left open.
-          if (tab) c.postMessage({ type: 'dotdash:navigate', tab });
+          if (tab) c.postMessage({ type: 'dotdash:navigate', tab, who: data.who || null });
           return c.focus();
         }
       }

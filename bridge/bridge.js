@@ -205,6 +205,7 @@ function parseMessage(parts, payload) {
     body,
     level: 'active',
     route: 'parent',
+    sender,          // the child's NAME+PIN, which is how the app labels chats
   };
 }
 
@@ -400,11 +401,16 @@ async function deliver(hash, ev) {
 // Every data value must be a string -- FCM rejects the message otherwise, and
 // the error does not say which field.
 async function send(uid, tokens, childHash, ev) {
-  // Land on the tab that ANSWERS the alert. A timer approval lives in Monitor,
-  // so opening Chat means the parent has to go and find it -- which is most of
-  // the value of tapping a notification gone.
+  // Land on the tab that ANSWERS the alert, AND on the right child. Both tabs
+  // have a device selector, so the tab alone drops a parent on whichever child
+  // they happened to be looking at last -- which for a message means the wrong
+  // conversation.
+  //
+  // Chat selects by the sender's NAME+PIN, because that is what it filters on.
+  // Monitor selects by the device hash, which is what the topic carries.
   const tab = ev.kind === 'message' ? 'chat' : 'monitor';
-  const link = `${LINK_PATH}#${tab}`;
+  const who = ev.kind === 'message' ? (ev.sender || '') : childHash;
+  const link = who ? `${LINK_PATH}#${tab}:${who}` : `${LINK_PATH}#${tab}`;
   const messages = tokens.map((token) => ({
     token,
     notification: { title: ev.title, body: ev.body },
@@ -413,7 +419,7 @@ async function send(uid, tokens, childHash, ev) {
       notification: { title: ev.title, body: ev.body, icon: '/icon.jpg' },
       fcmOptions: { link },
     },
-    data: { kind: ev.kind, child: childHash.slice(0, 16), link, tab },
+    data: { kind: ev.kind, child: childHash, link, tab, who },
   }));
 
   let res;

@@ -234,11 +234,17 @@
       //   cold   -- the service worker opens /test.html#monitor, read here
       //   warm   -- the service worker focuses the window and postMessages the
       //             tab, because an open page never re-reads its own URL
-      const tabFromHash = () => {
-        const h = (window.location.hash || '').replace('#', '');
-        return ['chat', 'monitor', 'tutorials', 'settings'].includes(h) ? h : 'chat';
+      // Hash carries "<tab>" or "<tab>:<who>", where who is the sender's NAME+PIN
+      // for a chat and the device hash for a monitor alert.
+      const parseHash = () => {
+        const raw = (window.location.hash || '').replace('#', '');
+        const [tab, who] = raw.split(':');
+        return {
+          tab: ['chat', 'monitor', 'tutorials', 'settings'].includes(tab) ? tab : 'chat',
+          who: who || null,
+        };
       };
-      const [activeTab, setActiveTab] = useState(tabFromHash);
+      const [activeTab, setActiveTab] = useState(() => parseHash().tab);
       const [childOnlineStatus, setChildOnlineStatus] = useState({});
       const [activeChildId, setActiveChildId] = useState(null); 
       
@@ -356,12 +362,17 @@
         const onSwMessage = (e) => {
           if (e.data && e.data.type === 'dotdash:navigate' && e.data.tab) {
             setActiveTab(e.data.tab);
+            if (e.data.who) selectDeviceFor(e.data.who);
           }
         };
         navigator.serviceWorker.addEventListener('message', onSwMessage);
         // Also covers the case where iOS resumes the app on a new hash rather
         // than reloading it.
-        const onHash = () => setActiveTab(tabFromHash());
+        const onHash = () => {
+          const { tab, who } = parseHash();
+          setActiveTab(tab);
+          if (who) selectDeviceFor(who);
+        };
         window.addEventListener('hashchange', onHash);
         return () => {
           navigator.serviceWorker.removeEventListener('message', onSwMessage);
@@ -678,6 +689,29 @@
                    }}
                 />;
       }
+
+      // A notification names WHO it is about: a sender's NAME+PIN for a chat, or
+      // a device hash for a monitor alert. Both resolve to the same device here,
+      // because both tabs select by device id.
+      const selectDeviceFor = (who) => {
+        if (!who) return;
+        const match = devicesRef.current.find((d) => {
+          const label = `${d.identity?.name || ''}${d.identity?.pin || ''}`;
+          return label === who || d.hashedId === who;
+        });
+        if (match) setActiveChildId(match.id);
+      };
+
+      // Cold start: devices load asynchronously, so the hash cannot be applied
+      // until they exist. Runs once they do, then clears the hash so a later
+      // reload does not keep yanking the parent back to an old notification.
+      useEffect(() => {
+        if (!devices.length) return;
+        const { who } = parseHash();
+        if (!who) return;
+        selectDeviceFor(who);
+        try { window.history.replaceState(null, '', window.location.pathname); } catch (e) {}
+      }, [devices]);
 
       const activeDevice = devices.find(d => d.id === activeChildId);
       const activeChildLabel = activeDevice ? `${activeDevice.identity.name}${activeDevice.identity.pin}` : '';
