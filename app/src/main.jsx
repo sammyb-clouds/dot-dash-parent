@@ -1073,7 +1073,6 @@
        const [unlinkCode, setUnlinkCode] = useState('');
        const [newFriendId, setNewFriendId] = useState('');
        const [newPhrase, setNewPhrase] = useState('');
-       const [syncing, setSyncing] = useState(false);
        const [openFriends, setOpenFriends] = useState(false);
        const [openMessages, setOpenMessages] = useState(false);
 
@@ -1159,22 +1158,6 @@
          mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_PHRASES,${updatedPhrases.join('|')}`, {qos: 1, retain: true});
        };
 
-       const handleManualSync = () => {
-         setSyncing(true);
-         // 1. Sync Friends
-         const currentFriends = activeDevice.friends || [];
-         const updatedFriends = [...new Set([parentProfile.virtualId, ...currentFriends].filter(Boolean))];
-         if (updatedFriends.length !== currentFriends.length) {
-             updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: updatedFriends });
-         }
-         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, {qos: 1, retain: true});
-
-         // 2. Sync Phrases
-         updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { phrases: currentPhrases });
-         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_PHRASES,${currentPhrases.join('|')}`, {qos: 1, retain: true});
-
-         setTimeout(() => setSyncing(false), 2000);
-       };
 
        if (unlinkMode) {
           return (
@@ -1208,16 +1191,9 @@
          <div className="p-6">
             <div className="flex justify-between items-center mb-6">
                <h1 className="text-3xl font-bold">Settings</h1>
-               <button onClick={handleEnablePush} disabled={pushState.busy}
-                 className="flex items-center px-4 py-2 bg-blue-500 text-white font-bold rounded-full shadow-sm active:bg-blue-600 disabled:bg-blue-300 mr-3">
-                  <Bell className="w-4 h-4 mr-2"/> {pushState.busy ? 'Working...' : 'Notifications'}
-               </button>
                <button onClick={handleLogout} className="flex items-center px-4 py-2 bg-white text-gray-700 font-bold rounded-full shadow-sm active:bg-gray-100 border border-gray-200">
                   <LogOut className="w-4 h-4 mr-2"/> Logout
                </button>
-               {pushState.msg && (
-                 <p className="w-full mt-3 text-sm text-gray-600 leading-snug">{pushState.msg}</p>
-               )}
             </div>
 
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
@@ -1305,11 +1281,26 @@
                 </div>
               )}
 
-              <div className="mb-6"></div>
+            </div>
 
-              <button onClick={handleManualSync} className="w-full py-3 bg-gray-100 text-gray-700 font-bold rounded-xl flex items-center justify-center active:bg-gray-200 border border-gray-200 transition-colors">
-                 {syncing ? <><CheckCircle2 className="w-5 h-5 mr-2 text-green-500"/> Sent to Device!</> : "Send Lists to Device"}
+            {/* Sits directly above Add to Home Screen on purpose: on iPhone the
+                one is a precondition for the other, and a parent who taps this
+                from a Safari tab needs the next box to be the answer. */}
+            <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
+              <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
+                  <Bell className="w-4 h-4 mr-2" /> Notifications
+              </h3>
+              <p className="text-gray-500 text-sm leading-relaxed mb-4">
+                  Get alerted when someone new messages your child, a timer needs
+                  approving, or a device battery runs low.
+              </p>
+              <button onClick={handleEnablePush} disabled={pushState.busy}
+                className="w-full py-3 bg-blue-500 text-white font-bold rounded-full shadow-sm active:bg-blue-600 disabled:bg-blue-300 transition-colors">
+                 {pushState.busy ? 'Working...' : 'Turn On Notifications'}
               </button>
+              {pushState.msg && (
+                <p className="mt-3 text-sm text-gray-600 leading-snug">{pushState.msg}</p>
+              )}
             </div>
 
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6">
