@@ -109,7 +109,14 @@ class SeenStore:
 # ------------------------------------------------------------- events ----
 def parse_event(topic: str, payload: str):
     """
-    Return (kind, title, body) for a topic worth notifying about, else None.
+    Return (kind, title, body, level) for a topic worth notifying about, else None.
+
+    `level` is the APNs interruption-level, and it encodes urgency rather than
+    importance. A friend request and a finished timer both have a child waiting
+    on a parent to tap something, so they arrive normally. A flat battery is
+    true for hours and needs no decision -- it goes out "passive": no sound, no
+    vibration, no lit screen, just waiting in Notification Center. Same
+    information, without buzzing a pocket at 3am over a battery.
 
     Topic shape: doorbell/monitor/<childHash>/<kind>[/<id>]
 
@@ -130,17 +137,20 @@ def parse_event(topic: str, payload: str):
         sender = fields[1]
         return ("friendreq",
                 "New friend request",
-                f"{sender} sent your child a message. Add them as a friend?")
+                f"{sender} sent your child a message. Add them as a friend?",
+                "active")
 
     if kind == "timerreq" and tag == "TIMERREQ" and len(fields) >= 3:
         minutes, points = fields[1], fields[2]
         return ("timerreq",
                 "Timer completed",
-                f"Your child finished a {minutes}-minute timer. Approve {points} points?")
+                f"Your child finished a {minutes}-minute timer. Approve {points} points?",
+                "active")
 
     if kind == "battery":
         if tag == "LOWBATT":
-            return ("battery", "Low battery", "Your child's Dot Dash needs charging.")
+            return ("battery", "Low battery",
+                    "Your child's Dot Dash needs charging.", "passive")
         # An empty payload is the device withdrawing the alert because it is on
         # charge again. Nothing to push -- but it still has to pass through the
         # replay guard so the NEXT genuine low reading is treated as new.
@@ -150,15 +160,24 @@ def parse_event(topic: str, payload: str):
 
 
 # ------------------------------------------------------------ delivery ----
-def deliver(child_hash: str, kind: str, title: str, body: str):
-    """Stage B/C. Until a service account is installed this only reports."""
+def deliver(child_hash: str, kind: str, title: str, body: str, level: str):
+    """
+    Stage B/C. Until a service account is installed this only reports.
+
+    When stage C lands, `level` goes into the APNs payload as
+    aps.interruption-level. Note it has no Web Push equivalent: a browser or
+    installed PWA has no notion of a passive notification, so the battery alert
+    will be as loud as the others there until the platform offers a way to say
+    otherwise.
+    """
     if not SERVICE_ACCOUNT:
         log.info("  [stage A] no SERVICE_ACCOUNT set -- would notify "
-                 "child=%s kind=%s title=%r", child_hash[:12], kind, title)
+                 "child=%s kind=%s level=%s title=%r",
+                 child_hash[:12], kind, level, title)
         return
     if DRY_RUN:
-        log.info("  [dry run] child=%s kind=%s title=%r body=%r",
-                 child_hash[:12], kind, title, body)
+        log.info("  [dry run] child=%s kind=%s level=%s title=%r body=%r",
+                 child_hash[:12], kind, level, title, body)
         return
     log.warning("  stage C not implemented yet: child=%s kind=%s", child_hash[:12], kind)
 
@@ -195,10 +214,11 @@ def on_message(client, userdata, msg):
         log.debug("retained replay ignored: %s", topic)
         return
 
-    kind, title, body = event
+    kind, title, body, level = event
     child_hash = topic.split("/")[2]
-    log.info("EVENT %-10s child=%s payload=%r", kind, child_hash[:12], payload)
-    deliver(child_hash, kind, title, body)
+    log.info("EVENT %-10s child=%s level=%-7s payload=%r",
+             kind, child_hash[:12], level, payload)
+    deliver(child_hash, kind, title, body, level)
 
 
 def main():
