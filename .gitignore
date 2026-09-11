@@ -27,7 +27,18 @@ ios/App/App.xcodeproj/xcuserdata/
 DerivedData/
 *.xcuserstate
 
-# Signing material -- must never be committed
+# Credentials -- must never be committed.
+#
+# The Firebase service account JSON is the worst one to leak: it is a private
+# key granting ADMIN access to the whole project -- every user's Firestore data,
+# and the ability to mint auth tokens as anyone. It belongs on the droplet at
+# 0600 and nowhere else, never in this repo. The patterns below cover the names
+# the Firebase console hands out.
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceaccount*.json
+dotdash-*-firebase*.json
+
 *.p8
 *.p12
 *.mobileprovision
