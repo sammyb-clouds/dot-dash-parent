@@ -1,0 +1,18 @@
+[Unit]
+Description=Dot Dash push bridge (MQTT -> FCM -> APNs)
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/dotdash_bridge
+EnvironmentFile=/root/dotdash_bridge/bridge.env
+ExecStart=/root/dotdash_bridge/venv/bin/python /root/dotdash_bridge/bridge.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -45,3 +45,14 @@ topic readwrite doorbell/cmd/+
 # its parent. The two sit at different depths, so the ACL can tell them apart.
 topic read      doorbell/pairing/+
 topic write     doorbell/pairing/reply/+
+
+# ---------------- Push bridge ----------------
+# Forwards friendreq / timerreq / battery alerts to parents' phones via FCM,
+# because iOS suspends the parent app and its MQTT connection with it.
+#
+# READ ONLY, and only Monitor. It never publishes anything, so it never should
+# be able to: a leaked bridge credential can watch that stream and nothing else.
+# Note this is the one stream carrying message text, which is why it gets its
+# own account rather than reusing the device or app credentials.
+user dotdash-bridge
+topic read      doorbell/monitor/+/#
