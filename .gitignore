@@ -14,9 +14,14 @@ www/
 # Capacitor copies the web assets into the iOS project on `cap sync`.
 ios/App/App/public/
 
-# Xcode / CocoaPods build output
+# Capacitor regenerates this from the root capacitor.config.json on every sync.
+ios/App/App/capacitor.config.json
+
+# Xcode build output. ios/build/ is the -derivedDataPath used by the build
+# script; DerivedData/ is where Xcode.app puts it by default.
 ios/App/Pods/
 ios/App/build/
+ios/build/
 ios/App/App.xcworkspace/xcuserdata/
 ios/App/App.xcodeproj/xcuserdata/
 DerivedData/
