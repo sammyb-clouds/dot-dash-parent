@@ -549,8 +549,13 @@
           if (isNaN(msgId) || msgId < 1600000000000) msgId = Date.now();
           
           if (baseTopic === `doorbell/msg/${hashedParent}`) {
-            if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
+            // ORDER MATTERS. The retained copy on the broker is the ONLY copy
+            // until this client saves it, so it is released last. Clearing first
+            // meant a message could vanish for good: iOS suspends this app within
+            // seconds of it connecting, and anything suspended between the clear
+            // and the save was gone from the broker and never written anywhere.
             const parts = payload.split(',');
+            let stored = false;
             if (parts.length >= 3) {
               const newMsg = {
                 id: msgId, type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
@@ -558,9 +563,18 @@
               };
               setMessages(prev => {
                 if (prev.some(m => m.id === msgId)) return prev;
-                return [...prev, newMsg];
+                const next = [...prev, newMsg];
+                // Written here rather than left to the effect that mirrors
+                // `messages`, because that effect runs a tick later -- which is
+                // exactly the gap a suspension falls into.
+                try { localStorage.setItem('dotdash_messages', JSON.stringify(next)); } catch (e) {}
+                return next;
               });
+              stored = true;
             }
+            // A payload we could not parse is left on the broker deliberately:
+            // better a message that reappears than one silently destroyed.
+            if (stored && !isCanvasBlocked) client.publish(topic, "", { retain: true });
             return;
           }
 
@@ -622,7 +636,6 @@
               return; // do NOT auto-clear; cleared when the parent approves/denies
             }
 
-            if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
             const parts = payload.split(',');
             if (parts.length >= 3) {
               let targetFriend = "A Friend";
@@ -646,8 +659,12 @@
               };
               setMonitorMessages(prev => {
                 if (prev.some(m => m.id === msgId)) return prev;
-                return [...prev, newMonMsg];
+                const next = [...prev, newMonMsg];
+                try { localStorage.setItem('dotdash_monitor', JSON.stringify(next)); } catch (e) {}
+                return next;
               });
+              // Released only now, for the same reason as the parent path above.
+              if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
             }
           }
         });
