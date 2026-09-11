@@ -247,8 +247,25 @@ async function initFirestore() {
     const sa = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT, 'utf8'));
     initializeApp({ credential: cert(sa) });
     messaging = getMessaging();
+    const store = getFirestore();
+
+    // Watch for token changes instead of waiting out a TTL. Without this, a
+    // parent who turns notifications on gets nothing until the cache expires --
+    // which is exactly the moment they are testing it, so it reads as broken.
+    // At this scale the listener costs nothing and makes the cache correct
+    // rather than merely fresh.
+    store.collectionGroup('pushTokens').onSnapshot(
+      (snap) => {
+        const uids = new Set();
+        for (const c of snap.docChanges()) uids.add(c.doc.ref.path.split('/')[3]);
+        for (const uid of uids) cache.delete(`tok:${uid}`);
+        if (uids.size) info(`token cache invalidated for ${uids.size} parent(s)`);
+      },
+      (e) => error(`pushTokens watch failed: ${e.message}`)
+    );
+
     info(`firestore ready (project ${sa.project_id})`);
-    return getFirestore();
+    return store;
   } catch (e) {
     // Deliberately non-fatal: drop back to stage A rather than exit. A bridge
     // that dies on a bad credential looks identical to one that is working.
@@ -259,7 +276,7 @@ async function initFirestore() {
 
 const CACHE_OK_MS = 60 * 60 * 1000;   // device -> parent almost never changes
 const CACHE_MISS_MS = 5 * 60 * 1000;  // but re-check unknowns occasionally
-const CACHE_TOKENS_MS = 5 * 60 * 1000;
+const CACHE_TOKENS_MS = 5 * 60 * 1000;   // backstop; the watcher above is the real mechanism
 const cache = new Map();
 
 function cacheGet(key) {

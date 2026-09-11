@@ -5,7 +5,7 @@
     import { createRoot } from 'react-dom/client';
     import { initializeApp } from 'firebase/app';
     import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
-    import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
+    import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
     import { getMessaging, getToken, deleteToken, isSupported as messagingSupported } from 'firebase/messaging';
 
     // =========================================================================
@@ -146,12 +146,25 @@
       // A push token is far longer than the 1500-byte cap on a Firestore
       // document id, so the id is a digest and the token lives in a field.
       const id = sha256(token).slice(0, 32);
+      const ua = navigator.userAgent.slice(0, 200);
       await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id), {
         token,
         platform: isNativeApp() ? 'ios-app' : (iOS ? 'ios-web' : 'web'),
-        userAgent: navigator.userAgent.slice(0, 200),
+        userAgent: ua,
         updatedAt: Date.now(),
       });
+
+      // Drop this device's PREVIOUS tokens. Deleting a Home Screen app throws
+      // away its push subscription but leaves the token in Firestore, and FCM
+      // keeps reporting those as delivered -- so they pile up and silently
+      // absorb notifications that never arrive anywhere. Matched on user agent,
+      // which is the same phone re-registering.
+      try {
+        const existing = await getDocs(collection(db, 'artifacts', appId, 'users', uid, 'pushTokens'));
+        await Promise.all(existing.docs
+          .filter((d) => d.id !== id && d.data().userAgent === ua)
+          .map((d) => deleteDoc(d.ref)));
+      } catch (e) {}
 
       try { localStorage.setItem(PUSH_ID_KEY, id); } catch (e) {}
       return { ok: true, reason: 'Notifications are on for this device.' };
