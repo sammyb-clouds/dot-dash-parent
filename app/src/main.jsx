@@ -6,7 +6,7 @@
     import { initializeApp } from 'firebase/app';
     import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
     import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
-    import { getMessaging, getToken, isSupported as messagingSupported } from 'firebase/messaging';
+    import { getMessaging, getToken, deleteToken, isSupported as messagingSupported } from 'firebase/messaging';
 
     // =========================================================================
     // ✅ YOUR FIREBASE CONFIGURATION ✅
@@ -83,6 +83,7 @@
     // ---------- WEB PUSH REGISTRATION ----------
     // Public VAPID key. Safe in client code by design -- it is the public half
     // of the pair, and the private half never leaves Firebase.
+    const PUSH_ID_KEY = 'dotdash_push_token_id';
     const VAPID_PUBLIC_KEY =
       'BFuCduXya7RRSfwlQoZWbKoOcJhkWtzr6mz9OsHJNGWUNA7j4LJB21kpVP__Vo8BayRxwh7MKy_IeGLorIvK2jU';
 
@@ -139,7 +140,41 @@
         updatedAt: Date.now(),
       });
 
+      try { localStorage.setItem(PUSH_ID_KEY, id); } catch (e) {}
       return { ok: true, reason: 'Notifications are on for this device.' };
+    }
+
+    // Turning them OFF deletes the token the bridge sends to. Browser permission
+    // itself cannot be revoked from script -- only the user can, in Settings --
+    // so removing the token is what actually stops the notifications, and it
+    // stops them for THIS device without touching the parent's other phones.
+    async function disableWebPush(uid) {
+      let id = null;
+      try { id = localStorage.getItem(PUSH_ID_KEY); } catch (e) {}
+
+      if (uid && id) {
+        try { await deleteDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id)); } catch (e) {}
+      }
+      try { await deleteToken(getMessaging(app)); } catch (e) {}
+      try { localStorage.removeItem(PUSH_ID_KEY); } catch (e) {}
+      return { ok: true, reason: 'Notifications are off for this device.' };
+    }
+
+    // Is this browser currently registered? Checked against Firestore rather
+    // than trusting localStorage alone: a token pruned as dead at the other end
+    // would otherwise still show as on.
+    async function webPushState(uid) {
+      if (!uid) return false;
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
+      let id = null;
+      try { id = localStorage.getItem(PUSH_ID_KEY); } catch (e) {}
+      if (!id) return false;
+      try {
+        const snap = await getDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id));
+        return snap.exists();
+      } catch (e) {
+        return false;
+      }
     }
 
     // --- Inline SVG Icons ---
@@ -194,7 +229,16 @@
       const [mqttClient, setMqttClient] = useState(null);
       
       const [isWizardActive, setIsWizardActive] = useState(false);
-      const [activeTab, setActiveTab] = useState('chat');
+      // A notification tap names the tab that ANSWERS it. Two routes in, because
+      // the app may be cold or already running:
+      //   cold   -- the service worker opens /test.html#monitor, read here
+      //   warm   -- the service worker focuses the window and postMessages the
+      //             tab, because an open page never re-reads its own URL
+      const tabFromHash = () => {
+        const h = (window.location.hash || '').replace('#', '');
+        return ['chat', 'monitor', 'tutorials', 'settings'].includes(h) ? h : 'chat';
+      };
+      const [activeTab, setActiveTab] = useState(tabFromHash);
       const [childOnlineStatus, setChildOnlineStatus] = useState({});
       const [activeChildId, setActiveChildId] = useState(null); 
       
@@ -307,6 +351,24 @@
       useEffect(() => { localStorage.setItem('dotdash_messages', JSON.stringify(messages)); }, [messages]);
       useEffect(() => { localStorage.setItem('dotdash_monitor', JSON.stringify(monitorMessages)); }, [monitorMessages]);
       
+      useEffect(() => {
+        if (!('serviceWorker' in navigator)) return;
+        const onSwMessage = (e) => {
+          if (e.data && e.data.type === 'dotdash:navigate' && e.data.tab) {
+            setActiveTab(e.data.tab);
+          }
+        };
+        navigator.serviceWorker.addEventListener('message', onSwMessage);
+        // Also covers the case where iOS resumes the app on a new hash rather
+        // than reloading it.
+        const onHash = () => setActiveTab(tabFromHash());
+        window.addEventListener('hashchange', onHash);
+        return () => {
+          navigator.serviceWorker.removeEventListener('message', onSwMessage);
+          window.removeEventListener('hashchange', onHash);
+        };
+      }, []);
+
       useEffect(() => {
         // Native asks through the plugin; the browser path is unchanged. On
         // native this covers foreground banners only -- the APNs permission the
@@ -1080,16 +1142,32 @@
 
        const handleLogout = () => { if(window.confirm("Are you sure you want to log out?")) signOut(auth); };
 
-       // Background notifications. Driven by a button rather than asked for on
-       // load, because iOS only grants permission from inside a tap handler.
+       // Background notifications. The toggle is the only way in, because iOS
+       // only grants permission from inside a tap handler -- asking on load
+       // fails silently, with no prompt and no error.
+       const [pushOn, setPushOn] = useState(false);
        const [pushState, setPushState] = useState({ busy: false, msg: '' });
-       const handleEnablePush = async () => {
+
+       useEffect(() => {
+         let alive = true;
+         webPushState(user?.uid).then((on) => { if (alive) setPushOn(on); });
+         return () => { alive = false; };
+       }, [user]);
+
+       const handleTogglePush = async () => {
          setPushState({ busy: true, msg: '' });
          try {
-           const r = await enableWebPush(user?.uid);
-           setPushState({ busy: false, msg: r.reason });
+           if (pushOn) {
+             const r = await disableWebPush(user?.uid);
+             setPushOn(false);
+             setPushState({ busy: false, msg: r.reason });
+           } else {
+             const r = await enableWebPush(user?.uid);
+             setPushOn(!!r.ok);
+             setPushState({ busy: false, msg: r.reason });
+           }
          } catch (e) {
-           setPushState({ busy: false, msg: `Could not turn on notifications: ${e.message}` });
+           setPushState({ busy: false, msg: `Could not change notifications: ${e.message}` });
          }
        };
 
@@ -1290,14 +1368,22 @@
               <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
                   <Bell className="w-4 h-4 mr-2" /> Notifications
               </h3>
-              <p className="text-gray-500 text-sm leading-relaxed mb-4">
-                  Get alerted when someone new messages your child, a timer needs
-                  approving, or a device battery runs low.
-              </p>
-              <button onClick={handleEnablePush} disabled={pushState.busy}
-                className="w-full py-3 bg-blue-500 text-white font-bold rounded-full shadow-sm active:bg-blue-600 disabled:bg-blue-300 transition-colors">
-                 {pushState.busy ? 'Working...' : 'Turn On Notifications'}
-              </button>
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-gray-500 text-sm leading-relaxed flex-1">
+                    Get alerted when your child messages you, someone new messages
+                    them, a timer needs approving, or a battery runs low.
+                </p>
+                <button
+                  role="switch"
+                  aria-checked={pushOn}
+                  aria-label="Notifications"
+                  onClick={handleTogglePush}
+                  disabled={pushState.busy}
+                  className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 disabled:opacity-50 ${pushOn ? 'bg-green-500' : 'bg-gray-300'}`}>
+                  <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${pushOn ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
+              {pushState.busy && <p className="mt-3 text-sm text-gray-400">Working...</p>}
               {pushState.msg && (
                 <p className="mt-3 text-sm text-gray-600 leading-snug">{pushState.msg}</p>
               )}

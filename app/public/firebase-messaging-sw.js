@@ -44,15 +44,22 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  // Land on the tab that answers the alert rather than the home screen.
-  const target = event.notification.data && event.notification.data.link
-    ? event.notification.data.link
-    : '/test.html';
+  const data = event.notification.data || {};
+  const target = data.link || '/test.html';
+  const tab = data.tab || null;
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if ('focus' in c) return c.focus();
+        if ('focus' in c) {
+          // An app that is ALREADY open will not re-read the URL, so the tab
+          // has to be handed over directly. Without this, tapping a timer
+          // approval focuses whatever screen the parent left open.
+          if (tab) c.postMessage({ type: 'dotdash:navigate', tab });
+          return c.focus();
+        }
       }
+      // Cold start: the tab rides in on the hash, which the app reads on boot.
       return self.clients.openWindow(target);
     })
   );

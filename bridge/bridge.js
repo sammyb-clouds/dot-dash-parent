@@ -400,7 +400,11 @@ async function deliver(hash, ev) {
 // Every data value must be a string -- FCM rejects the message otherwise, and
 // the error does not say which field.
 async function send(uid, tokens, childHash, ev) {
-  const link = LINK_PATH;
+  // Land on the tab that ANSWERS the alert. A timer approval lives in Monitor,
+  // so opening Chat means the parent has to go and find it -- which is most of
+  // the value of tapping a notification gone.
+  const tab = ev.kind === 'message' ? 'chat' : 'monitor';
+  const link = `${LINK_PATH}#${tab}`;
   const messages = tokens.map((token) => ({
     token,
     notification: { title: ev.title, body: ev.body },
@@ -409,7 +413,7 @@ async function send(uid, tokens, childHash, ev) {
       notification: { title: ev.title, body: ev.body, icon: '/icon.jpg' },
       fcmOptions: { link },
     },
-    data: { kind: ev.kind, child: childHash.slice(0, 16), link },
+    data: { kind: ev.kind, child: childHash.slice(0, 16), link, tab },
   }));
 
   let res;
