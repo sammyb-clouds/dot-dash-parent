@@ -61,7 +61,7 @@
     import React, { useState, useEffect, useRef } from 'react';
     import { createRoot } from 'react-dom/client';
     import { initializeApp } from 'firebase/app';
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+    import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
     import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
 
     // =========================================================================
@@ -80,8 +80,28 @@
     if (isCanvas) { firebaseConfig = JSON.parse(__firebase_config); }
     // =========================================================================
 
+    // True inside the Capacitor iOS app, false in any browser. Declared here
+    // rather than beside notify() below because auth creation depends on it.
+    const isNativeApp = () => {
+      const cap = window.Capacitor;
+      return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+    };
+
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+
+    // Firebase Auth's default storage NEVER SETTLES under capacitor://localhost:
+    // onAuthStateChanged simply never fires, and no error callback runs either,
+    // so the app sits on its loading spinner forever with nothing in the console
+    // to explain it. Verified on the simulator -- getAuth() never fired, and
+    // indexedDB persistence fired immediately.
+    //
+    // The browser deliberately keeps getAuth(). Its default is localStorage, and
+    // moving the web app to indexedDB would relocate where sessions live and
+    // sign every existing user out once, to fix a problem browsers do not have.
+    const auth = isNativeApp()
+      ? initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] })
+      : getAuth(app);
+
     const db = getFirestore(app);
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'dotdash';
 
@@ -102,11 +122,6 @@
     //   Anything else -> nothing, silently. WKWebView has no window.Notification
     //       at all, and neither does iOS Safari in a plain tab, so this has to
     //       fail quietly rather than throw inside the MQTT handler.
-    const isNativeApp = () => {
-      const cap = window.Capacitor;
-      return !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
-    };
-
     const notify = (title, body) => {
       try {
         if (isNativeApp()) {
