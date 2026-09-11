@@ -77,3 +77,19 @@ forever.
 - the app to register a push token into `pushTokens` — until then routing
   resolves correctly and reports `tokens=0`, which is the expected end state
   for stage B
+
+## Priming
+
+Message topics are retained and go back months, so the very first subscribe
+hands over every message ever sent. Without a guard that is one notification
+each. It happens exactly once — afterwards the digest guard recognises them —
+so the first run records the backlog silently, then writes a `__primed:msg`
+marker. On the real run that absorbed 28 topics and sent nothing.
+
+## Parent lookup
+
+A parent's topic is `sha256(virtualId.toLowerCase().trim())`, matching the app's
+`hashId()`. Firestore stores the `virtualId` but not its hash, so the reverse map
+is built by hashing every parent profile and cached for ten minutes. With a
+handful of families that is cheaper and simpler than adding a field to every
+profile and backfilling it.

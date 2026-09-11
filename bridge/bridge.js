@@ -52,7 +52,14 @@ const DRY_RUN = env.DRY_RUN === '1';
 const LINK_PATH = env.LINK_PATH || '/test.html';
 const STATE_PATH = env.STATE_PATH || '/root/dotdash_bridge/state.json';
 
-const TOPIC = 'doorbell/monitor/+/#';
+const TOPICS = [
+  'doorbell/monitor/+/#',   // friendreq / timerreq / battery alerts
+  'doorbell/msg/+/#',       // messages -- notified only when addressed to a PARENT
+];
+
+// One-time priming marker. See primeWindow below.
+const PRIME_KEY = '__primed:msg';
+const PRIME_MS = 20000;
 
 const log = (level, msg, ...rest) =>
   console.log(`${new Date().toISOString()} ${level.padEnd(7)} ${msg}`, ...rest);
@@ -121,6 +128,8 @@ class SeenStore {
  */
 export function parseEvent(topic, payload) {
   const parts = topic.split('/');
+  if (parts[1] === 'msg') return parseMessage(parts, payload);
+  if (parts[1] !== 'monitor') return null;
   if (parts.length < 4) return null;
   const kind = parts[3];
 
@@ -133,6 +142,7 @@ export function parseEvent(topic, payload) {
       title: 'New friend request',
       body: `${fields[1]} sent your child a message. Add them as a friend?`,
       level: 'active',
+      route: 'child',
     };
   }
 
@@ -142,6 +152,7 @@ export function parseEvent(topic, payload) {
       title: 'Timer completed',
       body: `Your child finished a ${fields[1]}-minute timer. Approve ${fields[2]} points?`,
       level: 'active',
+      route: 'child',
     };
   }
 
@@ -152,6 +163,7 @@ export function parseEvent(topic, payload) {
         title: 'Low battery',
         body: "Your child's Dot Dash needs charging.",
         level: 'passive',
+        route: 'child',
       };
     }
     // An empty payload is the device withdrawing the alert because it is on
@@ -161,6 +173,39 @@ export function parseEvent(topic, payload) {
   }
 
   return null;
+}
+
+/**
+ * A message addressed to someone. Payload is "TYPE,TEXT,SENDER".
+ *
+ * The same wildcard also carries messages to CHILDREN's devices -- the hash in
+ * the topic says who it is for. This returns an event either way; deliver()
+ * only notifies when that hash belongs to a parent, so a message between two
+ * children reaches nobody's phone.
+ */
+function parseMessage(parts, payload) {
+  if (parts.length < 3) return null;
+  // An empty payload is the parent app clearing the retained copy after reading
+  // it. Nothing to announce, but it still passes through the replay guard.
+  if (!payload) return null;
+
+  const f = payload.split(',');
+  if (f.length < 3) return null;
+  const [type, text, sender] = [f[0], f[1], f[2]];
+  if (!['TEXT', 'MORSE', 'PULSE'].includes(type)) return null;
+
+  let body;
+  if (type === 'TEXT') body = text;
+  else if (type === 'MORSE') body = 'Sent you a message in morse.';
+  else body = 'Buzzed you.';
+
+  return {
+    kind: 'message',
+    title: sender || 'New message',
+    body,
+    level: 'active',
+    route: 'parent',
+  };
 }
 
 // ------------------------------------------------------------- stage B ----
@@ -239,6 +284,49 @@ async function resolveParent(childHash) {
   return uid;
 }
 
+// A parent's topic is sha256(virtualId.toLowerCase().trim()) -- the same
+// hashId() the app uses. Firestore stores the virtualId but not its hash, so
+// the reverse map is built by hashing every parent profile. There are a handful
+// of families, so enumerating is cheaper and simpler than adding a field to
+// every profile and backfilling it.
+let parentHashes = new Map();
+let parentHashesAt = 0;
+const PARENT_MAP_TTL = 10 * 60 * 1000;
+
+async function refreshParentHashes() {
+  try {
+    const snap = await db.collectionGroup('profile').get();
+    const next = new Map();
+    for (const d of snap.docs) {
+      const vid = d.data().virtualId;
+      if (!vid) continue;
+      const uid = d.ref.path.split('/')[3];
+      const h = crypto.createHash('sha256')
+        .update(String(vid).toLowerCase().trim()).digest('hex');
+      next.set(h, uid);
+    }
+    parentHashes = next;
+    parentHashesAt = Date.now();
+    info(`parent map refreshed: ${next.size} parents`);
+  } catch (e) {
+    error(`refreshParentHashes failed: ${e.message}`);
+  }
+}
+
+async function resolveParentByHash(hash) {
+  if (Date.now() - parentHashesAt > PARENT_MAP_TTL) await refreshParentHashes();
+  let uid = parentHashes.get(hash);
+  if (uid) return uid;
+  // A miss is usually a CHILD's inbox, which is the common case and must stay
+  // cheap. Only re-read if the map is stale enough that a newly registered
+  // parent could plausibly be missing from it.
+  if (Date.now() - parentHashesAt > 60 * 1000) {
+    await refreshParentHashes();
+    uid = parentHashes.get(hash);
+  }
+  return uid || null;
+}
+
 async function getTokens(uid) {
   const key = `tok:${uid}`;
   const hit = cacheGet(key);
@@ -265,25 +353,31 @@ async function getTokens(uid) {
  * PWA has no notion of a passive notification, so the battery alert will be as
  * loud as the others there until the platform offers a way to say otherwise.
  */
-async function deliver(childHash, ev) {
-  const short = childHash.slice(0, 12);
+async function deliver(hash, ev) {
+  const short = hash.slice(0, 12);
   if (!db) {
-    info(`  [stage A] no firestore -- would notify child=${short} ` +
+    info(`  [stage A] no firestore -- would notify hash=${short} ` +
          `kind=${ev.kind} level=${ev.level} title=${JSON.stringify(ev.title)}`);
     return;
   }
 
-  const uid = await resolveParent(childHash);
+  // Two different questions, depending on what the topic is.
+  //   child  -- "who owns this device?"        (monitor alerts)
+  //   parent -- "is this hash a parent's id?"  (messages)
+  const uid = ev.route === 'parent'
+    ? await resolveParentByHash(hash)
+    : await resolveParent(hash);
+
   if (!uid) {
-    // Not an error: an unlinked or never-paired device keeps publishing to the
-    // Monitor stream, and nobody is listening for it.
-    info(`  no parent owns child=${short} -- nothing to notify`);
+    // Not an error, and usually not even interesting: for messages this is the
+    // common case, because the same wildcard carries every child's inbox.
+    if (ev.route !== 'parent') info(`  no parent owns child=${short} -- nothing to notify`);
     return;
   }
 
   const tokens = await getTokens(uid);
   if (tokens.length === 0) {
-    info(`  routed child=${short} -> parent=${uid.slice(0, 8)}.. but no push ` +
+    info(`  routed ${ev.route}=${short} -> parent=${uid.slice(0, 8)}.. but no push ` +
          `tokens registered yet (the app registers these at stage C)`);
     return;
   }
@@ -295,7 +389,7 @@ async function deliver(childHash, ev) {
     return;
   }
 
-  await send(uid, tokens, childHash, ev);
+  await send(uid, tokens, hash, ev);
 }
 
 // ----------------------------------------------------------------- stage C --
@@ -376,9 +470,9 @@ async function main() {
 
   client.on('connect', () => {
     info(`connected to ${MQTT_HOST}:${MQTT_PORT} as ${MQTT_USER}`);
-    client.subscribe(TOPIC, { qos: 1 }, (err) => {
+    client.subscribe(TOPICS, { qos: 1 }, (err) => {
       if (err) error(`subscribe failed: ${err.message}`);
-      else info(`subscribed to ${TOPIC}`);
+      else info(`subscribed to ${TOPICS.join('  ')}`);
     });
   });
 
@@ -386,20 +480,40 @@ async function main() {
   client.on('error', (err) => error(`mqtt error: ${err.message}`));
   client.on('close', () => warn('connection closed -- mqtt.js will retry'));
 
-  client.on('message', (topic, buf) => {
+  // PRIMING. The message topics are retained and go back months, so the very
+  // first subscribe would hand us every message ever sent and notify for each
+  // one. That happens exactly once -- afterwards the digest guard recognises
+  // them -- so the first run records the backlog silently and then marks itself
+  // primed. The window is time-based because MQTT gives no "backlog finished"
+  // signal; 20s is far longer than a retained burst takes.
+  let priming = !seen.data[PRIME_KEY];
+  if (priming) {
+    warn(`first run with message topics -- priming the replay guard for ${PRIME_MS / 1000}s ` +
+         `(existing messages will NOT be notified)`);
+    setTimeout(() => {
+      priming = false;
+      seen.data[PRIME_KEY] = new Date().toISOString();
+      seen.save();
+      info('priming complete -- new messages will notify from here');
+    }, PRIME_MS);
+  }
+
+  client.on('message', (topic, buf, packet) => {
     const payload = buf.toString('utf8');
     const ev = parseEvent(topic, payload);
 
-    // Record EVERY monitored topic, alert or not, so a cleared battery flag
-    // updates the guard and the next genuine low reading counts as new.
+    // Record EVERY topic, alert or not, so a cleared battery flag updates the
+    // guard and the next genuine low reading counts as new.
     const isNew = seen.isNew(topic, payload);
 
     if (!ev || !isNew) return;
 
-    const childHash = topic.split('/')[2];
-    info(`EVENT ${ev.kind.padEnd(10)} child=${childHash.slice(0, 12)} ` +
-         `level=${ev.level.padEnd(7)} payload=${JSON.stringify(payload)}`);
-    deliver(childHash, ev).catch((e) => error(`deliver failed: ${e.message}`));
+    if (priming && packet?.retain) return;   // backlog, not news
+
+    const hash = topic.split('/')[2];
+    info(`EVENT ${ev.kind.padEnd(10)} ${ev.route}=${hash.slice(0, 12)} ` +
+         `level=${ev.level.padEnd(7)} payload=${JSON.stringify(payload.slice(0, 60))}`);
+    deliver(hash, ev).catch((e) => error(`deliver failed: ${e.message}`));
   });
 
   for (const sig of ['SIGTERM', 'SIGINT']) {
