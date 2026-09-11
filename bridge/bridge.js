@@ -109,6 +109,15 @@ class SeenStore {
   }
 }
 
+// Strip the 4-digit PIN off a NAME+PIN id for display, matching what the device
+// itself shows and what the app now shows. DISPLAY ONLY -- routing still uses
+// the full sender, because two children can share a first name.
+function displayName(id) {
+  if (typeof id !== 'string') return id;
+  const short = id.replace(/\d{4}$/, '');
+  return short || id;
+}
+
 // ------------------------------------------------------------------ events --
 /**
  * Return {kind, title, body, level} for a topic worth notifying about, else null.
@@ -140,7 +149,7 @@ export function parseEvent(topic, payload) {
     return {
       kind: 'friendreq',
       title: 'New friend request',
-      body: `${fields[1]} sent your child a message. Add them as a friend?`,
+      body: `${displayName(fields[1])} sent your child a message. Add them as a friend?`,
       level: 'active',
       route: 'child',
     };
@@ -201,7 +210,7 @@ function parseMessage(parts, payload) {
 
   return {
     kind: 'message',
-    title: sender || 'New message',
+    title: displayName(sender) || 'New message',
     body,
     level: 'active',
     route: 'parent',

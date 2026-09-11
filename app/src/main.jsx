@@ -83,6 +83,19 @@
     // ---------- WEB PUSH REGISTRATION ----------
     // Public VAPID key. Safe in client code by design -- it is the public half
     // of the pair, and the private half never leaves Firebase.
+    // Strip the 4-digit PIN off a NAME+PIN id for display, so a parent sees the
+    // same name their child sees on the device -- the firmware does the same
+    // thing to a sender before showing it.
+    //
+    // DISPLAY ONLY. Matching, filtering and every topic hash keep the full id;
+    // two children can share a first name and only the PIN tells them apart.
+    // Settings still shows the full id for when a parent needs to look one up.
+    const displayName = (id) => {
+      if (typeof id !== 'string') return id;
+      const short = id.replace(/\d{4}$/, '');
+      return short || id;
+    };
+
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const VAPID_PUBLIC_KEY =
       'BFuCduXya7RRSfwlQoZWbKoOcJhkWtzr6mz9OsHJNGWUNA7j4LJB21kpVP__Vo8BayRxwh7MKy_IeGLorIvK2jU';
@@ -467,7 +480,7 @@
               if (!lowBatteryRef.current[battChildId]) {
                 {
                   const dv = devicesRef.current.find(x => x.id === battChildId);
-                  const label = dv ? `${dv.identity.name}${dv.identity.pin}` : 'A device';
+                  const label = dv ? displayName(`${dv.identity.name}${dv.identity.pin}`) : 'A device';
                   notify('🔋 Low battery', `${label} needs charging.`);
                 }
               }
@@ -571,7 +584,7 @@
                   if (prev.some(r => r.childMac === sourceChildMac && r.strangerId === strangerId)) return prev;
                   return [...prev, { strangerId, childMac: sourceChildMac, childHash: topicParts[2], childLabel, topic }];
                 });
-                notify('👋 New friend request', `${strangerId} sent ${childLabel} a message. Add them as a friend?`);
+                notify('👋 New friend request', `${displayName(strangerId)} sent ${displayName(childLabel)} a message. Add them as a friend?`);
               }
               return; // do NOT auto-clear; cleared when the parent answers
             }
@@ -591,7 +604,7 @@
                   if (prev.some(p => p.reqId === reqId)) return prev;
                   return [...prev, { reqId, minutes, points, childMac: sourceChildMac, childHash, childLabel, topic }];
                 });
-                notify('⏱️ Timer completed', `${childLabel} finished a ${minutes}-minute timer — approve ${points} point${points > 1 ? 's' : ''}?`);
+                notify('⏱️ Timer completed', `${displayName(childLabel)} finished a ${minutes}-minute timer — approve ${points} point${points > 1 ? 's' : ''}?`);
               }
               return; // do NOT auto-clear; cleared when the parent approves/denies
             }
@@ -661,6 +674,34 @@
       }, [mqttClient, devices, parentProfile]);
 
 
+      // A notification names WHO it is about: a sender's NAME+PIN for a chat, or
+      // a device hash for a monitor alert. Both resolve to the same device here,
+      // because both tabs select by device id.
+      //
+      // Declared with the other hooks, ABOVE the early returns below. Putting the
+      // effect after them broke the Rules of Hooks -- on any render that took an
+      // early return the hook was skipped, the hook count changed, and React
+      // unmounted the whole tree to a blank screen.
+      const selectDeviceFor = (who) => {
+        if (!who) return;
+        const match = devicesRef.current.find((d) => {
+          const label = `${d.identity?.name || ''}${d.identity?.pin || ''}`;
+          return label === who || d.hashedId === who;
+        });
+        if (match) setActiveChildId(match.id);
+      };
+
+      // Cold start: devices load asynchronously, so the hash cannot be applied
+      // until they exist. Runs once they do, then clears the hash so a later
+      // reload does not keep yanking the parent back to an old notification.
+      useEffect(() => {
+        if (!devices.length) return;
+        const { who } = parseHash();
+        if (!who) return;
+        selectDeviceFor(who);
+        try { window.history.replaceState(null, '', window.location.pathname); } catch (e) {}
+      }, [devices]);
+
       // --- AUTO-LAUNCH WIZARD ---
       useEffect(() => {
         if (!loading && user && devicesLoaded && (!parentProfile?.virtualId || devices.length === 0) && !isWizardActive) {
@@ -689,29 +730,6 @@
                    }}
                 />;
       }
-
-      // A notification names WHO it is about: a sender's NAME+PIN for a chat, or
-      // a device hash for a monitor alert. Both resolve to the same device here,
-      // because both tabs select by device id.
-      const selectDeviceFor = (who) => {
-        if (!who) return;
-        const match = devicesRef.current.find((d) => {
-          const label = `${d.identity?.name || ''}${d.identity?.pin || ''}`;
-          return label === who || d.hashedId === who;
-        });
-        if (match) setActiveChildId(match.id);
-      };
-
-      // Cold start: devices load asynchronously, so the hash cannot be applied
-      // until they exist. Runs once they do, then clears the hash so a later
-      // reload does not keep yanking the parent back to an old notification.
-      useEffect(() => {
-        if (!devices.length) return;
-        const { who } = parseHash();
-        if (!who) return;
-        selectDeviceFor(who);
-        try { window.history.replaceState(null, '', window.location.pathname); } catch (e) {}
-      }, [devices]);
 
       const activeDevice = devices.find(d => d.id === activeChildId);
       const activeChildLabel = activeDevice ? `${activeDevice.identity.name}${activeDevice.identity.pin}` : '';
@@ -1492,14 +1510,14 @@
                    className={`px-5 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center space-x-2 transition-all duration-200 shadow-sm ${isActive ? 'bg-blue-500 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
                  >
                    <span className={`w-2.5 h-2.5 rounded-full ${online ? (isActive ? 'bg-green-300 shadow-[0_0_6px_#86efac]' : 'bg-green-500 shadow-[0_0_6px_#22c55e]') : (isActive ? 'bg-blue-300' : 'bg-gray-300')}`}></span>
-                   <span>{childLabel}</span>
+                   <span>{displayName(childLabel)}</span>
                  </button>
                )
             })}
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-            {activeMessages.length === 0 && <p className="text-center text-gray-400 mt-10">No messages yet with {activeChildLabel}.</p>}
+            {activeMessages.length === 0 && <p className="text-center text-gray-400 mt-10">No messages yet with {displayName(activeChildLabel)}.</p>}
             {activeMessages.map((msg) => (
               <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.isMe ? 'bg-blue-500 text-white' : 'bg-white text-black shadow-sm border border-gray-100'}`}>
@@ -1589,7 +1607,7 @@
                     <span>Low battery</span>
                   </div>
                   <p className="text-black leading-snug">
-                    <span className="font-bold text-indigo-600">{d.identity.name}{d.identity.pin}</span>{' '}
+                    <span className="font-bold text-indigo-600">{displayName(`${d.identity.name}${d.identity.pin}`)}</span>{' '}
                     needs charging. The battery icon is blinking on the device.
                   </p>
                   {/* No dismiss button, on purpose. The device owns this warning
@@ -1610,10 +1628,11 @@
                     <span>New friend request</span>
                   </div>
                   <p className="text-black mb-3 leading-snug">
-                    <span className="font-bold text-gray-700">{req.strangerId}</span> sent a message to{' '}
-                    <span className="font-bold text-indigo-600">{req.childLabel}</span>, but isn't on their
+                    <span className="font-bold text-gray-700">{displayName(req.strangerId)}</span> sent a message to{' '}
+                    <span className="font-bold text-indigo-600">{displayName(req.childLabel)}</span>, but isn't on their
                     friends list.
                     <br/>Add them as a friend?
+                    <br/><span className="text-xs text-gray-400">Full ID: {req.strangerId}</span>
                   </p>
                   <div className="flex space-x-3">
                     <button onClick={() => respondFriendReq(req, true)}
@@ -1641,7 +1660,7 @@
                     <span>Timer completed</span>
                   </div>
                   <p className="text-black mb-3 leading-snug">
-                    <span className="font-bold text-indigo-600">{appr.childLabel}</span> finished a{' '}
+                    <span className="font-bold text-indigo-600">{displayName(appr.childLabel)}</span> finished a{' '}
                     <span className="font-bold">{appr.minutes}-minute</span> focus timer.
                     <br/>Grant <span className="font-bold">{appr.points} point{appr.points > 1 ? 's' : ''}</span>?
                   </p>
@@ -1671,7 +1690,7 @@
                    key={device.id} onClick={() => setActiveChildId(device.id)}
                    className={`px-5 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center space-x-2 transition-all duration-200 shadow-sm ${isActive ? 'bg-indigo-500 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
                  >
-                   <span>{childLabel}</span>
+                   <span>{displayName(childLabel)}</span>
                    {lowBattery[device.id] && <BatteryLow className={`w-4 h-4 ${isActive ? 'text-white' : 'text-red-500'}`} />}
                  </button>
                )
@@ -1694,15 +1713,15 @@
                     <div className="flex items-center space-x-2 text-sm font-bold">
                        {isOutgoing ? (
                          <>
-                           <span className="text-indigo-600">{activeChildLabel}</span>
+                           <span className="text-indigo-600">{displayName(activeChildLabel)}</span>
                            <ArrowRight className="w-4 h-4 text-gray-400" />
-                           <span className="text-gray-500 italic">{msg.otherParty}</span>
+                           <span className="text-gray-500 italic">{displayName(msg.otherParty)}</span>
                          </>
                        ) : (
                          <>
-                           <span className="text-gray-600">{msg.otherParty}</span>
+                           <span className="text-gray-600">{displayName(msg.otherParty)}</span>
                            <ArrowRight className="w-4 h-4 text-gray-400" />
-                           <span className="text-green-600">{activeChildLabel}</span>
+                           <span className="text-green-600">{displayName(activeChildLabel)}</span>
                          </>
                        )}
                     </div>
