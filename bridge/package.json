@@ -1,0 +1,11 @@
+{
+  "name": "dotdash-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Forwards Dot Dash device alerts from MQTT to parents' phones via FCM/APNs",
+  "main": "bridge.js",
+  "dependencies": {
+    "mqtt": "^5.15.2"
+  }
+}
