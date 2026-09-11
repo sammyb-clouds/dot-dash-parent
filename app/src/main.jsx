@@ -6,6 +6,7 @@
     import { initializeApp } from 'firebase/app';
     import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
     import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
+    import { getMessaging, getToken, isSupported as messagingSupported } from 'firebase/messaging';
 
     // =========================================================================
     // ✅ YOUR FIREBASE CONFIGURATION ✅
@@ -79,11 +80,74 @@
       } catch (e) {}
     };
 
+    // ---------- WEB PUSH REGISTRATION ----------
+    // Public VAPID key. Safe in client code by design -- it is the public half
+    // of the pair, and the private half never leaves Firebase.
+    const VAPID_PUBLIC_KEY =
+      'BFuCduXya7RRSfwlQoZWbKoOcJhkWtzr6mz9OsHJNGWUNA7j4LJB21kpVP__Vo8BayRxwh7MKy_IeGLorIvK2jU';
+
+    // Turns on background notifications and hands the resulting token to the
+    // push bridge by writing it where the bridge looks.
+    //
+    // MUST be called from a tap. iOS only grants notification permission from
+    // inside a user-gesture handler -- asking on page load fails silently, with
+    // no prompt and no error, which is exactly how this looks broken.
+    //
+    // On iOS it also requires the app to have been added to the Home Screen.
+    // Safari in a plain tab has no Push API at all, so this reports that rather
+    // than leaving someone tapping a button that cannot work.
+    async function enableWebPush(uid) {
+      if (!uid) return { ok: false, reason: 'Sign in first.' };
+
+      const standalone = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+      const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        return {
+          ok: false,
+          reason: iOS && !standalone
+            ? 'On iPhone, notifications only work once this page is added to your Home Screen. Tap Share, then "Add to Home Screen", and open it from there.'
+            : 'This browser does not support push notifications.',
+        };
+      }
+      if (!(await messagingSupported())) {
+        return { ok: false, reason: 'Push messaging is not available in this browser.' };
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        return { ok: false, reason: 'Notifications are blocked. You can turn them back on in Settings.' };
+      }
+
+      const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+
+      const token = await getToken(getMessaging(app), {
+        vapidKey: VAPID_PUBLIC_KEY,
+        serviceWorkerRegistration: reg,
+      });
+      if (!token) return { ok: false, reason: 'Could not get a notification token.' };
+
+      // A push token is far longer than the 1500-byte cap on a Firestore
+      // document id, so the id is a digest and the token lives in a field.
+      const id = sha256(token).slice(0, 32);
+      await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id), {
+        token,
+        platform: isNativeApp() ? 'ios-app' : (iOS ? 'ios-web' : 'web'),
+        userAgent: navigator.userAgent.slice(0, 200),
+        updatedAt: Date.now(),
+      });
+
+      return { ok: true, reason: 'Notifications are on for this device.' };
+    }
+
     // --- Inline SVG Icons ---
     const Shield = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
     // Deliberately mirrors the device's own gauge: same body-and-nub outline, one
     // bar left. A parent glancing at the app sees the shape their child is
     // looking at on the hardware.
+    const Bell = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>;
     const UserPlus = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>;
     const BatteryLow = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="2" y="7" width="16" height="10" rx="2"/><line x1="22" y1="11" x2="22" y2="13"/><rect x="4" y="9" width="3" height="6" fill="currentColor" stroke="none"/></svg>;
     const Activity = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
@@ -1017,6 +1081,19 @@
 
        const handleLogout = () => { if(window.confirm("Are you sure you want to log out?")) signOut(auth); };
 
+       // Background notifications. Driven by a button rather than asked for on
+       // load, because iOS only grants permission from inside a tap handler.
+       const [pushState, setPushState] = useState({ busy: false, msg: '' });
+       const handleEnablePush = async () => {
+         setPushState({ busy: true, msg: '' });
+         try {
+           const r = await enableWebPush(user?.uid);
+           setPushState({ busy: false, msg: r.reason });
+         } catch (e) {
+           setPushState({ busy: false, msg: `Could not turn on notifications: ${e.message}` });
+         }
+       };
+
        const handleUnlink = async () => {
          if (unlinkCode.toUpperCase() !== activeDevice.pairingCode) return alert("Incorrect pairing code.");
          if (window.confirm("Are you sure you want to unlink this device from your account?")) {
@@ -1131,9 +1208,16 @@
          <div className="p-6">
             <div className="flex justify-between items-center mb-6">
                <h1 className="text-3xl font-bold">Settings</h1>
+               <button onClick={handleEnablePush} disabled={pushState.busy}
+                 className="flex items-center px-4 py-2 bg-blue-500 text-white font-bold rounded-full shadow-sm active:bg-blue-600 disabled:bg-blue-300 mr-3">
+                  <Bell className="w-4 h-4 mr-2"/> {pushState.busy ? 'Working...' : 'Notifications'}
+               </button>
                <button onClick={handleLogout} className="flex items-center px-4 py-2 bg-white text-gray-700 font-bold rounded-full shadow-sm active:bg-gray-100 border border-gray-200">
                   <LogOut className="w-4 h-4 mr-2"/> Logout
                </button>
+               {pushState.msg && (
+                 <p className="w-full mt-3 text-sm text-gray-600 leading-snug">{pushState.msg}</p>
+               )}
             </div>
 
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">

@@ -47,6 +47,9 @@ const SERVICE_ACCOUNT = env.SERVICE_ACCOUNT || '';   // stage B
 // Matches the app: `typeof __app_id !== 'undefined' ? __app_id : 'dotdash'`.
 const APP_ID = env.APP_ID || 'dotdash';
 const DRY_RUN = env.DRY_RUN === '1';
+// Where a tapped notification should land. Staging for now; becomes "/" when
+// the build is promoted to the production index.html.
+const LINK_PATH = env.LINK_PATH || '/test.html';
 const STATE_PATH = env.STATE_PATH || '/root/dotdash_bridge/state.json';
 
 const TOPIC = 'doorbell/monitor/+/#';
@@ -176,16 +179,19 @@ export function parseEvent(topic, payload) {
 // unpaired or unlinked device stays in the Monitor stream, and without negative
 // caching it would be re-queried forever.
 let db = null;
+let messaging = null;
 
 async function initFirestore() {
   if (!SERVICE_ACCOUNT) return null;
   try {
-    const [{ initializeApp, cert }, { getFirestore }] = await Promise.all([
+    const [{ initializeApp, cert }, { getFirestore }, { getMessaging }] = await Promise.all([
       import('firebase-admin/app'),
       import('firebase-admin/firestore'),
+      import('firebase-admin/messaging'),
     ]);
     const sa = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT, 'utf8'));
     initializeApp({ credential: cert(sa) });
+    messaging = getMessaging();
     info(`firestore ready (project ${sa.project_id})`);
     return getFirestore();
   } catch (e) {
@@ -289,8 +295,60 @@ async function deliver(childHash, ev) {
     return;
   }
 
-  warn(`  stage C not implemented: would send to ${tokens.length} token(s) ` +
-       `for parent=${uid.slice(0, 8)}..`);
+  await send(uid, tokens, childHash, ev);
+}
+
+// ----------------------------------------------------------------- stage C --
+// One message shape covers both targets. `apns.interruption-level` is what
+// makes the battery alert passive on an iPhone app; Web Push has no equivalent,
+// so on an installed PWA the battery alert is as loud as the others.
+//
+// Every data value must be a string -- FCM rejects the message otherwise, and
+// the error does not say which field.
+async function send(uid, tokens, childHash, ev) {
+  const link = LINK_PATH;
+  const messages = tokens.map((token) => ({
+    token,
+    notification: { title: ev.title, body: ev.body },
+    apns: { payload: { aps: { 'interruption-level': ev.level } } },
+    webpush: {
+      notification: { title: ev.title, body: ev.body, icon: '/icon.jpg' },
+      fcmOptions: { link },
+    },
+    data: { kind: ev.kind, child: childHash.slice(0, 16), link },
+  }));
+
+  let res;
+  try {
+    res = await messaging.sendEach(messages);
+  } catch (e) {
+    error(`  send failed outright for parent=${uid.slice(0, 8)}..: ${e.message}`);
+    return;
+  }
+
+  info(`  sent kind=${ev.kind} parent=${uid.slice(0, 8)}.. ` +
+       `ok=${res.successCount} failed=${res.failureCount}`);
+
+  // Prune tokens the far end has thrown away. Without this a parent who
+  // reinstalls leaves a dead token behind forever, and every future alert
+  // reports a failure that means nothing.
+  for (let i = 0; i < res.responses.length; i++) {
+    const r = res.responses[i];
+    if (r.success) continue;
+    const code = r.error?.errorInfo?.code || r.error?.code || 'unknown';
+    if (code.includes('registration-token-not-registered') || code.includes('invalid-argument')) {
+      const id = crypto.createHash('sha256').update(tokens[i]).digest('hex').slice(0, 32);
+      try {
+        await db.doc(`artifacts/${APP_ID}/users/${uid}/pushTokens/${id}`).delete();
+        info(`  pruned dead token for parent=${uid.slice(0, 8)}.. (${code})`);
+        cache.delete(`tok:${uid}`);
+      } catch (e) {
+        warn(`  could not prune dead token: ${e.message}`);
+      }
+    } else {
+      warn(`  token ${i} failed: ${code}`);
+    }
+  }
 }
 
 // -------------------------------------------------------------------- mqtt --

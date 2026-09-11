@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy:test": "npm run build && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html",
+    "deploy:test": "npm run build && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
     "ios:sync": "npm run build && npx cap sync ios",
     "ios:open": "npx cap open ios"
   },
