@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Capacitor's web root. GENERATED -- `npm run stage` copies dotdashindex.html
+# here as index.html, because Capacitor requires its entry point to be named
+# index.html and this repo's root index.html is the deployed PRODUCTION web app.
+# Keeping www/ out of git means dotdashindex.html stays the single source.
+www/
+
+# Capacitor copies the web assets into the iOS project on `cap sync`.
+ios/App/App/public/
+
+# Xcode / CocoaPods build output
+ios/App/Pods/
+ios/App/build/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Signing material -- must never be committed
+*.p8
+*.p12
+*.mobileprovision
+GoogleService-Info.plist

@@ -1,0 +1,21 @@
+{
+  "name": "dot-dash-parent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dot Dash parent companion app. One codebase: dotdashindex.html is deployed as the web app and wrapped by Capacitor as the iOS app.",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "stage": "mkdir -p www && cp dotdashindex.html www/index.html",
+    "ios:sync": "npm run stage && npx cap sync ios",
+    "ios:open": "npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/local-notifications": "^6.1.0",
+    "@capacitor/push-notifications": "^6.0.0"
+  }
+}
