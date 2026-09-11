@@ -1,64 +1,7 @@
-<!doctype html>
-<!--
-  Dot Dash — parent application
-  Copyright (c) 2026 Samuel Posner. All rights reserved.
-
-  Proprietary and confidential. See LICENSE in this repository. Published for
-  reference and operation only; no licence to copy, modify, redistribute or
-  host is granted. Third-party components load from public CDNs under their own
-  licences — see THIRD-PARTY-NOTICES.md.
-
-  "Dot Dash" is a trademark of the copyright holder.
--->
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Dot Dash">
-  <title>Dot Dash Parent Portal</title>
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Babel -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- MQTT & SHA256 -->
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js"></script>
-
-  <!-- Module Import Map -->
-  <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-        "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
-        "firebase/app": "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js",
-        "firebase/auth": "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js",
-        "firebase/firestore": "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"
-      }
-    }
-  </script>
-
-  <!-- iOS Home Screen Icon -->
-  <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg">
-
-  <style>
-    body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; }
-    #root { height: 100%; width: 100%; }
-    .hide-scrollbar::-webkit-scrollbar { display: none; }
-    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  </style>
-</head>
-<body class="bg-[#f2f2f7] text-black font-sans selection:bg-blue-200">
-  
-  <div id="root"></div>
-
-  <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useRef } from 'react';
+    import mqtt from 'mqtt';
+    import { sha256 } from 'js-sha256';
+    import './index.css';
     import { createRoot } from 'react-dom/client';
     import { initializeApp } from 'firebase/app';
     import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
@@ -171,7 +114,7 @@
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       } else {
-        return window.sha256(message.toLowerCase().trim());
+        return sha256(message.toLowerCase().trim());
       }
     }
 
@@ -358,7 +301,7 @@
             password: 'sqEh8Vx6hNE5ZaBKDG2LP1X', 
             clientId: 'web_' + Math.random().toString(16).substr(2, 8) 
           };
-          client = window.mqtt.connect(brokerUrl, options);
+          client = mqtt.connect(brokerUrl, options);
           setMqttClient(client);
         }
         // =========================================================================
@@ -1752,10 +1695,4 @@
 
     const root = createRoot(document.getElementById('root'));
     root.render(<App />);
-  </script>
-
-  <style>
-    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-  </style>
-</body>
-</html>
+  

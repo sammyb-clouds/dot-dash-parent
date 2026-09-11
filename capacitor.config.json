@@ -1,5 +1,5 @@
 {
   "appId": "com.dotdashdevice.parent",
   "appName": "Dot Dash",
-  "webDir": "www"
+  "webDir": "dist"
 }

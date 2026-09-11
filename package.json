@@ -5,17 +5,32 @@
   "description": "Dot Dash parent companion app. One codebase: dotdashindex.html is deployed as the web app and wrapped by Capacitor as the iOS app.",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
-    "stage": "mkdir -p www && cp dotdashindex.html www/index.html",
-    "ios:sync": "npm run stage && npx cap sync ios",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy:test": "npm run build && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html",
+    "ios:sync": "npm run build && npx cap sync ios",
     "ios:open": "npx cap open ios"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.5.2"
+    "@capacitor/cli": "^8.5.2",
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.5.6",
+    "postcss": "^8.5.28",
+    "tailwindcss": "^3.4.19",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2",
     "@capacitor/local-notifications": "^8.3.1",
-    "@capacitor/push-notifications": "^8.1.2"
-  }
+    "@capacitor/push-notifications": "^8.1.2",
+    "firebase": "^11.10.0",
+    "js-sha256": "^1.0.0",
+    "mqtt": "^5.15.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "type": "module"
 }
