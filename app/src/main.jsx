@@ -145,6 +145,42 @@
         || window.navigator.standalone === true;
       const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
+      // NATIVE. Uses the Firebase messaging plugin rather than Capacitor's own
+      // push plugin, because that one yields a raw APNs device token and FCM's
+      // send API takes an FCM registration token -- the bridge would have had to
+      // speak APNs directly, certificates and all. This way the token drops into
+      // the same pushTokens collection the bridge already reads, and the bridge
+      // needs no changes whatsoever.
+      //
+      // Imported dynamically so the browser build never pulls the native path in.
+      if (isNativeApp()) {
+        try {
+          const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+          const perm = await FirebaseMessaging.requestPermissions();
+          if (perm.receive !== 'granted') {
+            return { ok: false, reason: 'Notifications are blocked. You can turn them back on in iOS Settings.' };
+          }
+          const { token } = await FirebaseMessaging.getToken();
+          if (!token) return { ok: false, reason: 'Could not get a notification token.' };
+
+          const id = sha256(token).slice(0, 32);
+          const ua = navigator.userAgent.slice(0, 200);
+          await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id), {
+            token, platform: 'ios-app', userAgent: ua, updatedAt: Date.now(),
+          });
+          try {
+            const existing = await getDocs(collection(db, 'artifacts', appId, 'users', uid, 'pushTokens'));
+            await Promise.all(existing.docs
+              .filter((d) => d.id !== id && d.data().userAgent === ua)
+              .map((d) => deleteDoc(d.ref)));
+          } catch (e) {}
+          try { localStorage.setItem(PUSH_ID_KEY, id); } catch (e) {}
+          return { ok: true, reason: 'Notifications are on for this device.' };
+        } catch (e) {
+          return { ok: false, reason: `Could not turn on notifications: ${e.message}` };
+        }
+      }
+
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         return {
           ok: false,
