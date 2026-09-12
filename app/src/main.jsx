@@ -96,6 +96,29 @@
       return short || id;
     };
 
+    // ---------- WI-FI LIST SYNC ----------
+    // Must mirror wifiKeystreamXor() in Network.ino byte for byte; a mismatch
+    // would write garbage credentials to a device rather than fail loudly.
+    //
+    // OBFUSCATION, not encryption, and the difference is worth stating: every
+    // device shares one MQTT credential with readwrite on doorbell/cmd/+, so a
+    // leaked credential can read any device's command topic. Keying on that
+    // device's own name+PIN means a reader needs that too. It does NOT survive
+    // brute-forcing name+PIN from the topic hash -- per-device broker
+    // credentials are the real fix.
+    const WIFI_US = String.fromCharCode(0x1f);   // field separator; '|' is legal in a password
+
+    const wifiObfuscate = (plain, myID) => {
+      const bytes = new TextEncoder().encode(plain);
+      let out = '', block = -1, key = null;
+      for (let i = 0; i < bytes.length; i++) {
+        const b = Math.floor(i / 32);
+        if (b !== block) { key = sha256.array(`${myID}|wifi|${b}`); block = b; }
+        out += (bytes[i] ^ key[i % 32]).toString(16).padStart(2, '0');
+      }
+      return out;
+    };
+
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const VAPID_PUBLIC_KEY =
       'BFuCduXya7RRSfwlQoZWbKoOcJhkWtzr6mz9OsHJNGWUNA7j4LJB21kpVP__Vo8BayRxwh7MKy_IeGLorIvK2jU';
@@ -812,7 +835,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} />
             </div>}
           </div>
 
@@ -1252,15 +1275,56 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        const [unlinkCode, setUnlinkCode] = useState('');
        const [newFriendId, setNewFriendId] = useState('');
        const [newPhrase, setNewPhrase] = useState('');
        const [openFriends, setOpenFriends] = useState(false);
        const [openMessages, setOpenMessages] = useState(false);
+       const [openWifi, setOpenWifi] = useState(false);
+       const [newSsid, setNewSsid] = useState('');
+       const [newWifiPass, setNewWifiPass] = useState('');
+       const [revealed, setRevealed] = useState({});
+       const [wifiSyncMsg, setWifiSyncMsg] = useState('');
 
        const currentPhrases = activeDevice?.phrases?.length > 0 ? activeDevice.phrases : defaultPhrases;
+
+       const wifiNets = activeDevice?.wifiNets || [];
+
+       // Saving writes Firestore first, then pushes to the device. Firestore is
+       // the record a parent manages; the device copy is derived from it, so a
+       // device that is offline picks the list up whenever it next connects.
+       const saveWifiNets = async (nets) => {
+         if (!activeDevice) return;
+         setWifiSyncMsg('');
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { wifiNets: nets });
+         try {
+           const myID = `${activeDevice.identity.name}${activeDevice.identity.pin}`;
+           const plain = nets.flatMap(n => [n.ssid, n.pass]).join(WIFI_US);
+           const payload = wifiObfuscate(plain, myID);
+           mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_WIFI,${payload}`, { qos: 1, retain: true });
+           setWifiSyncMsg(childOnlineStatus?.[activeDevice.id]
+             ? 'Sent to the device.'
+             : 'Saved. It will load the next time the device is online.');
+         } catch (e) {
+           setWifiSyncMsg('Saved, but could not reach the device.');
+         }
+       };
+
+       const handleAddWifi = async () => {
+         const ssid = newSsid.trim();
+         if (!ssid) return;
+         if (wifiNets.length >= 5) return;
+         if (wifiNets.some(n => n.ssid === ssid)) return setWifiSyncMsg('That network is already saved.');
+         await saveWifiNets([...wifiNets, { ssid, pass: newWifiPass }]);
+         setNewSsid(''); setNewWifiPass('');
+       };
+
+       const handleRemoveWifi = async (ssid) => {
+         if (!window.confirm(`Remove "${ssid}" from this device?`)) return;
+         await saveWifiNets(wifiNets.filter(n => n.ssid !== ssid));
+       };
 
        const handleLogout = () => { if(window.confirm("Are you sure you want to log out?")) signOut(auth); };
 
@@ -1478,6 +1542,63 @@
                      <input type="text" placeholder="New message..." maxLength="20" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newPhrase} onChange={e=>setNewPhrase(e.target.value.toUpperCase())}/>
                      <button onClick={handleAddPhrase} disabled={currentPhrases.length >= 20} className="shrink-0 bg-indigo-500 text-white px-5 py-2 font-bold rounded-xl active:bg-indigo-600 disabled:bg-indigo-300">Add</button>
                   </div>
+                </div>
+              )}
+
+              {/* Wi-Fi networks (collapsible) */}
+              <button onClick={() => setOpenWifi(o => !o)} className={`w-full flex items-center justify-between p-4 bg-teal-50 border border-teal-100 active:bg-teal-100 transition-colors ${openWifi ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                 <div className="flex items-center space-x-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-teal-500 text-white flex items-center justify-center shrink-0"><Wifi className="w-5 h-5"/></div>
+                    <div className="text-left min-w-0">
+                       <div className="font-bold text-gray-800 text-base">Wi-Fi Networks</div>
+                       <div className="text-xs text-gray-500">{wifiNets.length === 1 ? '1 network saved' : `${wifiNets.length} networks saved`}</div>
+                    </div>
+                 </div>
+                 <div className="flex items-center space-x-2 shrink-0 ml-2">
+                    <span className="bg-teal-500 text-white text-xs font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">{wifiNets.length}</span>
+                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-teal-400 transition-transform duration-200 ${openWifi ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                 </div>
+              </button>
+              {openWifi && (
+                <div className="border border-t-0 border-teal-100 rounded-b-2xl bg-white p-4 mb-3">
+                  <p className="text-xs text-gray-500 leading-relaxed mb-4">
+                    Save up to 5 networks &mdash; home, a second home, a co-parent's house.
+                    The device picks whichever it finds, so it works in each place
+                    without being set up again.
+                  </p>
+                  <ul className="space-y-2 mb-4">
+                    {wifiNets.map((n) => (
+                       <li key={n.ssid} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                         <div className="min-w-0 flex-1">
+                           <div className="font-bold text-gray-700 text-sm truncate">{n.ssid}</div>
+                           <div className="flex items-center gap-2 mt-0.5">
+                             <span className="text-xs text-gray-400 font-mono truncate">
+                               {revealed[n.ssid] ? (n.pass || '(no password)') : '\u2022'.repeat(Math.min(n.pass?.length || 0, 12) || 4)}
+                             </span>
+                             <button onClick={() => setRevealed(r => ({ ...r, [n.ssid]: !r[n.ssid] }))}
+                               className="text-xs text-teal-600 font-bold shrink-0">
+                               {revealed[n.ssid] ? 'Hide' : 'Show'}
+                             </button>
+                           </div>
+                         </div>
+                         <button onClick={() => handleRemoveWifi(n.ssid)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
+                           <Trash2 className="w-5 h-5"/>
+                         </button>
+                       </li>
+                    ))}
+                    {wifiNets.length === 0 && (
+                      <li className="text-sm text-gray-400 text-center py-2">No networks saved yet.</li>
+                    )}
+                  </ul>
+                  <div className="space-y-2">
+                     <input type="text" placeholder="Network name (SSID)" className="w-full bg-gray-50 px-4 py-2 rounded-xl outline-none font-bold border border-gray-200" value={newSsid} onChange={e=>setNewSsid(e.target.value)}/>
+                     <div className="flex space-x-2">
+                       <input type="password" placeholder="Password" autoComplete="new-password" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none border border-gray-200" value={newWifiPass} onChange={e=>setNewWifiPass(e.target.value)}/>
+                       <button onClick={handleAddWifi} disabled={wifiNets.length >= 5 || !newSsid.trim()} className="shrink-0 bg-teal-500 text-white px-5 py-2 font-bold rounded-xl active:bg-teal-600 disabled:bg-teal-300">Add</button>
+                     </div>
+                  </div>
+                  {wifiNets.length >= 5 && <p className="text-xs text-gray-400 mt-2">The device holds 5 networks. Remove one to add another.</p>}
+                  {wifiSyncMsg && <p className="text-xs text-gray-600 mt-2">{wifiSyncMsg}</p>}
                 </div>
               )}
 
