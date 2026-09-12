@@ -13,7 +13,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <!-- Pinch-zoom is deliberately ALLOWED. Blocking it (user-scalable=no,
+       maximum-scale=1) stops anyone who needs to magnify text from doing so,
+       which reviewers flag and which matters more here than layout tidiness:
+       parents read message history and 4-digit PINs on this screen. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Dot Dash">
