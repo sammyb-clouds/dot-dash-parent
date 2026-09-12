@@ -318,6 +318,13 @@
       // only create a window where the app shows a warning for a device that was
       // plugged in hours ago. Let it come from the device, every time.
       const [lowBattery, setLowBattery] = useState({});
+
+      // What each device says it ACTUALLY has stored, keyed by device id. The
+      // device reports SSIDs only; passwords never leave it. Without this the
+      // network joined through the captive portal at setup -- usually the
+      // family's own home wifi -- would never appear in the app's list, which
+      // is precisely where someone would go looking for it.
+      const [deviceWifi, setDeviceWifi] = useState({});
       
       const isAppActiveRef = useRef(true); 
       
@@ -620,6 +627,16 @@
           if (monitorTopics[baseTopic]) {
             const sourceChildMac = monitorTopics[baseTopic];
 
+            // The device reporting the network list it actually holds.
+            if (topicParts[3] === 'wifi') {
+              const fields = payload.split(String.fromCharCode(0x1f));
+              if (fields[0] === 'WIFI') {
+                const ssids = fields.slice(1).filter(Boolean);
+                setDeviceWifi(prev => ({ ...prev, [sourceChildMac]: ssids }));
+              }
+              return; // retained and device-owned; do not auto-clear
+            }
+
             // A stranger messaged this child. The device shows its own NEW REQ
             // card, but only a parent can actually add a friend -- so the same
             // event surfaces here, where it can be answered. Retained until
@@ -835,7 +852,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} />
             </div>}
           </div>
 
@@ -1275,7 +1292,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        const [unlinkCode, setUnlinkCode] = useState('');
        const [newFriendId, setNewFriendId] = useState('');
@@ -1290,7 +1307,19 @@
 
        const currentPhrases = activeDevice?.phrases?.length > 0 ? activeDevice.phrases : defaultPhrases;
 
-       const wifiNets = activeDevice?.wifiNets || [];
+       // Two sources, one list. Firestore holds the rows a parent typed (with
+       // passwords); the device reports what it really has (SSIDs only). A
+       // network the device knows but the app does not is shown as saved on the
+       // device, and carries a KEEP marker so saving cannot wipe its password.
+       const WIFI_KEEP = String.fromCharCode(0x02);
+       const savedNets = activeDevice?.wifiNets || [];
+       const reported = (deviceWifi && activeDevice) ? (deviceWifi[activeDevice.id] || []) : [];
+       const wifiNets = [
+         ...savedNets,
+         ...reported
+           .filter(ssid => !savedNets.some(n => n.ssid === ssid))
+           .map(ssid => ({ ssid, pass: WIFI_KEEP, fromDevice: true })),
+       ];
 
        // Saving writes Firestore first, then pushes to the device. Firestore is
        // the record a parent manages; the device copy is derived from it, so a
@@ -1298,7 +1327,10 @@
        const saveWifiNets = async (nets) => {
          if (!activeDevice) return;
          setWifiSyncMsg('');
-         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { wifiNets: nets });
+         // Only rows with a real password are worth storing; a KEEP row is the
+         // device's own and belongs to the device, not to Firestore.
+         const persist = nets.filter(n => n.pass !== WIFI_KEEP).map(n => ({ ssid: n.ssid, pass: n.pass }));
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { wifiNets: persist });
          try {
            const myID = `${activeDevice.identity.name}${activeDevice.identity.pin}`;
            const plain = nets.flatMap(n => [n.ssid, n.pass]).join(WIFI_US);
@@ -1572,13 +1604,19 @@
                          <div className="min-w-0 flex-1">
                            <div className="font-bold text-gray-700 text-sm truncate">{n.ssid}</div>
                            <div className="flex items-center gap-2 mt-0.5">
-                             <span className="text-xs text-gray-400 font-mono truncate">
-                               {revealed[n.ssid] ? (n.pass || '(no password)') : '\u2022'.repeat(Math.min(n.pass?.length || 0, 12) || 4)}
-                             </span>
-                             <button onClick={() => setRevealed(r => ({ ...r, [n.ssid]: !r[n.ssid] }))}
-                               className="text-xs text-teal-600 font-bold shrink-0">
-                               {revealed[n.ssid] ? 'Hide' : 'Show'}
-                             </button>
+                             {n.fromDevice ? (
+                               <span className="text-xs text-gray-400 italic truncate">Saved on the device</span>
+                             ) : (
+                               <>
+                                 <span className="text-xs text-gray-400 font-mono truncate">
+                                   {revealed[n.ssid] ? (n.pass || '(no password)') : '\u2022'.repeat(Math.min(n.pass?.length || 0, 12) || 4)}
+                                 </span>
+                                 <button onClick={() => setRevealed(r => ({ ...r, [n.ssid]: !r[n.ssid] }))}
+                                   className="text-xs text-teal-600 font-bold shrink-0">
+                                   {revealed[n.ssid] ? 'Hide' : 'Show'}
+                                 </button>
+                               </>
+                             )}
                            </div>
                          </div>
                          <button onClick={() => handleRemoveWifi(n.ssid)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
