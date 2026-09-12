@@ -514,7 +514,18 @@ async function send(uid, tokens, childHash, ev) {
   const messages = tokens.map((token) => ({
     token,
     notification: { title: ev.title, body: ev.body },
-    apns: { payload: { aps: { 'interruption-level': ev.level } } },
+    apns: {
+      payload: {
+        aps: {
+          'interruption-level': ev.level,
+          // Sound has to be named explicitly. FCM's notification block becomes
+          // aps.alert, which shows a banner and nothing else -- so without this
+          // every alert arrived silently, which reads as "not working" rather
+          // than "delivered". Omitted for passive, where silence is the point.
+          ...(ev.level === 'passive' ? {} : { sound: 'default' }),
+        },
+      },
+    },
     webpush: {
       notification: { title: ev.title, body: ev.body, icon: '/icon.jpg' },
       fcmOptions: { link },

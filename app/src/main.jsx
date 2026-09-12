@@ -864,6 +864,28 @@
         return () => unsub();
       }, [user]);
 
+      // Notification taps on NATIVE arrive through the Firebase plugin, not a
+      // service worker -- the iOS app is a Capacitor WebView and has no SW at
+      // all, which is why deep linking worked on the Home Screen PWA and did
+      // nothing in the app. Same destination data either way: the bridge puts
+      // tab and who in the message's data payload.
+      useEffect(() => {
+        if (!isNativeApp()) return;
+        let remove;
+        (async () => {
+          try {
+            const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+            const handle = await FirebaseMessaging.addListener('notificationActionPerformed', (event) => {
+              const d = event?.notification?.data || {};
+              if (d.tab) setActiveTab(d.tab);
+              if (d.who) selectDeviceFor(d.who);
+            });
+            remove = () => handle.remove();
+          } catch (e) {}
+        })();
+        return () => { try { remove && remove(); } catch (e) {} };
+      }, []);
+
       // --- AUTO-LAUNCH WIZARD ---
       useEffect(() => {
         if (!loading && user && devicesLoaded && (!parentProfile?.virtualId || devices.length === 0) && !isWizardActive) {
