@@ -42,4 +42,14 @@ dotdash-*-firebase*.json
 *.p8
 *.p12
 *.mobileprovision
-GoogleService-Info.plist
+
+# GoogleService-Info.plist is deliberately NOT ignored. Unlike the files above
+# it is not a secret: Google ships it inside every copy of an iOS app, so anyone
+# who downloads the app has it. The identical API key is already public in this
+# app's own firebaseConfig, which is served in the HTML at app.dotdashdevice.com.
+#
+# Firebase security comes from Firestore rules and Auth, never from hiding this
+# file. Committing it keeps an iOS build reproducible from a clean clone.
+#
+# The service account JSON above is the opposite in every respect and must never
+# be committed.
