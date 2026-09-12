@@ -352,6 +352,17 @@
       // the device owns, and the broker replays them on every subscribe.
       const [pendingFriendReqs, setPendingFriendReqs] = useState([]);
 
+      // Which messages a parent has actually SEEN, as childLabel -> highest
+      // message id read. Kept in Firestore rather than only locally so the
+      // bridge can put a correct number on the app icon when the app is shut --
+      // a badge that only updates while the app is open is wrong exactly when
+      // someone looks at it.
+      //
+      // One small document per parent, written only when the value changes.
+      const [readState, setReadState] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('dotdash_read') || '{}'); } catch (e) { return {}; }
+      });
+
       // Devices reporting a flat battery, keyed by device id.
       // Deliberately NOT persisted to localStorage, unlike messages above: this
       // mirrors a RETAINED broker topic that the device owns and clears itself,
@@ -886,6 +897,85 @@
         return () => { try { remove && remove(); } catch (e) {} };
       }, []);
 
+      // Pull read state down once signed in, so a second device does not show
+      // badges for messages already read on the first.
+      useEffect(() => {
+        if (!user) return;
+        let alive = true;
+        getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'state', 'read'))
+          .then((snap) => {
+            if (!alive || !snap.exists()) return;
+            const remote = snap.data().lastRead || {};
+            setReadState((local) => {
+              // Merge on the HIGHER id per child: whichever device read further
+              // wins, and neither can un-read the other's progress.
+              const merged = { ...local };
+              for (const [k, v] of Object.entries(remote)) {
+                if (!merged[k] || v > merged[k]) merged[k] = v;
+              }
+              try { localStorage.setItem('dotdash_read', JSON.stringify(merged)); } catch (e) {}
+              return merged;
+            });
+          })
+          .catch(() => {});
+        return () => { alive = false; };
+      }, [user]);
+
+      // Unread per child, and the totals the badges use.
+      const unreadByChild = React.useMemo(() => {
+        const out = {};
+        for (const m of messages) {
+          if (m.isMe || !m.sender) continue;
+          const seen = readState[m.sender] || 0;
+          if (m.id > seen) out[m.sender] = (out[m.sender] || 0) + 1;
+        }
+        return out;
+      }, [messages, readState]);
+
+      const totalUnreadChats = Object.values(unreadByChild).reduce((a, b) => a + b, 0);
+      const monitorCount = pendingApprovals.length + pendingFriendReqs.length +
+        Object.keys(lowBattery).filter(id => devices.some(d => d.id === id)).length;
+
+      // Opening a child's chat is what marks it read -- not receiving the
+      // message, and not merely having the app open on another tab.
+      useEffect(() => {
+        if (activeTab !== 'chat' || !activeChildId || !user) return;
+        const dev = devices.find(d => d.id === activeChildId);
+        if (!dev) return;
+        const label = `${dev.identity.name}${dev.identity.pin}`;
+        const highest = messages.reduce((max, m) => (!m.isMe && m.sender === label && m.id > max ? m.id : max), 0);
+        if (!highest || (readState[label] || 0) >= highest) return;
+
+        const next = { ...readState, [label]: highest };
+        setReadState(next);
+        try { localStorage.setItem('dotdash_read', JSON.stringify(next)); } catch (e) {}
+        setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'state', 'read'),
+               { lastRead: next, badge: 0, updatedAt: Date.now() }, { merge: true }).catch(() => {});
+      }, [activeTab, activeChildId, messages, devices, user, readState]);
+
+      // The iOS app icon number. Set from here whenever it changes; the bridge
+      // keeps it moving while the app is closed.
+      useEffect(() => {
+        if (!isNativeApp()) return;
+        const total = totalUnreadChats + monitorCount;
+        (async () => {
+          try {
+            const { Badge } = await import('@capawesome/capacitor-badge');
+            if (total > 0) await Badge.set({ count: total });
+            else await Badge.clear();
+          } catch (e) {}
+        })();
+      }, [totalUnreadChats, monitorCount]);
+
+      // Keep the stored badge in step with what the app is showing, so the
+      // bridge increments from the right number rather than a stale one.
+      useEffect(() => {
+        if (!user) return;
+        const total = totalUnreadChats + monitorCount;
+        setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'state', 'read'),
+               { badge: total }, { merge: true }).catch(() => {});
+      }, [totalUnreadChats, monitorCount, user]);
+
       // --- AUTO-LAUNCH WIZARD ---
       useEffect(() => {
         if (!loading && user && devicesLoaded && (!parentProfile?.virtualId || devices.length === 0) && !isWizardActive) {
@@ -922,7 +1012,7 @@
         <div className="flex flex-col h-full w-full bg-[#f2f2f7] text-black font-sans selection:bg-blue-200 overflow-hidden">
           <div className="flex-1 flex flex-col px-4 overflow-hidden" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
             
-            {activeTab === 'chat' && <ChatView mqttClient={mqttClient} messages={messages} setMessages={setMessages} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} childOnlineStatus={childOnlineStatus} activeChildLabel={activeChildLabel} />}
+            {activeTab === 'chat' && <ChatView unreadByChild={unreadByChild} mqttClient={mqttClient} messages={messages} setMessages={setMessages} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} childOnlineStatus={childOnlineStatus} activeChildLabel={activeChildLabel} />}
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
@@ -931,11 +1021,11 @@
           </div>
 
           <div className="shrink-0 w-full bg-[#f8f8f8]/90 backdrop-blur-md border-t border-gray-300 pt-2 px-4 flex justify-between items-center" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
-            <TabButton icon={<MessageCircle className="w-6 h-6"/>} label="Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
+            <TabButton icon={<MessageCircle className="w-6 h-6"/>} label="Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} badge={totalUnreadChats} />
             {/* Count only alerts for devices still linked -- an unlinked device
                 leaves a stale key behind, and a badge you cannot clear is worse
                 than no badge. */}
-            <TabButton icon={<Shield className="w-6 h-6"/>} label="Monitor" active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} badge={pendingApprovals.length + pendingFriendReqs.length + Object.keys(lowBattery).filter(id => devices.some(d => d.id === id)).length} />
+            <TabButton icon={<Shield className="w-6 h-6"/>} label="Monitor" active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} badge={monitorCount} />
             <TabButton icon={<BookOpen className="w-6 h-6"/>} label="Tutorials" active={activeTab === 'tutorials'} onClick={() => setActiveTab('tutorials')} />
             <TabButton icon={<SettingsIcon className="w-6 h-6"/>} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
           </div>
@@ -1871,7 +1961,7 @@
     // ==============================================
     //                MAIN APP VIEWS
     // ==============================================
-    function ChatView({ mqttClient, messages, setMessages, parentProfile, devices, activeChildId, setActiveChildId, childOnlineStatus, activeChildLabel }) {
+    function ChatView({ unreadByChild = {}, mqttClient, messages, setMessages, parentProfile, devices, activeChildId, setActiveChildId, childOnlineStatus, activeChildLabel }) {
       const [inputText, setInputText] = useState('');
       const messagesEndRef = useRef(null);
 
@@ -1920,6 +2010,15 @@
                  >
                    <span className={`w-2.5 h-2.5 rounded-full ${online ? (isActive ? 'bg-green-300 shadow-[0_0_6px_#86efac]' : 'bg-green-500 shadow-[0_0_6px_#22c55e]') : (isActive ? 'bg-blue-300' : 'bg-gray-300')}`}></span>
                    <span>{displayName(childLabel)}</span>
+                   {/* Unread count for this child. Hidden on the chat you are
+                       currently looking at, because opening it is what marks it
+                       read -- leaving a number on the open conversation would
+                       be telling you about messages you can see. */}
+                   {!isActive && unreadByChild[childLabel] > 0 && (
+                     <span className="bg-red-500 text-white text-xs font-bold min-w-[20px] h-[20px] px-1.5 flex items-center justify-center rounded-full">
+                       {unreadByChild[childLabel] > 99 ? '99+' : unreadByChild[childLabel]}
+                     </span>
+                   )}
                  </button>
                )
             })}

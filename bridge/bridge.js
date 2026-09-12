@@ -493,6 +493,27 @@ async function recordMessage(uid, topic, ev) {
   await pruneMessages(uid);
 }
 
+// The number on the app icon.
+//
+// APNs only accepts an ABSOLUTE badge count -- there is no "increment by one" --
+// so someone has to keep a running total. The app writes what it is currently
+// showing, and this reads and bumps it. Without that, a badge set while the app
+// was open would stay frozen at that number through every later notification,
+// which is worse than no badge because it looks authoritative.
+async function nextBadge(uid) {
+  const ref = db.doc(`artifacts/${APP_ID}/users/${uid}/state/read`);
+  try {
+    const snap = await ref.get();
+    const current = (snap.exists && Number(snap.data().badge)) || 0;
+    const next = current + 1;
+    await ref.set({ badge: next }, { merge: true });
+    return next;
+  } catch (e) {
+    error(`  badge update failed for parent=${uid.slice(0, 8)}..: ${e.message}`);
+    return 0;   // 0 means "leave it alone" -- better than guessing wrong
+  }
+}
+
 // ----------------------------------------------------------------- stage C --
 // One message shape covers both targets. `apns.interruption-level` is what
 // makes the battery alert passive on an iPhone app; Web Push has no equivalent,
@@ -501,6 +522,7 @@ async function recordMessage(uid, topic, ev) {
 // Every data value must be a string -- FCM rejects the message otherwise, and
 // the error does not say which field.
 async function send(uid, tokens, childHash, ev) {
+  const badge = await nextBadge(uid);
   // Land on the tab that ANSWERS the alert, AND on the right child. Both tabs
   // have a device selector, so the tab alone drops a parent on whichever child
   // they happened to be looking at last -- which for a message means the wrong
@@ -518,6 +540,7 @@ async function send(uid, tokens, childHash, ev) {
       payload: {
         aps: {
           'interruption-level': ev.level,
+          ...(badge > 0 ? { badge } : {}),
           // Sound has to be named explicitly. FCM's notification block becomes
           // aps.alert, which shows a banner and nothing else -- so without this
           // every alert arrived silently, which reads as "not working" rather
@@ -542,7 +565,7 @@ async function send(uid, tokens, childHash, ev) {
   }
 
   info(`  sent kind=${ev.kind} parent=${uid.slice(0, 8)}.. ` +
-       `ok=${res.successCount} failed=${res.failureCount}`);
+       `ok=${res.successCount} failed=${res.failureCount} badge=${badge}`);
 
   // Prune tokens the far end has thrown away. Without this a parent who
   // reinstalls leaves a dead token behind forever, and every future alert
