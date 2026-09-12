@@ -732,6 +732,46 @@
         try { window.history.replaceState(null, '', window.location.pathname); } catch (e) {}
       }, [devices]);
 
+      // Inbound messages come from FIRESTORE, not only from MQTT.
+      //
+      // The retained MQTT message is a single copy that the first client to read
+      // it consumes. If this app happened to be the one that took it and was
+      // then suspended -- which iOS does within seconds -- the message was gone
+      // from the broker and stored nowhere. The bridge, which never sleeps, now
+      // records every message to this parent, and this listener is what makes it
+      // show up reliably and on every one of their devices.
+      //
+      // The MQTT path stays for immediacy while the app is open. Both merge by
+      // id, so the overlap is harmless.
+      useEffect(() => {
+        if (!user) return;
+        const ref = collection(db, 'artifacts', appId, 'users', user.uid, 'messages');
+        const unsub = onSnapshot(ref, (snap) => {
+          const incoming = snap.docs.map((d) => {
+            const m = d.data();
+            return {
+              id: m.id || Number(d.id),
+              type: m.type,
+              text: m.text,
+              sender: m.sender,
+              target: null,
+              isMe: false,
+              timestamp: new Date(m.id || Number(d.id)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            };
+          });
+          if (!incoming.length) return;
+          setMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id));
+            const add = incoming.filter((m) => !seen.has(m.id));
+            if (!add.length) return prev;
+            const next = [...prev, ...add].sort((a, b) => a.id - b.id);
+            try { localStorage.setItem('dotdash_messages', JSON.stringify(next)); } catch (e) {}
+            return next;
+          });
+        }, (e) => console.error('message sync failed', e));
+        return () => unsub();
+      }, [user]);
+
       // --- AUTO-LAUNCH WIZARD ---
       useEffect(() => {
         if (!loading && user && devicesLoaded && (!parentProfile?.virtualId || devices.length === 0) && !isWizardActive) {

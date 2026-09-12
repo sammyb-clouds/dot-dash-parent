@@ -215,6 +215,8 @@ function parseMessage(parts, payload) {
     level: 'active',
     route: 'parent',
     sender,          // the child's NAME+PIN, which is how the app labels chats
+    msgType: type,   // TEXT | MORSE | PULSE, kept raw for the stored copy
+    text,
   };
 }
 
@@ -402,6 +404,10 @@ async function deliver(hash, ev) {
     return;
   }
 
+  // Saved BEFORE any delivery attempt: a message that cannot be pushed still
+  // has to survive, and push failures must not take the message with them.
+  if (ev.kind === 'message') await recordMessage(uid, ev.__topic || '', ev);
+
   const tokens = await getTokens(uid);
   if (tokens.length === 0) {
     info(`  routed ${ev.route}=${short} -> parent=${uid.slice(0, 8)}.. but no push ` +
@@ -417,6 +423,38 @@ async function deliver(hash, ev) {
   }
 
   await send(uid, tokens, hash, ev);
+}
+
+// --------------------------------------------------------------- durable log --
+// Write inbound parent messages to Firestore.
+//
+// Until now a message to a parent existed ONLY as a retained MQTT message, and
+// whichever client read it first consumed it and kept it in that device's
+// localStorage. That loses the message outright if the app is killed while
+// handling it -- which is routine, because iOS suspends the app seconds after
+// it connects -- and it means a parent's other devices never see it at all.
+//
+// The bridge is the one participant that is always connected, so it is the
+// right place to write things down. The app still gets the live MQTT copy for
+// immediacy; this is what makes the message survive.
+async function recordMessage(uid, topic, ev) {
+  // Key on the topic's timestamp so a redelivery overwrites rather than
+  // duplicates, and so the id matches what the app derives from the same topic.
+  const parts = topic.split('/');
+  const stamp = parts[3];
+  const id = /^\d+$/.test(stamp || '') ? stamp : String(Date.now());
+  try {
+    await db.doc(`artifacts/${APP_ID}/users/${uid}/messages/${id}`).set({
+      id: Number(id),
+      type: ev.msgType,
+      text: ev.text ?? '',
+      sender: ev.sender,
+      isMe: false,
+      receivedAt: Date.now(),
+    });
+  } catch (e) {
+    error(`  could not record message for parent=${uid.slice(0, 8)}..: ${e.message}`);
+  }
 }
 
 // ----------------------------------------------------------------- stage C --
@@ -549,6 +587,7 @@ async function main() {
     const hash = topic.split('/')[2];
     info(`EVENT ${ev.kind.padEnd(10)} ${ev.route}=${hash.slice(0, 12)} ` +
          `level=${ev.level.padEnd(7)} payload=${JSON.stringify(payload.slice(0, 60))}`);
+    ev.__topic = topic;
     deliver(hash, ev).catch((e) => error(`deliver failed: ${e.message}`));
   });
 
