@@ -438,6 +438,39 @@ async function deliver(hash, ev) {
 // The bridge is the one participant that is always connected, so it is the
 // right place to write things down. The app still gets the live MQTT copy for
 // immediacy; this is what makes the message survive.
+// How many messages to keep per parent. The app only ever reads the most recent
+// MESSAGE_PAGE (100) of these, so anything far beyond that is storage and index
+// cost for data nobody will fetch.
+const KEEP_MESSAGES = 200;
+const PRUNE_EVERY_MS = 10 * 60 * 1000;
+const lastPrune = new Map();
+
+// Keep the collection bounded. Uses a count() aggregation rather than reading
+// the documents: count bills roughly one read per thousand index entries, where
+// fetching them to count would bill one read EACH -- which is the very cost this
+// is here to avoid.
+async function pruneMessages(uid) {
+  const now = Date.now();
+  if (now - (lastPrune.get(uid) || 0) < PRUNE_EVERY_MS) return;
+  lastPrune.set(uid, now);
+
+  const col = db.collection(`artifacts/${APP_ID}/users/${uid}/messages`);
+  try {
+    const total = (await col.count().get()).data().count;
+    if (total <= KEEP_MESSAGES) return;
+
+    const excess = total - KEEP_MESSAGES;
+    const oldest = await col.orderBy('id', 'asc').limit(excess).get();
+    const batch = db.batch();
+    oldest.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    info(`  pruned ${oldest.size} old message(s) for parent=${uid.slice(0, 8)}.. (kept ${KEEP_MESSAGES})`);
+  } catch (e) {
+    // Never fatal: a failed prune costs storage, a thrown one costs delivery.
+    error(`  prune failed for parent=${uid.slice(0, 8)}..: ${e.message}`);
+  }
+}
+
 async function recordMessage(uid, topic, ev) {
   // Key on the topic's timestamp so a redelivery overwrites rather than
   // duplicates, and so the id matches what the app derives from the same topic.
@@ -455,7 +488,9 @@ async function recordMessage(uid, topic, ev) {
     });
   } catch (e) {
     error(`  could not record message for parent=${uid.slice(0, 8)}..: ${e.message}`);
+    return;
   }
+  await pruneMessages(uid);
 }
 
 // ----------------------------------------------------------------- stage C --

@@ -5,7 +5,7 @@
     import { createRoot } from 'react-dom/client';
     import { initializeApp } from 'firebase/app';
     import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
-    import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
+    import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
     import { getMessaging, getToken, deleteToken, isSupported as messagingSupported } from 'firebase/messaging';
 
     // =========================================================================
@@ -118,6 +118,11 @@
       }
       return out;
     };
+
+    // How many recent messages the app pulls from Firestore. Local history in
+    // localStorage is not capped by this -- older messages a device has already
+    // seen stay visible; this only bounds what is re-read from the server.
+    const MESSAGE_PAGE = 100;
 
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const VAPID_PUBLIC_KEY =
@@ -785,7 +790,18 @@
       // id, so the overlap is harmless.
       useEffect(() => {
         if (!user) return;
-        const ref = collection(db, 'artifacts', appId, 'users', user.uid, 'messages');
+        // BOUNDED, and this matters more than it looks. onSnapshot reads every
+        // document in the collection on first attach, so an unbounded query
+        // costs one read per message EVER STORED, on every app open. At 25
+        // devices that crosses the free tier's 50k reads/day once each parent
+        // has ~200 messages of history -- from history accumulating, not from
+        // more devices. With a limit, an app open costs at most MESSAGE_PAGE
+        // reads no matter how long the product has been running.
+        const ref = query(
+          collection(db, 'artifacts', appId, 'users', user.uid, 'messages'),
+          orderBy('id', 'desc'),
+          limit(MESSAGE_PAGE)
+        );
         const unsub = onSnapshot(ref, (snap) => {
           const incoming = snap.docs.map((d) => {
             const m = d.data();
