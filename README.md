@@ -7,7 +7,8 @@ single-file `dotdashindex.html` is gone — it is now this build's output.
     npm install
     npm run dev            # local dev server, hot reload
     npm run build          # -> dist/index.html, one self-contained file
-    npm run deploy:test    # build, then scp dist/index.html to test.html
+    npm run deploy:test    # build, then scp to test.html   (staging)
+    npm run deploy:prod    # build, then scp to index.html   (production)
 
 The build emits ONE inlined HTML file on purpose. It serves both targets: the
 web deploy is still a single `scp`, and Capacitor's `webDir` points at `dist/`

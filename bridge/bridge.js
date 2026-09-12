@@ -47,9 +47,10 @@ const SERVICE_ACCOUNT = env.SERVICE_ACCOUNT || '';   // stage B
 // Matches the app: `typeof __app_id !== 'undefined' ? __app_id : 'dotdash'`.
 const APP_ID = env.APP_ID || 'dotdash';
 const DRY_RUN = env.DRY_RUN === '1';
-// Where a tapped notification should land. Staging for now; becomes "/" when
-// the build is promoted to the production index.html.
-const LINK_PATH = env.LINK_PATH || '/test.html';
+// Where a tapped notification should land. Production root since the build was
+// promoted from test.html on 2026-09-12. Override with LINK_PATH in the systemd
+// EnvironmentFile to point a bridge at staging instead.
+const LINK_PATH = env.LINK_PATH || '/';
 const STATE_PATH = env.STATE_PATH || '/root/dotdash_bridge/state.json';
 
 const TOPICS = [

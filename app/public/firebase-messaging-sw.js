@@ -45,7 +45,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const target = data.link || '/test.html';
+  const target = data.link || '/';
   const tab = data.tab || null;
 
   event.waitUntil(
