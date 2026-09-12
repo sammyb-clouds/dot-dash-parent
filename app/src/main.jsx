@@ -4,8 +4,8 @@
     import './index.css';
     import { createRoot } from 'react-dom/client';
     import { initializeApp } from 'firebase/app';
-    import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
-    import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
+    import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken, deleteUser, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+    import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, updateDoc, query, orderBy, limit, writeBatch } from 'firebase/firestore';
     import { getMessaging, getToken, deleteToken, isSupported as messagingSupported } from 'firebase/messaging';
 
     // =========================================================================
@@ -1410,6 +1410,98 @@
          await saveWifiNets(wifiNets.filter(n => n.ssid !== ssid));
        };
 
+       // ---------- ACCOUNT DELETION ----------
+       // Required by App Store guideline 5.1.1(v): an app that creates accounts
+       // must let people delete them from inside it.
+       //
+       // Deletes in a deliberate ORDER. Firestore data goes first, while the
+       // user is still authenticated -- once the auth account is gone the
+       // security rules reject their own writes and the data is orphaned with
+       // no way to reach it. The auth account is destroyed last.
+       //
+       // Devices are unpaired before anything else. A device whose records
+       // vanish but which was never told keeps its name and PIN, so friends'
+       // devices carry on publishing to an identity nobody is listening on and
+       // the messages just disappear -- the same failure unlinking was written
+       // to avoid.
+       const [deleting, setDeleting] = useState('');
+
+       const deleteAllIn = async (path) => {
+         const snap = await getDocs(collection(db, path));
+         // Firestore caps a batch at 500 writes.
+         for (let i = 0; i < snap.docs.length; i += 400) {
+           const batch = writeBatch(db);
+           snap.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+           await batch.commit();
+         }
+         return snap.size;
+       };
+
+       const handleDeleteAccount = async () => {
+         if (!window.confirm(
+           "Delete your account?\n\n" +
+           "This unpairs every Dot Dash device, erases your message history, and " +
+           "removes your parent ID. It cannot be undone."
+         )) return;
+         const typed = window.prompt('This is permanent.\n\nType DELETE to confirm:');
+         if (typed !== 'DELETE') return;
+
+         const base = `artifacts/${appId}/users/${user.uid}`;
+         try {
+           // 1. Release the hardware while we still know each device's hash.
+           setDeleting('Unpairing devices...');
+           for (const d of devices) {
+             try {
+               mqttClient?.publish(`doorbell/cmd/${d.hashedId}`, 'CMD,UNPAIR', { qos: 1, retain: true });
+               // Drop this device's retained alerts too, or they outlive the account.
+               ['battery', 'wifi'].forEach(k =>
+                 mqttClient?.publish(`doorbell/monitor/${d.hashedId}/${k}`, '', { retain: true }));
+               await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', d.hashedId));
+             } catch (e) {}
+           }
+
+           setDeleting('Erasing your data...');
+           await deleteAllIn(`${base}/devices`);
+           await deleteAllIn(`${base}/messages`);
+           await deleteAllIn(`${base}/pushTokens`);
+           try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'parent')); } catch (e) {}
+           if (parentProfile?.virtualId) {
+             try {
+               const pHash = await hashId(parentProfile.virtualId);
+               await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', pHash));
+             } catch (e) {}
+           }
+
+           // 2. The account itself, last.
+           setDeleting('Closing your account...');
+           try {
+             await deleteUser(auth.currentUser);
+           } catch (e) {
+             // Firebase refuses to delete an account authenticated a while ago.
+             // Asking for the password here is the standard remedy -- and it is
+             // a reasonable thing to require before destroying an account.
+             if (e.code === 'auth/requires-recent-login') {
+               const pw = window.prompt('For security, please re-enter your password to finish deleting your account:');
+               if (!pw) { setDeleting(''); return alert('Account not deleted. Your data has been removed; sign in again to finish.'); }
+               const cred = EmailAuthProvider.credential(auth.currentUser.email, pw);
+               await reauthenticateWithCredential(auth.currentUser, cred);
+               await deleteUser(auth.currentUser);
+             } else {
+               throw e;
+             }
+           }
+
+           try { localStorage.removeItem('dotdash_messages'); } catch (e) {}
+           try { localStorage.removeItem('dotdash_monitor'); } catch (e) {}
+           try { localStorage.removeItem(PUSH_ID_KEY); } catch (e) {}
+           setDeleting('');
+           alert('Your account has been deleted.');
+         } catch (e) {
+           setDeleting('');
+           alert(`Could not finish deleting your account: ${e.message}`);
+         }
+       };
+
        const handleLogout = () => { if(window.confirm("Are you sure you want to log out?")) signOut(auth); };
 
        // Background notifications. The toggle is the only way in, because iOS
@@ -1736,6 +1828,20 @@
             {activeDevice && (
               <button onClick={() => setUnlinkMode(true)} className="w-full py-4 text-red-500 font-bold bg-white border border-red-100 rounded-3xl shadow-sm active:bg-red-50">Unlink Device</button>
             )}
+
+            {/* Account deletion. Required by App Store guideline 5.1.1(v), and
+                kept plainly visible rather than buried -- a deletion a reviewer
+                has to hunt for is treated as not offered. */}
+            <div className="mt-6 mb-2">
+              <button onClick={handleDeleteAccount} disabled={!!deleting}
+                className="w-full py-4 text-white font-bold bg-red-500 rounded-3xl shadow-sm active:bg-red-600 disabled:bg-red-300">
+                {deleting || 'Delete My Account'}
+              </button>
+              <p className="text-xs text-gray-400 mt-2 text-center leading-relaxed">
+                Unpairs every device, erases your messages and removes your parent ID.
+                This cannot be undone.
+              </p>
+            </div>
          </div>
        );
     }
