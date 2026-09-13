@@ -161,56 +161,85 @@
           if (perm.receive !== 'granted') {
             return { ok: false, reason: 'Notifications are blocked. You can turn them back on in iOS Settings.' };
           }
-          // A fresh INSTALL that gets handed back its predecessor's token is the
-          // TestFlight trap: the app container (and with it localStorage) is
-          // wiped on delete, but Firebase's installation id lives in the
-          // keychain and survives. So the new install re-registers the token
-          // the OLD install minted -- and FCM keeps that token pointed at the
-          // old install's APNs token, in the old install's APNs environment.
-          // Xcode builds are sandbox, TestFlight builds are production, so the
-          // carried-over mapping sends every notification into the void while
-          // FCM cheerfully reports ok=1 failed=0.
-          //
-          // No stored id means this install has never registered, so throw the
-          // inherited token away and mint one that belongs to THIS install.
-          //
-          // The mint marker covers the case a fresh install does not: updating
-          // through TestFlight KEEPS the container, so an app carrying a token
-          // inherited before this code existed would look like a returning
-          // install and keep it forever. Builds before the marker never wrote
-          // one, so its absence re-mints exactly once, then never again.
-          let needsFresh = false;
-          try {
-            needsFresh = !localStorage.getItem(PUSH_ID_KEY) || !localStorage.getItem(PUSH_MINT_KEY);
-          } catch (e) { needsFresh = true; }
-          if (needsFresh) {
-            try { await FirebaseMessaging.deleteToken(); } catch (e) {}
-          }
-
-          const { token } = await FirebaseMessaging.getToken();
-          if (!token) return { ok: false, reason: 'Could not get a notification token.' };
-
-          const id = sha256(token).slice(0, 32);
-          const ua = navigator.userAgent.slice(0, 200);
-          await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id), {
-            token, platform: 'ios-app', userAgent: ua, updatedAt: Date.now(),
-          });
-          try {
-            const existing = await getDocs(collection(db, 'artifacts', appId, 'users', uid, 'pushTokens'));
-            await Promise.all(existing.docs
-              .filter((d) => d.id !== id && d.data().userAgent === ua)
-              .map((d) => deleteDoc(d.ref)));
-          } catch (e) {}
-          try {
-            localStorage.setItem(PUSH_ID_KEY, id);
-            localStorage.setItem(PUSH_MINT_KEY, '1');
-          } catch (e) {}
-          return { ok: true, reason: 'Notifications are on for this device.' };
+          return await registerNativeToken(uid);
         } catch (e) {
           return { ok: false, reason: `Could not turn on notifications: ${e.message}` };
         }
       }
+      return await enableBrowserPush(uid, { iOS, standalone });
+    }
 
+    // Mints a token and writes it where the bridge looks. Split out of
+    // enableWebPush so the launch reconciliation below can reuse it without
+    // re-requesting permission.
+    async function registerNativeToken(uid) {
+      const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+      // A fresh INSTALL that gets handed back its predecessor's token is the
+      // TestFlight trap: the app container (and with it localStorage) is
+      // wiped on delete, but Firebase's installation id lives in the
+      // keychain and survives. So the new install re-registers the token
+      // the OLD install minted -- and FCM keeps that token pointed at the
+      // old install's APNs token, in the old install's APNs environment.
+      // Xcode builds are sandbox, TestFlight builds are production, so the
+      // carried-over mapping sends every notification into the void while
+      // FCM cheerfully reports ok=1 failed=0.
+      //
+      // No stored id means this install has never registered, so throw the
+      // inherited token away and mint one that belongs to THIS install.
+      //
+      // The mint marker covers the case a fresh install does not: updating
+      // through TestFlight KEEPS the container, so an app carrying a token
+      // inherited before this code existed would look like a returning
+      // install and keep it forever. Builds before the marker never wrote
+      // one, so its absence re-mints exactly once, then never again.
+      let needsFresh = false;
+      try {
+        needsFresh = !localStorage.getItem(PUSH_ID_KEY) || !localStorage.getItem(PUSH_MINT_KEY);
+      } catch (e) { needsFresh = true; }
+      if (needsFresh) {
+        try { await FirebaseMessaging.deleteToken(); } catch (e) {}
+      }
+
+      const { token } = await FirebaseMessaging.getToken();
+      if (!token) return { ok: false, reason: 'Could not get a notification token.' };
+
+      const id = sha256(token).slice(0, 32);
+      const ua = navigator.userAgent.slice(0, 200);
+      await setDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id), {
+        token, platform: 'ios-app', userAgent: ua, updatedAt: Date.now(),
+      });
+      try {
+        const existing = await getDocs(collection(db, 'artifacts', appId, 'users', uid, 'pushTokens'));
+        await Promise.all(existing.docs
+          .filter((d) => d.id !== id && d.data().userAgent === ua)
+          .map((d) => deleteDoc(d.ref)));
+      } catch (e) {}
+      try {
+        localStorage.setItem(PUSH_ID_KEY, id);
+        localStorage.setItem(PUSH_MINT_KEY, '1');
+      } catch (e) {}
+      return { ok: true, reason: 'Notifications are on for this device.' };
+    }
+
+    // A build shipping the re-mint has to apply it WITHOUT the user touching
+    // the toggle -- the toggle already reads on, so nothing would ever call
+    // enableWebPush and the inherited token would live on forever. Safe to run
+    // on launch: only the permission PROMPT needs a tap handler, and permission
+    // is already granted here, so this just mints and writes.
+    async function reconcileNativeToken(uid) {
+      if (!uid || !isNativeApp()) return;
+      try {
+        let minted = null;
+        try { minted = localStorage.getItem(PUSH_MINT_KEY); } catch (e) {}
+        if (minted) return;
+        const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+        const perm = await FirebaseMessaging.checkPermissions();
+        if (perm.receive !== 'granted') return;
+        await registerNativeToken(uid);
+      } catch (e) {}
+    }
+
+    async function enableBrowserPush(uid, { iOS, standalone }) {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         return {
           ok: false,
@@ -1688,7 +1717,9 @@
 
        useEffect(() => {
          let alive = true;
-         webPushState(user?.uid).then((on) => { if (alive) setPushOn(on); });
+         reconcileNativeToken(user?.uid)
+           .then(() => webPushState(user?.uid))
+           .then((on) => { if (alive) setPushOn(on); });
          return () => { alive = false; };
        }, [user]);
 
