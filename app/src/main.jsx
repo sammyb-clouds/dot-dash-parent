@@ -1651,7 +1651,12 @@
            // A row with no password of its own sends KEEP, and the device fills
            // in what it already holds. Only a password typed in this session
            // travels as itself.
-           const plain = nets.flatMap(n => [n.ssid, n.pass || WIFI_KEEP]).join(WIFI_US);
+           // KEEP means "we do not hold a password for this row"; an empty
+           // string means "this network has no password". Testing truthiness
+           // conflated the two and sent KEEP for an open network, which the
+           // device cannot resolve and now drops.
+           const plain = nets.flatMap(n => [n.ssid,
+             (n.pass === undefined || n.pass === null) ? WIFI_KEEP : n.pass]).join(WIFI_US);
            const payload = wifiObfuscate(plain, myID);
            mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_WIFI,${payload}`, { qos: 1, retain: true });
            setWifiSyncMsg(childOnlineStatus?.[activeDevice.id]
@@ -1672,7 +1677,18 @@
        };
 
        const handleRemoveWifi = async (ssid) => {
-         if (!window.confirm(`Remove "${ssid}" from this device?`)) return;
+         // A network the DEVICE reports is one it actually holds -- possibly the
+         // one it is connected through right now. Removing it here tells the
+         // device to forget it, and if nothing else in the list works, the only
+         // way back is the Wi-Fi portal on the device itself. Worth a sentence
+         // of warning rather than the same bland confirm as any other row.
+         const heldByDevice = reported.includes(ssid);
+         const prompt = heldByDevice
+           ? `"${ssid}" is saved on the device, and may be the network it is using right now.\n\n`
+             + `Removing it here tells the device to forget it. If it cannot reach any of the other saved networks, `
+             + `it will need setting up again through its own Wi-Fi portal.\n\nRemove it anyway?`
+           : `Remove "${ssid}" from this device?`;
+         if (!window.confirm(prompt)) return;
          await saveWifiNets(wifiNets.filter(n => n.ssid !== ssid));
        };
 
