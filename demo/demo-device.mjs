@@ -67,7 +67,11 @@ function sendToParent(text) {
   // this is the path the push bridge watches, so a demo message also exercises
   // the notification the reviewer would get.
   client.publish(`doorbell/msg/${parentHash}/${id}`, payload, { qos: 1, retain: true });
-  client.publish(`doorbell/monitor/${childHash}/${id}`, payload, { qos: 1, retain: false });
+  // Monitor carries a FOURTH field the inbox copy does not: the recipient's
+  // hash, which the app reverse-resolves against the child's approved contacts
+  // so a parent sees who a message went to. Without it Monitor says "A Friend"
+  // about a message sent to the parent themselves.
+  client.publish(`doorbell/monitor/${childHash}/${id}`, `${payload},${parentHash}`, { qos: 1, retain: false });
   log('sent', JSON.stringify(text));
 }
 
