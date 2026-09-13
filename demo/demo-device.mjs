@@ -7,11 +7,17 @@
  * so Chat, Monitor and the online dot all behave the way they would beside a
  * real one.
  *
+ * It does NOT chatter on its own. It used to send a phrase every ten minutes,
+ * which over a review that runs for weeks meant thousands of Firestore writes
+ * and a chat full of the same six phrases. The seeded history from
+ * provision-demo.mjs shows what a conversation looks like; a reply to whatever
+ * the reviewer sends shows that it works. Nothing more is needed.
+ *
  * It speaks the same MQTT the firmware does, on the same shared device
  * credential, so it needs no broker changes and no ACL of its own.
  *
- * Deliberately NOT a simulation of the whole product: it sends, it is present,
- * and it answers. It does not fake battery alerts, friend requests or timer
+ * Deliberately NOT a simulation of the whole product: it is present, and it
+ * answers. It does not fake battery alerts, friend requests or timer
  * approvals -- those reach the reviewer only if they actually happen.
  */
 
@@ -25,13 +31,6 @@ const PASS = process.env.MQTT_PASS || '';
 
 const PARENT_ID = process.env.DEMO_PARENT_ID || 'DEMO0101';
 const CHILD_ID = process.env.DEMO_CHILD_ID || 'ROBIN0614';
-
-// How often the demo child sends something unprompted. Long enough that a
-// reviewer sees the app at rest rather than a device chattering at them, short
-// enough that a few minutes of poking produces visible life.
-const IDLE_SEND_MS = parseInt(process.env.DEMO_IDLE_MS || '600000', 10);
-
-const PHRASES = ['HELLO!', 'HOW ARE YOU?', 'GREAT!', 'OK', 'COME OVER?', 'MEET AT PARK?', ':)'];
 
 // Ids are hashed LOWERCASED and trimmed, matching hashId() in main.jsx, the
 // firmware, and the bridge's parent map. Anything else talks to nobody.
@@ -109,8 +108,6 @@ client.on('message', (topic, buf) => {
 
 client.on('error', (e) => log('mqtt error:', e.message));
 client.on('close', () => log('disconnected'));
-
-setInterval(() => sendToParent(PHRASES[Math.floor(Math.random() * PHRASES.length)]), IDLE_SEND_MS);
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {

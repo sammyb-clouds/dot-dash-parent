@@ -10,8 +10,8 @@ Two pieces:
   an Auth user, `profile/parent`, one device, the two public identity records,
   and a little chat history. Idempotent; it resets the password each run.
 - **`demo-device.mjs`** is a virtual device. It holds presence open so the child
-  shows as online, replies when the reviewer sends a message, and taps out
-  something unprompted every ten minutes. It speaks the same MQTT the firmware
+  shows as online and replies when the reviewer sends a message. It never sends
+  unprompted — the seeded history covers what a conversation looks like. It speaks the same MQTT the firmware
   does, on the same shared device credential, so the broker needs no changes.
 
 ## Deployed
