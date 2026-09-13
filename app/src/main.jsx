@@ -1057,16 +1057,25 @@
       // The iOS app icon number. Set from here whenever it changes; the bridge
       // keeps it moving while the app is closed.
       useEffect(() => {
-        if (!isNativeApp()) return;
+        if (!isNativeApp() || !user) return;
         const total = totalUnreadChats + monitorCount;
         (async () => {
           try {
+            // Gated on permission ALREADY being granted, because the badge
+            // plugin requests authorization inside set() AND clear() -- so the
+            // mount-time clear of an empty badge was itself putting a system
+            // prompt in front of someone who had not signed in yet. checkPermissions
+            // never prompts. A badge means nothing until notifications are on
+            // anyway, so there is nothing to do in that case.
+            const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+            const perm = await FirebaseMessaging.checkPermissions();
+            if (perm.receive !== 'granted') return;
             const { Badge } = await import('@capawesome/capacitor-badge');
             if (total > 0) await Badge.set({ count: total });
             else await Badge.clear();
           } catch (e) {}
         })();
-      }, [totalUnreadChats, monitorCount]);
+      }, [totalUnreadChats, monitorCount, user]);
 
       // Keep the stored badge in step with what the app is showing, so the
       // bridge increments from the right number rather than a stale one.
