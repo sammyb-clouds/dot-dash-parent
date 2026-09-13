@@ -125,6 +125,7 @@
     const MESSAGE_PAGE = 100;
 
     const PUSH_ID_KEY = 'dotdash_push_token_id';
+    const PUSH_MINT_KEY = 'dotdash_push_minted';
     const VAPID_PUBLIC_KEY =
       'BFuCduXya7RRSfwlQoZWbKoOcJhkWtzr6mz9OsHJNGWUNA7j4LJB21kpVP__Vo8BayRxwh7MKy_IeGLorIvK2jU';
 
@@ -172,9 +173,17 @@
           //
           // No stored id means this install has never registered, so throw the
           // inherited token away and mint one that belongs to THIS install.
-          let firstRun = false;
-          try { firstRun = !localStorage.getItem(PUSH_ID_KEY); } catch (e) { firstRun = true; }
-          if (firstRun) {
+          //
+          // The mint marker covers the case a fresh install does not: updating
+          // through TestFlight KEEPS the container, so an app carrying a token
+          // inherited before this code existed would look like a returning
+          // install and keep it forever. Builds before the marker never wrote
+          // one, so its absence re-mints exactly once, then never again.
+          let needsFresh = false;
+          try {
+            needsFresh = !localStorage.getItem(PUSH_ID_KEY) || !localStorage.getItem(PUSH_MINT_KEY);
+          } catch (e) { needsFresh = true; }
+          if (needsFresh) {
             try { await FirebaseMessaging.deleteToken(); } catch (e) {}
           }
 
@@ -192,7 +201,10 @@
               .filter((d) => d.id !== id && d.data().userAgent === ua)
               .map((d) => deleteDoc(d.ref)));
           } catch (e) {}
-          try { localStorage.setItem(PUSH_ID_KEY, id); } catch (e) {}
+          try {
+            localStorage.setItem(PUSH_ID_KEY, id);
+            localStorage.setItem(PUSH_MINT_KEY, '1');
+          } catch (e) {}
           return { ok: true, reason: 'Notifications are on for this device.' };
         } catch (e) {
           return { ok: false, reason: `Could not turn on notifications: ${e.message}` };
