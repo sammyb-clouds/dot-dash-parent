@@ -255,6 +255,29 @@
     // would otherwise still show as on.
     async function webPushState(uid) {
       if (!uid) return false;
+
+      // NATIVE asks the plugin, not window.Notification -- that API does not
+      // exist in a WKWebView, so testing it here reported "off" on iOS even
+      // when notifications were working. The toggle read as off forever.
+      if (isNativeApp()) {
+        try {
+          const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+          const perm = await FirebaseMessaging.checkPermissions();
+          if (perm.receive !== 'granted') return false;
+        } catch (e) {
+          return false;
+        }
+        let nid = null;
+        try { nid = localStorage.getItem(PUSH_ID_KEY); } catch (e) {}
+        if (!nid) return false;
+        try {
+          const snap = await getDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', nid));
+          return snap.exists();
+        } catch (e) {
+          return false;
+        }
+      }
+
       if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
       let id = null;
       try { id = localStorage.getItem(PUSH_ID_KEY); } catch (e) {}
