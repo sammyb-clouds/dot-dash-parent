@@ -199,15 +199,27 @@ function parseMessage(parts, payload) {
   // it. Nothing to announce, but it still passes through the replay guard.
   if (!payload) return null;
 
-  const f = payload.split(',');
-  if (f.length < 3) return null;
-  const [type, text, sender] = [f[0], f[1], f[2]];
+  // Split on the FIRST and LAST comma rather than every comma. The middle
+  // field is the message, and a message can contain a comma -- the device's
+  // alphabet has punctuation in it now. Splitting naively truncated such a
+  // message at the comma and then read the rest of it as the sender's name.
+  // Type and sender cannot contain one, so the ends are safe to anchor on.
+  const firstComma = payload.indexOf(',');
+  const lastComma = payload.lastIndexOf(',');
+  if (firstComma < 1 || lastComma <= firstComma) return null;
+  const type = payload.slice(0, firstComma);
+  const text = payload.slice(firstComma + 1, lastComma);
+  const sender = payload.slice(lastComma + 1);
   if (!['TEXT', 'MORSE', 'PULSE'].includes(type)) return null;
+  if (!sender) return null;
 
+  // What was actually said, whichever way it was said. A parent glancing at a
+  // lock screen wants the message, not a description of it -- and whether it
+  // came from the quick-phrase list or was tapped out letter by letter is an
+  // implementation detail of the device, not something they asked about.
   let body;
-  if (type === 'TEXT') body = text;
-  else if (type === 'MORSE') body = 'Sent you a message in morse.';
-  else body = 'Buzzed you.';
+  if (type === 'PULSE') body = 'Buzzed you.';
+  else body = text || 'Sent you a message.';
 
   return {
     kind: 'message',

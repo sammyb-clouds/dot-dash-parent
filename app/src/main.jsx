@@ -737,9 +737,20 @@
             // meant a message could vanish for good: iOS suspends this app within
             // seconds of it connecting, and anything suspended between the clear
             // and the save was gone from the broker and never written anywhere.
-            const parts = payload.split(',');
+            // FIRST and LAST comma, not every comma: the message sits in the
+            // middle and can contain one now that the device's alphabet has
+            // punctuation. Splitting naively cut the message short and then
+            // read the remainder of it as the sender's name. The bridge parses
+            // the same payload the same way, so both copies of a message agree.
+            const firstComma = payload.indexOf(',');
+            const lastComma = payload.lastIndexOf(',');
             let stored = false;
-            if (parts.length >= 3) {
+            if (firstComma > 0 && lastComma > firstComma) {
+              const parts = [
+                payload.slice(0, firstComma),
+                payload.slice(firstComma + 1, lastComma),
+                payload.slice(lastComma + 1),
+              ];
               const newMsg = {
                 id: msgId, type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
                 timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
