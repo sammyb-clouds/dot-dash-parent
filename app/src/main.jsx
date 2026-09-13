@@ -160,6 +160,24 @@
           if (perm.receive !== 'granted') {
             return { ok: false, reason: 'Notifications are blocked. You can turn them back on in iOS Settings.' };
           }
+          // A fresh INSTALL that gets handed back its predecessor's token is the
+          // TestFlight trap: the app container (and with it localStorage) is
+          // wiped on delete, but Firebase's installation id lives in the
+          // keychain and survives. So the new install re-registers the token
+          // the OLD install minted -- and FCM keeps that token pointed at the
+          // old install's APNs token, in the old install's APNs environment.
+          // Xcode builds are sandbox, TestFlight builds are production, so the
+          // carried-over mapping sends every notification into the void while
+          // FCM cheerfully reports ok=1 failed=0.
+          //
+          // No stored id means this install has never registered, so throw the
+          // inherited token away and mint one that belongs to THIS install.
+          let firstRun = false;
+          try { firstRun = !localStorage.getItem(PUSH_ID_KEY); } catch (e) { firstRun = true; }
+          if (firstRun) {
+            try { await FirebaseMessaging.deleteToken(); } catch (e) {}
+          }
+
           const { token } = await FirebaseMessaging.getToken();
           if (!token) return { ok: false, reason: 'Could not get a notification token.' };
 
@@ -245,7 +263,18 @@
       if (uid && id) {
         try { await deleteDoc(doc(db, 'artifacts', appId, 'users', uid, 'pushTokens', id)); } catch (e) {}
       }
-      try { await deleteToken(getMessaging(app)); } catch (e) {}
+      // Delete the token itself, so turning the toggle back on mints a new one.
+      // This has to go through the native plugin on iOS: the web SDK's
+      // deleteToken works on a messaging instance WKWebView cannot even create,
+      // so it threw, got swallowed, and the token survived every toggle.
+      if (isNativeApp()) {
+        try {
+          const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+          await FirebaseMessaging.deleteToken();
+        } catch (e) {}
+      } else {
+        try { await deleteToken(getMessaging(app)); } catch (e) {}
+      }
       try { localStorage.removeItem(PUSH_ID_KEY); } catch (e) {}
       return { ok: true, reason: 'Notifications are off for this device.' };
     }
