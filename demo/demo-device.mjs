@@ -33,7 +33,9 @@ const IDLE_SEND_MS = parseInt(process.env.DEMO_IDLE_MS || '600000', 10);
 
 const PHRASES = ['HELLO!', 'HOW ARE YOU?', 'GREAT!', 'OK', 'COME OVER?', 'MEET AT PARK?', ':)'];
 
-const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+// Ids are hashed LOWERCASED and trimmed, matching hashId() in main.jsx, the
+// firmware, and the bridge's parent map. Anything else talks to nobody.
+const sha256 = (s) => crypto.createHash('sha256').update(String(s).toLowerCase().trim(), 'utf8').digest('hex');
 const childHash = sha256(CHILD_ID);
 const parentHash = sha256(PARENT_ID);
 const presenceTopic = `doorbell/presence/${childHash}`;

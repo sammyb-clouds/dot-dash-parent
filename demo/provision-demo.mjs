@@ -40,7 +40,10 @@ const EMAIL = process.env.DEMO_EMAIL || 'appreview@dotdashdevice.com';
 const DEFAULT_PHRASES = ['HELLO!', 'HOW ARE YOU?', 'COME OVER?', 'MEET AT PARK?', 'GREAT!', 'OK',
   'MAYBE LATER', 'BUSY', ':)', ':(', 'ASKING PARENT', 'CALL MY PARENT', 'BYE!'];
 
-const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+// Every id in Dot Dash is hashed LOWERCASED and trimmed -- hashId() in main.jsx
+// and the firmware both do it, and the bridge's parent map does it. Hashing the
+// uppercase id produces topics nothing else is listening on.
+const sha256 = (s) => crypto.createHash('sha256').update(String(s).toLowerCase().trim(), 'utf8').digest('hex');
 
 function password() {
   const i = process.argv.indexOf('--password');
