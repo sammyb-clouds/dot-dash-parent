@@ -167,6 +167,14 @@
           if (perm.receive !== 'granted') {
             return { ok: false, reason: 'Notifications are blocked. You can turn them back on in iOS Settings.' };
           }
+          // Foreground banners come from LocalNotifications rather than APNs.
+          // It is the same iOS authorization, so this never shows a second
+          // prompt -- it just makes sure the plugin has asked before notify()
+          // needs it. This used to happen on launch; it belongs here.
+          try {
+            const ln = window.Capacitor?.Plugins?.LocalNotifications;
+            if (ln) await ln.requestPermissions();
+          } catch (e) {}
           return await registerNativeToken(uid);
         } catch (e) {
           return { ok: false, reason: `Could not turn on notifications: ${e.message}` };
@@ -587,18 +595,12 @@
         };
       }, []);
 
+      // Notification permission is NOT requested here. Asking on launch put a
+      // system prompt in front of someone who had not yet seen what the app is,
+      // before they had even signed in -- pushy, and the first thing an App
+      // Review reviewer met. It is asked for once, from the Notifications
+      // toggle in Settings, where someone has just said they want them.
       useEffect(() => {
-        // Native asks through the plugin; the browser path is unchanged. On
-        // native this covers foreground banners only -- the APNs permission the
-        // bridge needs is requested separately by the push registration flow.
-        if (isNativeApp()) {
-          try {
-            const ln = window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications;
-            if (ln) ln.requestPermissions();
-          } catch (e) {}
-        } else if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-          Notification.requestPermission();
-        }
         const handleVisibilityChange = () => { isAppActiveRef.current = document.visibilityState === 'visible'; };
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
