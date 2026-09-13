@@ -113,7 +113,13 @@
       let out = '', block = -1, key = null;
       for (let i = 0; i < bytes.length; i++) {
         const b = Math.floor(i / 32);
-        if (b !== block) { key = sha256.array(`${myID}|wifi|${b}`); block = b; }
+        // LOWERCASED, because the firmware's sha256() helper lowercases and
+        // trims whatever it is handed -- including this key -- and a device
+        // named INSTA0515 therefore keys on "insta0515|wifi|0". Hashing the id
+        // as stored produced a different keystream on every sync: the device
+        // decoded the payload into binary, stored that as an SSID, and then
+        // reported the garbage back. Nothing failed loudly at any point.
+        if (b !== block) { key = sha256.array(`${myID}|wifi|${b}`.toLowerCase().trim()); block = b; }
         out += (bytes[i] ^ key[i % 32]).toString(16).padStart(2, '0');
       }
       return out;
@@ -1582,6 +1588,11 @@
        const wifiNets = [
          ...savedNets.map(n => ({ ssid: n.ssid, pass: n.pass || WIFI_KEEP })),
          ...reported
+           // A device that decoded a payload with the wrong key stored binary
+           // as an SSID and reports it back. Echoing that into the next sync
+           // would write it down again, so anything unprintable is dropped
+           // here and disappears from the device on the next successful save.
+           .filter(ssid => ssid && !/[\u0000-\u001f\u007f\ufffd]/.test(ssid))
            .filter(ssid => !savedNets.some(n => n.ssid === ssid))
            .map(ssid => ({ ssid, pass: WIFI_KEEP, fromDevice: true })),
        ];
