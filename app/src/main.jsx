@@ -1564,19 +1564,41 @@
 
        const currentPhrases = activeDevice?.phrases?.length > 0 ? activeDevice.phrases : defaultPhrases;
 
-       // Two sources, one list. Firestore holds the rows a parent typed (with
-       // passwords); the device reports what it really has (SSIDs only). A
-       // network the device knows but the app does not is shown as saved on the
-       // device, and carries a KEEP marker so saving cannot wipe its password.
+       // Two sources, one list, and NEITHER holds a password. Firestore keeps the
+       // SSIDs a parent manages; the device reports what it really has. The only
+       // copy of a password lives on the device that needs it.
+       //
+       // Every row therefore carries the KEEP marker, which tells the device to
+       // substitute its own stored password -- the same mechanism that has
+       // always protected a network joined through the captive portal. A real
+       // password appears in exactly one place: the row a parent has just typed,
+       // in the moment they save it.
+       //
+       // Rows written before this change may still carry a password. It is used
+       // if present, and dropped from Firestore on the next save.
        const WIFI_KEEP = String.fromCharCode(0x02);
        const savedNets = activeDevice?.wifiNets || [];
        const reported = (deviceWifi && activeDevice) ? (deviceWifi[activeDevice.id] || []) : [];
        const wifiNets = [
-         ...savedNets,
+         ...savedNets.map(n => ({ ssid: n.ssid, pass: n.pass || WIFI_KEEP })),
          ...reported
            .filter(ssid => !savedNets.some(n => n.ssid === ssid))
            .map(ssid => ({ ssid, pass: WIFI_KEEP, fromDevice: true })),
        ];
+
+       // The device republishes what it actually holds after every change, which
+       // is the receipt that lets a password be thrown away. Until that arrives
+       // the password has to stay, so this runs whenever the device's report
+       // changes rather than only at save time.
+       useEffect(() => {
+         if (!activeDevice || !user) return;
+         const held = savedNets.filter(n => n.pass);
+         if (!held.length) return;
+         if (!held.some(n => reported.includes(n.ssid))) return;
+         const next = savedNets.map(n => (reported.includes(n.ssid) ? { ssid: n.ssid } : n));
+         updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { wifiNets: next })
+           .catch(() => {});
+       }, [activeDevice?.id, JSON.stringify(reported), JSON.stringify(savedNets)]);
 
        // Saving writes Firestore first, then pushes to the device. Firestore is
        // the record a parent manages; the device copy is derived from it, so a
@@ -1584,13 +1606,30 @@
        const saveWifiNets = async (nets) => {
          if (!activeDevice) return;
          setWifiSyncMsg('');
-         // Only rows with a real password are worth storing; a KEEP row is the
-         // device's own and belongs to the device, not to Firestore.
-         const persist = nets.filter(n => n.pass !== WIFI_KEEP).map(n => ({ ssid: n.ssid, pass: n.pass }));
+         // SSIDs only. A password would be the most sensitive thing in the
+         // database and the device already has the one it needs, so there is
+         // nothing to gain by keeping a second copy here.
+         //
+         // Rows the DEVICE reported are not persisted at all: they belong to the
+         // device, which republishes them, and writing them here would turn a
+         // network the parent never chose into one the app claims to manage.
+         //
+         // A password is kept ONLY until the device confirms it holds that
+         // network. Dropping it any earlier loses it: an offline device may not
+         // have received it yet, and the next save would send KEEP for a
+         // network it never got, leaving it with a blank password and no way
+         // back but the captive portal.
+         const persist = nets.filter(n => !n.fromDevice).map(n => {
+           const real = n.pass && n.pass !== WIFI_KEEP;
+           return (real && !reported.includes(n.ssid)) ? { ssid: n.ssid, pass: n.pass } : { ssid: n.ssid };
+         });
          await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { wifiNets: persist });
          try {
            const myID = `${activeDevice.identity.name}${activeDevice.identity.pin}`;
-           const plain = nets.flatMap(n => [n.ssid, n.pass]).join(WIFI_US);
+           // A row with no password of its own sends KEEP, and the device fills
+           // in what it already holds. Only a password typed in this session
+           // travels as itself.
+           const plain = nets.flatMap(n => [n.ssid, n.pass || WIFI_KEEP]).join(WIFI_US);
            const payload = wifiObfuscate(plain, myID);
            mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_WIFI,${payload}`, { qos: 1, retain: true });
            setWifiSyncMsg(childOnlineStatus?.[activeDevice.id]
@@ -1949,24 +1988,33 @@
                     The device picks whichever it finds, so it works in each place
                     without being set up again.
                   </p>
+                  <p className="text-xs text-gray-400 leading-relaxed mb-4">
+                    Passwords are sent straight to the device and kept there, not
+                    in your account &mdash; so they cannot be shown again here.
+                    To change one, remove the network and add it back.
+                  </p>
                   <ul className="space-y-2 mb-4">
                     {wifiNets.map((n) => (
                        <li key={n.ssid} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
                          <div className="min-w-0 flex-1">
                            <div className="font-bold text-gray-700 text-sm truncate">{n.ssid}</div>
                            <div className="flex items-center gap-2 mt-0.5">
-                             {n.fromDevice ? (
-                               <span className="text-xs text-gray-400 italic truncate">Saved on the device</span>
-                             ) : (
+                             {/* Show/Hide only exists for a row saved before the
+                                 app stopped keeping passwords. Every other row
+                                 has nothing to reveal -- the password lives on
+                                 the device and never comes back here. */}
+                             {n.pass && n.pass !== WIFI_KEEP ? (
                                <>
                                  <span className="text-xs text-gray-400 font-mono truncate">
-                                   {revealed[n.ssid] ? (n.pass || '(no password)') : '\u2022'.repeat(Math.min(n.pass?.length || 0, 12) || 4)}
+                                   {revealed[n.ssid] ? n.pass : '\u2022'.repeat(Math.min(n.pass.length, 12) || 4)}
                                  </span>
                                  <button onClick={() => setRevealed(r => ({ ...r, [n.ssid]: !r[n.ssid] }))}
                                    className="text-xs text-teal-600 font-bold shrink-0">
                                    {revealed[n.ssid] ? 'Hide' : 'Show'}
                                  </button>
                                </>
+                             ) : (
+                               <span className="text-xs text-gray-400 italic truncate">Password saved on the device</span>
                              )}
                            </div>
                          </div>

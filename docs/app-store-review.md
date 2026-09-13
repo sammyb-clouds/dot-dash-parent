@@ -18,7 +18,7 @@ both are true, and both are checked.
 | Identifiers | User ID | The account id, and the `NAME+PIN` virtual ids messages are addressed to |
 | Identifiers | Device ID | The paired hardware's identifier, and the push notification token |
 | User Content | Other User Content | Message text, and the approved phrase lists |
-| Other Data | Other Data Types | Wi-Fi network names and passwords saved for a device |
+| Other Data | Other Data Types | Wi-Fi **network names** saved for a device. Passwords are no longer stored — see below |
 
 Nothing under Usage Data, Diagnostics, Location, Contacts, Health, Financial,
 Browsing or Search History — the app collects none of it, and the device has no
@@ -27,17 +27,21 @@ microphone, camera or GPS.
 **Under-declaring is the common rejection**, and on a children's product it is
 the bad kind. The Wi-Fi row in particular is easy to forget.
 
-### Decide first: Wi-Fi passwords at rest
+### Wi-Fi passwords — resolved
 
-`saveWifiNets` in `main.jsx` stores network names and passwords in Firestore in
-plaintext (obscured in transit to the device, not at rest). This is the most
-sensitive field in the database and the only one with no protection.
+Passwords are no longer stored in the account. They go straight to the device
+and live only there; the app sends a KEEP marker for every row it has no
+password for, and the firmware substitutes what it already holds — the same
+mechanism that has always protected a network joined through the captive portal.
 
-Options: encrypt at rest under a key the device already shares, stop persisting
-the password and pass it straight through to the device, or accept it and
-declare it. **Any of the three is defensible — but decide before submitting**,
-because the answer changes the label above and undoing a declaration later is
-worse than making it now.
+One password does persist briefly: from the moment a parent types it until the
+device reports back that it holds that network. Dropping it sooner would strand
+an offline device with a blank password. So the label stays at network names,
+and a password is transient rather than stored.
+
+Consequence for the UI: a saved password can no longer be revealed in the app,
+because the app does not have it. To change one, remove the network and add it
+back.
 
 ## 2. Age rating and the Kids Category
 
