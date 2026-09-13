@@ -1,0 +1,17 @@
+[Unit]
+Description=Dot Dash virtual demo device (App Store review account)
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/dotdash_demo
+EnvironmentFile=/root/dotdash_demo/demo.env
+ExecStart=/usr/bin/node /root/dotdash_demo/demo-device.mjs
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
