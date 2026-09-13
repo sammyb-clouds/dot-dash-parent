@@ -145,11 +145,15 @@
     // On iOS it also requires the app to have been added to the Home Screen.
     // Safari in a plain tab has no Push API at all, so this reports that rather
     // than leaving someone tapping a button that cannot work.
+    // Running from the Home Screen as an installed web app, rather than in a
+    // browser tab.
+    const isStandalone = () =>
+      window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
     async function enableWebPush(uid) {
       if (!uid) return { ok: false, reason: 'Sign in first.' };
 
-      const standalone = window.matchMedia('(display-mode: standalone)').matches
-        || window.navigator.standalone === true;
+      const standalone = isStandalone();
       const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
       // NATIVE. Uses the Firebase messaging plugin rather than Capacitor's own
@@ -2166,9 +2170,10 @@
               </div>
             )}
 
-            {/* Sits directly above Add to Home Screen on purpose: on iPhone the
-                one is a precondition for the other, and a parent who taps this
-                from a Safari tab needs the next box to be the answer. */}
+            {/* In the web app this sits directly above Add to Home Screen on
+                purpose: on iPhone the one is a precondition for the other, and a
+                parent who taps this from a Safari tab needs the next box to be
+                the answer. The native app shows no such box -- see below. */}
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
               <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
                   <Bell className="w-4 h-4 mr-2" /> Notifications
@@ -2194,16 +2199,23 @@
               )}
             </div>
 
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6">
-              <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
-                  <Share className="w-4 h-4 mr-2" /> Add to Home Screen (iOS)
-              </h3>
-              <ol className="list-decimal list-inside text-gray-500 space-y-2 text-sm leading-relaxed">
-                  <li>Open the web app url in the Safari browser</li>
-                  <li>Tap the Share button at the bottom of the screen</li>
-                  <li>Scroll down and select "Add to Home Screen"</li>
-              </ol>
-            </div>
+            {/* Web only. In the native app there is nothing to add -- it IS the
+                app on the Home Screen -- and a card about Safari and "the web app"
+                is the kind of reference to another platform App Review flags.
+                Also hidden once the web app is already running from the Home
+                Screen, where it would be telling someone to do what they did. */}
+            {!isNativeApp() && !isStandalone() && (
+              <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6">
+                <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
+                    <Share className="w-4 h-4 mr-2" /> Add to Home Screen (iOS)
+                </h3>
+                <ol className="list-decimal list-inside text-gray-500 space-y-2 text-sm leading-relaxed">
+                    <li>Open the web app url in the Safari browser</li>
+                    <li>Tap the Share button at the bottom of the screen</li>
+                    <li>Scroll down and select "Add to Home Screen"</li>
+                </ol>
+              </div>
+            )}
 
             {activeDevice && (
               <button onClick={() => setUnlinkMode(true)} className="w-full py-4 text-red-500 font-bold bg-white border border-red-100 rounded-3xl shadow-sm active:bg-red-50">Unlink Device</button>
