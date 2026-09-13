@@ -484,6 +484,10 @@
       // family's own home wifi -- would never appear in the app's list, which
       // is precisely where someone would go looking for it.
       const [deviceWifi, setDeviceWifi] = useState({});
+      // What each device REPORTS its arcade switch to be, keyed by device id.
+      // Separate from the parent's choice in Firestore on purpose: the gap
+      // between the two is how the app knows a change has not landed yet.
+      const [deviceArcade, setDeviceArcade] = useState({});
       
       const isAppActiveRef = useRef(true); 
       
@@ -790,6 +794,13 @@
 
           if (monitorTopics[baseTopic]) {
             const sourceChildMac = monitorTopics[baseTopic];
+
+            // The device reporting its arcade switch -- the receipt for SET_ARCADE.
+            if (topicParts[3] === 'arcade') {
+              const [tag, val] = payload.split(',');
+              if (tag === 'ARCADE') setDeviceArcade(prev => ({ ...prev, [sourceChildMac]: val === '1' }));
+              return; // retained and device-owned; do not auto-clear
+            }
 
             // The device reporting the network list it actually holds.
             if (topicParts[3] === 'wifi') {
@@ -1137,7 +1148,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} />
             </div>}
           </div>
 
@@ -1577,7 +1588,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        const [unlinkCode, setUnlinkCode] = useState('');
        const [newFriendId, setNewFriendId] = useState('');
@@ -1589,6 +1600,47 @@
        const [newWifiPass, setNewWifiPass] = useState('');
        const [revealed, setRevealed] = useState({});
        const [wifiSyncMsg, setWifiSyncMsg] = useState('');
+
+       // ---------- ARCADE SWITCH ----------
+       // Firestore holds what the PARENT chose (absent means on, which is every
+       // device paired before this switch existed). The device reports what it
+       // is actually doing. They are allowed to disagree for a while -- a device
+       // can be asleep -- and the disagreement is shown rather than hidden.
+       const arcadeWanted = activeDevice?.arcadeEnabled !== false;
+       const arcadeReported = activeDevice ? deviceArcade[activeDevice.id] : undefined;
+       const arcadeOnline = !!(activeDevice && childOnlineStatus?.[activeDevice.id]);
+       const lastArcadeSend = useRef({});
+
+       const sendArcade = (dev, on) => {
+         if (!mqttClient || !dev?.hashedId) return;
+         lastArcadeSend.current[dev.id] = Date.now();
+         mqttClient.publish(`doorbell/cmd/${dev.hashedId}`, `CMD,SET_ARCADE,${on ? 1 : 0}`, { qos: 1, retain: true });
+       };
+
+       const handleToggleArcade = async () => {
+         if (!activeDevice) return;
+         const next = !arcadeWanted;
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { arcadeEnabled: next });
+         sendArcade(activeDevice, next);
+       };
+
+       // The command topic holds ONE retained command. Change the Wi-Fi list
+       // while a device is asleep and that command replaces this one, so the
+       // switch would silently never arrive. When the device is online and
+       // reports something other than what the parent chose, send it again --
+       // at most every 20 seconds, so a device on old firmware that never
+       // answers is not hammered.
+       useEffect(() => {
+         if (!activeDevice || !arcadeOnline || arcadeReported === undefined) return;
+         if (arcadeReported === arcadeWanted) return;
+         if (Date.now() - (lastArcadeSend.current[activeDevice.id] || 0) < 20000) return;
+         sendArcade(activeDevice, arcadeWanted);
+       }, [activeDevice?.id, arcadeOnline, arcadeReported, arcadeWanted]);
+
+       const arcadeStatus =
+         arcadeReported === undefined ? 'Applies the next time the device connects.'
+         : arcadeReported === arcadeWanted ? (arcadeWanted ? 'Arcade is on for this device.' : 'Arcade is hidden on this device.')
+         : 'Waiting for the device to pick this up.';
 
        const currentPhrases = activeDevice?.phrases?.length > 0 ? activeDevice.phrases : defaultPhrases;
 
@@ -2089,6 +2141,30 @@
               )}
 
             </div>
+
+            {activeDevice && (
+              <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
+                <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+                  Arcade
+                </h3>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-gray-500 text-sm leading-relaxed flex-1">
+                    Show the arcade games on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device.
+                    Turned off, only Train stays &mdash; the Morse practice.
+                  </p>
+                  <button
+                    role="switch"
+                    aria-checked={arcadeWanted}
+                    aria-label="Arcade games"
+                    onClick={handleToggleArcade}
+                    className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${arcadeWanted ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${arcadeWanted ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+                <p className="mt-3 text-sm text-gray-400 leading-snug">{arcadeStatus}</p>
+              </div>
+            )}
 
             {/* Sits directly above Add to Home Screen on purpose: on iPhone the
                 one is a precondition for the other, and a parent who taps this
