@@ -7,6 +7,7 @@
     import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, signInAnonymously, signInWithCustomToken, deleteUser, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
     import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, updateDoc, query, orderBy, limit, writeBatch } from 'firebase/firestore';
     import { getMessaging, getToken, deleteToken, isSupported as messagingSupported } from 'firebase/messaging';
+    import { registerPlugin, CapacitorHttp } from '@capacitor/core';
 
     // =========================================================================
     // ✅ YOUR FIREBASE CONFIGURATION ✅
@@ -1297,8 +1298,326 @@
     // ==============================================
     //           ONBOARDING & PAIRING WIZARD
     // ==============================================
+    // ==============================================
+    //        IN-APP DEVICE WI-FI SETUP (native only)
+    // ==============================================
+    // The iOS app joins the device's own setup network, drives the same portal
+    // the device serves to a browser, then brings the phone back to its home
+    // network and confirms the device came online. No trip to iOS Settings, and
+    // no pairing code read off the screen.
+    //
+    // Native only, and deliberately so: no web page can join a Wi-Fi network,
+    // and an https page may not call the portal's plain-http address. The web
+    // app keeps the portal flow.
+    const SETUP_SSID = 'Dot Dash Setup';
+    const PORTAL = 'http://192.168.4.1';
+
+    // Must match the options the device's own portal offers (WebUI.h), because
+    // the device stores whichever POSIX string it is sent.
+    const DEVICE_TZ_OPTIONS = [
+      ['EST5EDT,M3.2.0,M11.1.0', 'US Eastern Time'],
+      ['CST6CDT,M3.2.0,M11.1.0', 'US Central Time'],
+      ['MST7MDT,M3.2.0,M11.1.0', 'US Mountain Time'],
+      ['PST8PDT,M3.2.0,M11.1.0', 'US Pacific Time'],
+      ['GMT0BST,M3.5.0/1,M10.5.0', 'UK Time (GMT/BST)'],
+      ['CET-1CEST,M3.5.0,M10.5.0/3', 'Central Europe'],
+    ];
+
+    // Pick the device timezone from the phone's January UTC offset. January so
+    // daylight saving never shifts the answer. Anything unrecognised defaults to
+    // US Eastern, the device's own default, and the picker stays editable.
+    const guessDeviceTz = () => {
+      const minutesEast = -new Date(new Date().getFullYear(), 0, 1).getTimezoneOffset();
+      const index = { '-300': 0, '-360': 1, '-420': 2, '-480': 3, '0': 4, '60': 5 }[String(minutesEast)];
+      return DEVICE_TZ_OPTIONS[index === undefined ? 0 : index][0];
+    };
+
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    // Module-level, never returned from an async function: a Capacitor plugin
+    // is a Proxy that turns ANY property into a native call, so resolving a
+    // promise with one makes JavaScript ask it for `.then` -- a native method
+    // that does not exist and never answers. Awaiting one hung setup forever.
+    // Harmless on the web, where nothing here is ever called.
+    const DeviceWifi = registerPlugin('DeviceWifi');
+    // iOS's join call has been seen never to call back at all (the simulator,
+    // or a build missing the Hotspot Configuration capability), which would
+    // leave a parent staring at a spinner. Bound it.
+    const withTimeout = (promise, ms, code) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('timed out'), { code })), ms)),
+    ]);
+
+    const headerValue = (headers, name) => {
+      const key = Object.keys(headers || {}).find((k) => k.toLowerCase() === name);
+      return key ? String(headers[key]) : '';
+    };
+
+    // Ask a device whether it is online. An unpaired device has no presence
+    // topic to watch, so it answers PING on its pairing topic instead. Resent
+    // every few seconds: the device is rebooting and rejoining Wi-Fi when this
+    // starts, and a ping sent before it subscribed is simply lost.
+    function pingDevice(client, code, timeoutMs, isCancelled) {
+      return new Promise((resolve) => {
+        if (!client || !code) return resolve(false);
+        const reply = `doorbell/pairing/reply/${code}`;
+        let finished = false;
+        const finish = (ok) => {
+          if (finished) return;
+          finished = true;
+          clearInterval(timer); clearTimeout(stop);
+          client.removeListener('message', onMessage);
+          client.unsubscribe(reply);
+          resolve(ok);
+        };
+        const onMessage = (topic, message) => {
+          if (topic === reply && message.toString() === 'PONG') finish(true);
+        };
+        const send = () => {
+          if (isCancelled()) return finish(false);
+          if (client.connected) client.publish(`doorbell/pairing/${code}`, 'PING');
+        };
+        client.on('message', onMessage);
+        client.subscribe(reply);
+        send();
+        const timer = setInterval(send, 4000);
+        const stop = setTimeout(() => finish(false), timeoutMs);
+      });
+    }
+
+    function DeviceWifiSetup({ mode, expectedCode, childName, mqttClient, isDeviceOnline, onDone, onSkip }) {
+      const isNew = mode === 'new';
+      const [phase, setPhase] = useState('INTRO');   // INTRO | WORKING | CHOOSE | OFFLINE | DONE
+      const [status, setStatus] = useState('');
+      const [error, setError] = useState('');
+      const [networks, setNetworks] = useState([]);
+      const [ssid, setSsid] = useState('');
+      const [manualSsid, setManualSsid] = useState('');
+      const [pass, setPass] = useState('');
+      const [tz, setTz] = useState(guessDeviceTz);
+      const codeRef = useRef('');
+      const cancelled = useRef(false);
+      const onlineRef = useRef(isDeviceOnline);
+      onlineRef.current = isDeviceOnline;
+
+      // Leaving the flow part-way must not strand the phone on a network with
+      // no internet.
+      useEffect(() => () => {
+        cancelled.current = true;
+        DeviceWifi.leave({ ssid: SETUP_SSID }).catch(() => {});
+      }, []);
+
+      const fail = (backTo, message) => { setPhase(backTo); setError(message); };
+
+      const joinAndScan = async () => {
+        setError(''); setPhase('WORKING'); setStatus('Joining your Dot Dash’s network…');
+        try {
+          await withTimeout(DeviceWifi.join({ ssid: SETUP_SSID }), 25000, 'JOIN_TIMEOUT');
+        } catch (e) {
+          return fail('INTRO', e?.code === 'USER_DENIED'
+            ? 'The app needs to join the “Dot Dash Setup” network to reach your Dot Dash. Tap Next again and choose Join.'
+            : 'Couldn’t find the “Dot Dash Setup” network. Check that your Dot Dash’s screen says WI-FI SETUP, then try again.');
+        }
+
+        setStatus('Finding Wi-Fi networks your Dot Dash can see…');
+        const http = CapacitorHttp;
+        // The first requests can fail while iOS finishes joining, or while it
+        // shows the local network permission prompt -- so keep trying briefly.
+        for (let attempt = 0; attempt < 8; attempt++) {
+          if (cancelled.current) return;
+          try {
+            const res = await http.get({ url: `${PORTAL}/scan_wifi`, connectTimeout: 4000, readTimeout: 12000 });
+            if (res.status === 200) {
+              const code = headerValue(res.headers, 'x-pairing-code').trim().toUpperCase();
+              if (!isNew && code && expectedCode && code !== expectedCode) {
+                return fail('INTRO', `That looks like a different Dot Dash (code ${code}). Make sure you’re setting up ${childName || 'this child'}’s device.`);
+              }
+              codeRef.current = code;
+              const seen = [...new Set(String(res.data || '').split('\n').map((n) => n.trim()).filter(Boolean))];
+              setNetworks(seen);
+              setSsid(seen[0] || '__other__');
+              setPhase('CHOOSE');
+              return;
+            }
+          } catch (e) {}
+          await pause(2500);
+        }
+        fail('INTRO', 'Joined the setup network, but couldn’t reach your Dot Dash. If iOS asked about finding devices on your local network, tap Allow, then try again.');
+      };
+
+      const connect = async () => {
+        const chosen = ssid === '__other__' ? manualSsid.trim() : ssid;
+        if (!chosen) return setError('Choose a network, or type its name.');
+        setError(''); setPhase('WORKING'); setStatus(`Connecting your Dot Dash to ${chosen}…`);
+
+        const http = CapacitorHttp;
+        const wifi = DeviceWifi;
+        const post = (path, data) => http.post({
+          url: `${PORTAL}${path}`,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          data, connectTimeout: 5000, readTimeout: 8000,
+        });
+
+        try { await post('/connect_wifi', { ssid: chosen, pass }); }
+        catch (e) {
+          try { await withTimeout(wifi.join({ ssid: SETUP_SSID }), 25000, 'JOIN_TIMEOUT'); await post('/connect_wifi', { ssid: chosen, pass }); }
+          catch (e2) { return fail('CHOOSE', 'Lost touch with your Dot Dash. Check it still says WI-FI SETUP, then try again.'); }
+        }
+
+        let joined = false;
+        for (let i = 0; i < 12 && !cancelled.current; i++) {
+          await pause(2000);
+          try {
+            const res = await http.get({ url: `${PORTAL}/wifi_status`, connectTimeout: 4000, readTimeout: 4000 });
+            if (String(res.data).trim() === 'CONNECTED') { joined = true; break; }
+          } catch (e) {
+            // While the device tries the home network its radio moves to the
+            // router's channel, which can briefly drop the phone off the setup
+            // network. Rejoin and keep polling.
+            try { await withTimeout(wifi.join({ ssid: SETUP_SSID }), 15000, 'JOIN_TIMEOUT'); } catch (_) {}
+          }
+        }
+        if (cancelled.current) return;
+        if (!joined) return fail('CHOOSE', `Your Dot Dash couldn’t join “${chosen}”. Check the password and try again.`);
+
+        setStatus('Saving…');
+        // Timezone only for a new device. An existing one keeps its own -- the
+        // device only overwrites it when one is sent.
+        try { await post('/save_and_reboot', isNew ? { ssid: chosen, pass, tz } : { ssid: chosen, pass }); }
+        catch (e) { /* the device restarts as it replies, so a dropped reply is expected */ }
+        await comeHome();
+      };
+
+      const comeHome = async () => {
+        setError(''); setPhase('WORKING'); setStatus('Reconnecting your phone to your home internet…');
+        try { await DeviceWifi.leave({ ssid: SETUP_SSID }); } catch (e) {}
+        for (let i = 0; i < 45 && !cancelled.current && !(mqttClient && mqttClient.connected); i++) await pause(1000);
+
+        setStatus('Waiting for your Dot Dash to come online…');
+        let online = false;
+        if (codeRef.current) {
+          online = await pingDevice(mqttClient, codeRef.current, 90000, () => cancelled.current);
+        } else {
+          // Firmware too old to report a code or answer a ping: fall back to the
+          // presence a paired device already publishes.
+          for (let i = 0; i < 90 && !cancelled.current && !online; i++) {
+            if (onlineRef.current && onlineRef.current()) online = true; else await pause(1000);
+          }
+        }
+        if (cancelled.current) return;
+        if (!online) return setPhase('OFFLINE');
+        if (isNew) return onDone(codeRef.current);
+        setPhase('DONE');
+      };
+
+      const Step = ({ n, children }) => (
+        <div className="flex items-start">
+          <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">{n}</div>
+          <p className="ml-3 text-gray-700">{children}</p>
+        </div>
+      );
+
+      return (
+        <div className="w-full max-w-sm my-auto text-left space-y-4">
+          {phase === 'INTRO' && (
+            <>
+              <h2 className="text-2xl font-bold text-center">{isNew ? 'Connect to Wi-Fi' : 'Wi-Fi Setup'}</h2>
+              <p className="text-gray-500 text-center">
+                {isNew
+                  ? 'First, let’s get your Dot Dash onto your home Wi-Fi.'
+                  : 'Set up your Dot Dash’s Wi-Fi, or reconnect it if it’s not online.'}
+              </p>
+              <div className="space-y-3 pt-2">
+                {isNew && <Step n={1}>Turn on your Dot Dash. It will say <strong>HELLO!</strong> — press any button.</Step>}
+                <Step n={isNew ? 2 : 1}>Press <strong>SELECT</strong> (front button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong>, then press <strong>ENTER</strong> (top button).</Step>
+                <Step n={isNew ? 3 : 2}>Press <strong>ENTER</strong> on <strong>WIFI</strong>. When the screen says <strong>WI-FI SETUP</strong>, tap Next.</Step>
+              </div>
+              {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
+              <button onClick={joinAndScan} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4">Next</button>
+              <p className="text-xs text-gray-400 leading-relaxed text-center">
+                Your phone will briefly join your Dot Dash’s own network. iOS asks first — tap <strong>Join</strong>, and <strong>Allow</strong> if it asks about devices on your local network.
+              </p>
+              {isNew && onSkip && (
+                <button onClick={onSkip} className="w-full text-blue-500 text-sm font-bold py-2">My Dot Dash is already on Wi-Fi</button>
+              )}
+            </>
+          )}
+
+          {phase === 'WORKING' && (
+            <div className="flex flex-col items-center text-center space-y-5 py-10">
+              <Activity className="w-12 h-12 text-blue-500 animate-pulse" />
+              <p className="text-gray-700 font-bold">{status}</p>
+            </div>
+          )}
+
+          {phase === 'CHOOSE' && (
+            <>
+              <h2 className="text-2xl font-bold text-center">Choose a network</h2>
+              <p className="text-gray-500 text-center">These are the networks your Dot Dash can see from where it is.</p>
+              {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl divide-y divide-gray-200 max-h-64 overflow-y-auto">
+                {networks.map((n) => (
+                  <button key={n} onClick={() => setSsid(n)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+                    <span className={`truncate ${ssid === n ? 'font-bold text-gray-900' : 'text-gray-700'}`}>{n}</span>
+                    {ssid === n && <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0 ml-3" />}
+                  </button>
+                ))}
+                <button onClick={() => setSsid('__other__')} className="w-full flex items-center justify-between px-4 py-3 text-left">
+                  <span className={ssid === '__other__' ? 'font-bold text-gray-900' : 'text-gray-500'}>Other network…</span>
+                  {ssid === '__other__' && <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0 ml-3" />}
+                </button>
+              </div>
+              {ssid === '__other__' && (
+                <input type="text" placeholder="Network name" autoCapitalize="none" autoCorrect="off"
+                  className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-200 focus:border-blue-400"
+                  value={manualSsid} onChange={(e) => setManualSsid(e.target.value)} />
+              )}
+              <input type="password" placeholder="Password (leave blank if none)" autoComplete="off"
+                className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-200 focus:border-blue-400"
+                value={pass} onChange={(e) => setPass(e.target.value)} />
+              {isNew && (
+                <div>
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Timezone</div>
+                  <select value={tz} onChange={(e) => setTz(e.target.value)}
+                    className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-200">
+                    {DEVICE_TZ_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                  </select>
+                </div>
+              )}
+              <button onClick={connect} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Connect</button>
+            </>
+          )}
+
+          {phase === 'OFFLINE' && (
+            <>
+              <h2 className="text-2xl font-bold text-center">Not online yet</h2>
+              <p className="text-gray-600 text-center">Your Dot Dash hasn’t come online. It can take a minute after restarting.</p>
+              <p className="text-gray-500 text-sm text-center">If its screen says <strong>WI-FI SETUP</strong> again, the network didn’t take — start over and check the password.</p>
+              <button onClick={comeHome} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Keep waiting</button>
+              <button onClick={() => { setError(''); setPhase('INTRO'); }} className="w-full bg-white text-gray-700 font-bold py-4 rounded-xl border border-gray-200">Start over</button>
+            </>
+          )}
+
+          {phase === 'DONE' && (
+            <div className="text-center space-y-4 py-6">
+              <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto"><Wifi className="w-8 h-8" /></div>
+              <h2 className="text-2xl font-bold">Connected</h2>
+              <p className="text-gray-600">{childName ? `${childName}’s Dot Dash` : 'Your Dot Dash'} is back online.</p>
+              <button onClick={() => onDone(codeRef.current)} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl shadow-sm">Back to Settings</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function OnboardingWizard({ user, parentProfile, setParentProfile, mqttClient, appId, onComplete, onCancel }) {
-      const [step, setStep] = useState('WIFI_CHECK');
+      // The iOS app sets Wi-Fi up itself, so it starts there. The web app cannot
+      // (see DeviceWifiSetup) and keeps asking whether the device is online.
+      const [step, setStep] = useState(isNativeApp() ? 'WIFI_SETUP' : 'WIFI_CHECK');
+      // The pairing code the device handed over during in-app Wi-Fi setup. When
+      // set, the link happens as soon as the child's ID is chosen and the manual
+      // code screen is skipped.
+      const [autoCode, setAutoCode] = useState('');
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState('');
 
@@ -1332,13 +1651,23 @@
          }
          
          setChildName(cName); setChildPin(cPin);
+         if (autoCode) return claimDevice(autoCode, cName, cPin, 'CHILD_ID');
          setLoading(false); setStep('PAIRING');
       };
 
-      const handlePairingSubmit = async () => {
-         setError(''); setLoading(true);
+      const handlePairingSubmit = () => {
+         setError('');
          const cleanCode = pairingCode.trim().toUpperCase();
-         if (cleanCode.length !== 6) { setLoading(false); return setError("Code must be 6 characters."); }
+         if (cleanCode.length !== 6) return setError("Code must be 6 characters.");
+         claimDevice(cleanCode, childName, childPin, 'PAIRING');
+      };
+
+      // Claim the device over MQTT. Takes the name and PIN as arguments rather
+      // than reading state, because the in-app Wi-Fi path calls this in the same
+      // tick that sets them. `from` is the screen a failure returns to; a failed
+      // automatic link drops to the manual code screen, code already filled in.
+      const claimDevice = async (cleanCode, childName, childPin, from) => {
+         setError(''); setLoading(true);
 
          const replyTopic = `doorbell/pairing/reply/${cleanCode}`;
          mqttClient.subscribe(replyTopic);
@@ -1346,13 +1675,18 @@
          const timeout = setTimeout(() => {
             setLoading(false); setError("Could not find device. Ensure it is powered on and connected to Wi-Fi.");
             mqttClient.unsubscribe(replyTopic);
+            mqttClient.removeListener('message', messageHandler);
+            if (from === 'CHILD_ID') { setPairingCode(cleanCode); setStep('PAIRING'); }
          }, 15000);
 
          const messageHandler = async (topic, message) => {
             if (topic === replyTopic) {
-               clearTimeout(timeout);
                const payload = message.toString();
                const parts = payload.split(',');
+               // The same reply topic carries PONG for the online check, and a
+               // late one can land here. Only a claim reply ends the wait.
+               if (parts.length < 3) return;
+               clearTimeout(timeout);
                if (parts.length >= 3) {
                   const mac = parts[0];
                   
@@ -1448,7 +1782,7 @@
 
       return (
         <div className="fixed inset-0 z-50 bg-white overflow-y-auto flex flex-col min-h-screen">
-           <div className="p-4 pt-12 shrink-0 relative flex items-center justify-center">
+           <div className="p-4 shrink-0 relative flex items-center justify-center" style={{ paddingTop: 'max(3rem, calc(env(safe-area-inset-top) + 1rem))' }}>
                <button onClick={onCancel} className="absolute left-4 p-2 text-gray-500 hover:text-gray-700 font-bold flex items-center transition-colors">
                   <ArrowLeft className="w-5 h-5 mr-1"/> Back
                </button>
@@ -1457,6 +1791,20 @@
            
            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
              
+             {step === 'WIFI_SETUP' && (
+                <DeviceWifiSetup
+                   mode="new"
+                   mqttClient={mqttClient}
+                   onDone={(code) => {
+                      // An old device reports no code; it still gets Wi-Fi, and
+                      // pairs through the manual code screen as before.
+                      setAutoCode(code || '');
+                      if (code) setPairingCode(code);
+                      setStep('CHILD_ID');
+                   }}
+                   onSkip={() => setStep('CHILD_ID')} />
+             )}
+
              {step === 'WIFI_CHECK' && (
                 <div className="w-full max-w-sm my-auto space-y-6">
                    <h2 className="text-xl font-bold mb-8">Have you connected your Dot Dash to your home Wi-Fi?</h2>
@@ -1512,13 +1860,14 @@
 
              {step === 'CHILD_ID' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
+                   {autoCode && <div className="text-green-700 text-sm bg-green-50 p-3 rounded-xl font-bold">Your Dot Dash is online.</div>}
                    <h2 className="text-xl font-bold mb-2">Create Device ID</h2>
                    <p className="text-gray-500 mb-6">Choose a screen name and 4-digit PIN for your child.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
                    <input type="text" placeholder="Child's Name (e.g. ARTHUR)" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childName} onChange={e=>setChildName(e.target.value)} />
                    <input type="text" placeholder="Birthday PIN (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childPin} onChange={e=>setChildPin(e.target.value.replace(/\D/g, ''))} />
                    <button onClick={handleChildIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
-                     {loading ? 'Checking...' : 'Next'}
+                     {loading ? (autoCode ? 'Linking your Dot Dash...' : 'Checking...') : 'Next'}
                    </button>
                 </div>
              )}
@@ -1604,6 +1953,7 @@
        const [newWifiPass, setNewWifiPass] = useState('');
        const [revealed, setRevealed] = useState({});
        const [wifiSyncMsg, setWifiSyncMsg] = useState('');
+       const [wifiSetupOpen, setWifiSetupOpen] = useState(false);
 
        // ---------- ARCADE SWITCH ----------
        // Firestore holds what the PARENT chose (absent means on, which is every
@@ -2144,7 +2494,40 @@
                 </div>
               )}
 
+              {/* iOS app only: the in-app setup flow needs to join the device's
+                  own network, which the web app cannot do. */}
+              {isNativeApp() && activeDevice && (
+                <div className={`flex justify-end ${openWifi ? 'mt-3' : '-mt-1'} mb-3`}>
+                  <button onClick={() => setWifiSetupOpen(true)}
+                    className="text-xs font-bold text-teal-700 bg-white border border-teal-200 rounded-full px-3 py-1.5 active:bg-teal-50">
+                    WiFi Disconnected?
+                  </button>
+                </div>
+              )}
+
             </div>
+
+            {wifiSetupOpen && activeDevice && (
+              <div className="fixed inset-0 z-50 bg-white overflow-y-auto flex flex-col min-h-screen">
+                <div className="p-4 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}>
+                  <button onClick={() => setWifiSetupOpen(false)} className="p-2 text-gray-500 hover:text-gray-700 font-bold flex items-center transition-colors">
+                    <ArrowLeft className="w-5 h-5 mr-1"/> Back
+                  </button>
+                </div>
+                <div className="flex-1 flex flex-col items-center justify-center p-6">
+                  {/* The pairing code is the last six characters of the device's
+                      MAC, which is also this document's id -- so it can be checked
+                      even on devices paired before the code was stored. */}
+                  <DeviceWifiSetup
+                    mode="reconnect"
+                    expectedCode={String(activeDevice.id).replace(/:/g, '').slice(-6).toUpperCase()}
+                    childName={displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}
+                    mqttClient={mqttClient}
+                    isDeviceOnline={() => !!childOnlineStatus?.[activeDevice.id]}
+                    onDone={() => setWifiSetupOpen(false)} />
+                </div>
+              </div>
+            )}
 
             {activeDevice && (
               <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
@@ -2622,7 +3005,8 @@
             { title: "Step 2", text: "On your phone, open Wi-Fi settings and join the network called Dot Dash Setup." },
             { title: "Step 3", text: "A setup page should pop up automatically. If it doesn't, open a browser and go to 192.168.4.1." },
             { title: "Step 4", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
-            { title: "Good to know", text: "Old networks are kept, not replaced. Back at a previous location, the Dot Dash reconnects on its own." }
+            { title: "Good to know", text: "Old networks are kept, not replaced. Back at a previous location, the Dot Dash reconnects on its own." },
+            { title: "Plan ahead", text: "Know where your Dot Dash is going? Add up to five networks ahead of time in the Settings tab, under Wi-Fi Networks, and it will connect by itself when it gets there." }
           ]
         }
       ];
