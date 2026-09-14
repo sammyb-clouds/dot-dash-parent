@@ -1493,6 +1493,13 @@
         try { await DeviceWifi.leave({ ssid: SETUP_SSID }); } catch (e) {}
         for (let i = 0; i < 45 && !cancelled.current && !(mqttClient && mqttClient.connected); i++) await pause(1000);
 
+        // A new device on firmware too old to report its code cannot be pinged,
+        // and has no presence topic either -- so there is nothing to wait for
+        // here. Hand over to the manual code screen, whose claim is itself the
+        // online check. Waiting would sit out the full timeout and then call a
+        // perfectly healthy device offline.
+        if (isNew && !codeRef.current) return onDone('');
+
         setStatus('Waiting for your Dot Dash to come online…');
         let online = false;
         if (codeRef.current) {
