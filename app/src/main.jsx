@@ -455,7 +455,31 @@
       if (!res.ok) throw new Error(`app-login HTTP ${res.status}`);
       const login = await res.json();
       brokerAccess.granted = new Set(login.granted || []);
+      try {
+        localStorage.setItem(brokerLoginKey(user.uid), JSON.stringify({ url: login.url, username: login.username, password: login.password }));
+      } catch (e) {}
       return login;
+    }
+
+    // The login is saved on the phone so the app connects at once on open, and
+    // still connects if the login service is down: the password never changes
+    // for an account, so a saved one stays good. Same exposure as the Firebase
+    // session already stored beside it -- this account's own data only. Removed
+    // on sign-out.
+    const brokerLoginKey = (uid) => `dotdash_broker_${uid}`;
+    function savedBrokerLogin(uid) {
+      try {
+        const l = JSON.parse(localStorage.getItem(brokerLoginKey(uid)) || 'null');
+        return l && l.url && l.username && l.password ? l : null;
+      } catch (e) { return null; }
+    }
+    function forgetBrokerLogins() {
+      try {
+        Object.keys(localStorage).filter(k => k.startsWith('dotdash_broker_')).forEach(k => localStorage.removeItem(k));
+      } catch (e) {}
+      brokerAccess.personal = false;
+      brokerAccess.granted = new Set();
+      brokerAccess.lastAsked = '';
     }
 
     // Make the broker's rules for this parent match `hashes` (their parent ID and
@@ -635,6 +659,9 @@
               })();
             }
           } else {
+            // Here rather than wherever `user` is null: it is null for a moment on
+            // every launch too, before the saved session is restored.
+            forgetBrokerLogins();
             setUser(null);
             setParentProfile(null);
             setDevices([]);
@@ -988,15 +1015,27 @@
           }
         };
 
-        // This parent's own broker login (see ensureBrokerAccess), or -- only if
-        // the login service cannot be reached -- the shared one.
+        // This parent's own broker login (see ensureBrokerAccess): the one saved on
+        // this phone if there is one, so connecting never waits on the login
+        // service; otherwise fetched now; and -- only if neither exists -- the
+        // shared one.
+        //
+        // The login service is asked every time regardless, in the background:
+        // that call is what brings the broker's rules for this parent up to date
+        // with the database, and it replaces a saved login that has gone stale.
         const connectBroker = async () => {
-          let login = null;
-          try { login = await fetchBrokerLogin(user); }
-          catch (e) { console.warn('[mqtt] personal broker login unavailable, using the shared login:', e.message); }
+          brokerAccess.lastAsked = '';
+          const refresh = fetchBrokerLogin(user);
+          brokerAccess.inFlight = refresh;
+          refresh.catch(() => {}).finally(() => { if (brokerAccess.inFlight === refresh) brokerAccess.inFlight = null; });
+
+          let login = savedBrokerLogin(user.uid);
+          if (!login) {
+            try { login = await refresh; }
+            catch (e) { console.warn('[mqtt] personal broker login unavailable, using the shared login:', e.message); }
+          }
           if (cancelled) return;
           brokerAccess.personal = !!login;
-          brokerAccess.lastAsked = '';
           const target = login || SHARED_BROKER;
           client = mqtt.connect(target.url, {
             username: target.username,
@@ -1018,6 +1057,15 @@
               client.options.password = renewed.password;
             } catch (e) {}
           });
+          // A saved login the service has since replaced: use the new password
+          // from the next reconnect on.
+          if (login) {
+            refresh.then((fresh) => {
+              if (cancelled || !client || fresh.password === client.options.password) return;
+              client.options.password = fresh.password;
+              if (!client.connected) client.reconnect();
+            }).catch(() => {});
+          }
           setMqttClient(client);
         };
 
@@ -1040,7 +1088,11 @@
            // Only once the profile has loaded: before that the lists are merely
            // empty, and asking would be a wasted request. (The server decides from
            // the database either way -- the app cannot widen or narrow it.)
-           if (parentProfile) await ensureBrokerAccess(user, [parentHash, ...deviceHashes], { exact: true });
+           // Shrinking is only asked for while some devices remain: an empty list
+           // is usually one still loading. Unlinking the LAST device is left to
+           // the server (a re-paired child is taken off this account the moment
+           // the new family signs in, and the daily reconcile does the rest).
+           if (parentProfile) await ensureBrokerAccess(user, [parentHash, ...deviceHashes], { exact: deviceHashes.length > 0 });
 
            if (parentHash) {
                mqttClient.subscribe(`doorbell/msg/${parentHash}`, { qos: 1 });

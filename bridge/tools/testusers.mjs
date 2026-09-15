@@ -40,7 +40,7 @@ export async function testUser(prefix) {
   });
   const j = await res.json();
   if (!j.idToken) throw new Error(`signInWithCustomToken: ${JSON.stringify(j.error || j)}`);
-  return { uid, idToken: j.idToken };
+  return { uid, idToken: j.idToken, refreshToken: j.refreshToken, expiresIn: j.expiresIn };
 }
 
 export async function deleteTestUsers(uids) {
