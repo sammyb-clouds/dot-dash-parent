@@ -497,6 +497,8 @@
       // Separate from the parent's choice in Firestore on purpose: the gap
       // between the two is how the app knows a change has not landed yet.
       const [deviceArcade, setDeviceArcade] = useState({});
+      // Same idea for the morse typewriter ("Dot Dash Mode" in Settings).
+      const [deviceTypewriter, setDeviceTypewriter] = useState({});
       
       const isAppActiveRef = useRef(true); 
       
@@ -833,6 +835,13 @@
 
           if (monitorTopics[baseTopic]) {
             const sourceChildMac = monitorTopics[baseTopic];
+
+            // The device reporting its morse typewriter -- the receipt for SET_TYPEWRITER.
+            if (topicParts[3] === 'typewriter') {
+              const [tag, val] = payload.split(',');
+              if (tag === 'TYPEWRITER') setDeviceTypewriter(prev => ({ ...prev, [sourceChildMac]: val === '1' }));
+              return; // retained and device-owned; do not auto-clear
+            }
 
             // The device reporting its arcade switch -- the receipt for SET_ARCADE.
             if (topicParts[3] === 'arcade') {
@@ -1192,7 +1201,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} />
             </div>}
           </div>
 
@@ -2016,7 +2025,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {} }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        const [unlinkCode, setUnlinkCode] = useState('');
        const [newFriendId, setNewFriendId] = useState('');
@@ -2025,6 +2034,7 @@
        const [openMessages, setOpenMessages] = useState(false);
        const [openWifi, setOpenWifi] = useState(false);
        const [openArcade, setOpenArcade] = useState(false);
+       const [openTypewriter, setOpenTypewriter] = useState(false);
        const [openSecurity, setOpenSecurity] = useState(false);
        const [newSsid, setNewSsid] = useState('');
        const [newWifiPass, setNewWifiPass] = useState('');
@@ -2068,6 +2078,39 @@
          if (Date.now() - (lastArcadeSend.current[activeDevice.id] || 0) < 20000) return;
          sendArcade(activeDevice, arcadeWanted);
        }, [activeDevice?.id, arcadeOnline, arcadeReported, arcadeWanted]);
+
+       // ---------- DOT DASH MODE (morse typewriter) ----------
+       // Same shape as the arcade switch: the parent's choice in Firestore
+       // (absent means on), the device's own report, and a resend when they
+       // disagree while it is online.
+       const typewriterWanted = activeDevice?.morseTypewriter !== false;
+       const typewriterReported = activeDevice ? deviceTypewriter[activeDevice.id] : undefined;
+       const lastTypewriterSend = useRef({});
+
+       const sendTypewriter = (dev, on) => {
+         if (!mqttClient || !dev?.hashedId) return;
+         lastTypewriterSend.current[dev.id] = Date.now();
+         mqttClient.publish(`doorbell/cmd/${dev.hashedId}`, `CMD,SET_TYPEWRITER,${on ? 1 : 0}`, { qos: 1, retain: true });
+       };
+
+       const handleToggleTypewriter = async () => {
+         if (!activeDevice) return;
+         const next = !typewriterWanted;
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { morseTypewriter: next });
+         sendTypewriter(activeDevice, next);
+       };
+
+       useEffect(() => {
+         if (!activeDevice || !arcadeOnline || typewriterReported === undefined) return;
+         if (typewriterReported === typewriterWanted) return;
+         if (Date.now() - (lastTypewriterSend.current[activeDevice.id] || 0) < 20000) return;
+         sendTypewriter(activeDevice, typewriterWanted);
+       }, [activeDevice?.id, arcadeOnline, typewriterReported, typewriterWanted]);
+
+       const typewriterStatus =
+         typewriterReported === undefined ? 'Applies the next time the device connects.'
+         : typewriterReported === typewriterWanted ? (typewriterWanted ? 'Morse typewriter is on for this device.' : 'Morse typewriter is off for this device.')
+         : 'Waiting for the device to pick this up.';
 
        const arcadeStatus =
          arcadeReported === undefined ? 'Applies the next time the device connects.'
@@ -2648,6 +2691,48 @@
                         </button>
                       </div>
                       <p className="mt-3 text-xs text-gray-400 leading-snug">{arcadeStatus}</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Dot Dash Mode (collapsible): the morse typewriter for incoming
+                  messages. Off, a morse message arrives whole, like a quick
+                  message, instead of being tapped out letter by letter. */}
+              {activeDevice && (
+                <>
+                  <button onClick={() => setOpenTypewriter(o => !o)} className={`w-full flex items-center justify-between p-4 bg-violet-50 border border-violet-100 active:bg-violet-100 transition-colors ${openTypewriter ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                     <div className="flex items-center space-x-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-violet-500 text-white flex items-center justify-center shrink-0">
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><circle cx="5" cy="12" r="2.6"/><rect x="10" y="9.4" width="11" height="5.2" rx="2.6"/></svg>
+                        </div>
+                        <div className="text-left min-w-0">
+                           <div className="font-bold text-gray-800 text-base">Dot Dash Mode</div>
+                           <div className="text-xs text-gray-500">{typewriterWanted ? 'Morse typed out live' : 'Morse shown whole'}</div>
+                        </div>
+                     </div>
+                     <div className="flex items-center space-x-2 shrink-0 ml-2">
+                        <span className={`text-white text-xs font-bold h-[22px] px-2 flex items-center justify-center rounded-full ${typewriterWanted ? 'bg-violet-500' : 'bg-gray-400'}`}>{typewriterWanted ? 'ON' : 'OFF'}</span>
+                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-violet-400 transition-transform duration-200 ${openTypewriter ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                     </div>
+                  </button>
+                  {openTypewriter && (
+                    <div className="border border-t-0 border-violet-100 rounded-b-2xl bg-white p-4 mb-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="text-gray-500 text-sm leading-relaxed flex-1">
+                          Turn off/on Morse typewriter for incoming messages on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device.
+                          Off, a Morse message shows up whole, like a quick message, instead of being typed out with beeps.
+                        </p>
+                        <button
+                          role="switch"
+                          aria-checked={typewriterWanted}
+                          aria-label="Morse typewriter"
+                          onClick={handleToggleTypewriter}
+                          className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${typewriterWanted ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${typewriterWanted ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+                      <p className="mt-3 text-xs text-gray-400 leading-snug">{typewriterStatus}</p>
                     </div>
                   )}
                 </>
