@@ -400,6 +400,7 @@
     const BookOpen = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
     const Volume2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>;
     const Send = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
+    const GripVertical = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>;
     const Trash2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
     const ArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
     const ArrowLeft = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>;
@@ -505,6 +506,127 @@
       try { await brokerAccess.inFlight; }
       catch (e) { console.warn('[mqtt] could not refresh broker access:', e.message); }
       finally { brokerAccess.inFlight = null; }
+    }
+
+    // What the device firmware holds (friendList[10], phrases[20] in every line).
+    // Past these the device silently drops the END of the list -- and new entries
+    // go at the top -- so the app refuses rather than let one fall off.
+    const MAX_FRIENDS = 10;
+    const MAX_PHRASES = 20;
+
+    // A device's friends in the parent's chosen order. The parent's own ID is
+    // always on the list but may sit anywhere in it; nothing on the device treats
+    // any position specially (only pairing puts the parent first).
+    function friendsInOrder(dev, parentId) {
+      const list = [...new Set((dev?.friends || []).filter(Boolean))];
+      return parentId && !list.includes(parentId) ? [parentId, ...list] : list;
+    }
+
+    // A vertical list reordered by dragging each row's grip. Pointer events rather
+    // than HTML drag-and-drop, which does not fire for touch on iPhone. Rows move
+    // aside as the dragged one passes their middle; the new order is handed to
+    // onReorder once, on release. Near the top or bottom of the screen the page
+    // scrolls, so a long list can be dragged end to end.
+    function ReorderList({ items, onReorder, renderItem, className = '' }) {
+      const listRef = useRef(null);
+      const geo = useRef(null);
+      const [drag, setDrag] = useState(null);             // { from, to, dy }
+      const [shown, setShown] = useState(items);          // optimistic order after a drop
+      const itemsKey = items.join('\u0000');
+      useEffect(() => { setShown(items); }, [itemsKey]);  // eslint-disable-line
+
+      const scrollerOf = (el) => {
+        for (let n = el?.parentElement; n; n = n.parentElement) {
+          const oy = getComputedStyle(n).overflowY;
+          if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+        }
+        return document.scrollingElement;
+      };
+
+      const update = () => {
+        const g = geo.current;
+        if (!g) return;
+        const dy = (g.lastY - g.startY) + (g.scroller.scrollTop - g.startScroll);
+        const center = g.mids[g.from] + dy;
+        const to = g.mids.filter((m, i) => i !== g.from && m < center).length;
+        g.to = to;
+        setDrag({ from: g.from, to, dy });
+      };
+
+      const autoScroll = () => {
+        const g = geo.current;
+        if (!g) return;
+        const edge = 70, h = window.innerHeight;
+        const speed = g.lastY < edge ? -(edge - g.lastY) / 4 : g.lastY > h - edge ? (g.lastY - (h - edge)) / 4 : 0;
+        if (speed) { g.scroller.scrollTop += speed; update(); }
+        g.raf = requestAnimationFrame(autoScroll);
+      };
+
+      const onDown = (e, index) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        const rects = [...listRef.current.children].map(r => r.getBoundingClientRect());
+        const scroller = scrollerOf(listRef.current);
+        geo.current = {
+          from: index, to: index, startY: e.clientY, lastY: e.clientY,
+          mids: rects.map(r => r.top + r.height / 2),
+          step: rects.length > 1 ? rects[1].top - rects[0].top : rects[0].height,
+          scroller, startScroll: scroller.scrollTop,
+        };
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+        setDrag({ from: index, to: index, dy: 0 });
+        geo.current.raf = requestAnimationFrame(autoScroll);
+      };
+      const onMove = (e) => { if (!geo.current) return; geo.current.lastY = e.clientY; update(); };
+      const onUp = () => {
+        const g = geo.current;
+        if (!g) return;
+        cancelAnimationFrame(g.raf);
+        geo.current = null;
+        setDrag(null);
+        if (g.to !== g.from) {
+          const next = [...shown];
+          const [moved] = next.splice(g.from, 1);
+          next.splice(g.to, 0, moved);
+          setShown(next);
+          onReorder(next);
+        }
+      };
+
+      const offset = (i) => {
+        if (!drag) return 0;
+        if (i === drag.from) return drag.dy;
+        const step = geo.current?.step || 0;
+        if (drag.from < drag.to && i > drag.from && i <= drag.to) return -step;
+        if (drag.from > drag.to && i >= drag.to && i < drag.from) return step;
+        return 0;
+      };
+
+      return (
+        <ul ref={listRef} className={className}>
+          {shown.map((item, i) => {
+            const dragging = drag?.from === i;
+            return (
+              <li key={item}
+                  style={{
+                    transform: `translateY(${offset(i)}px)`,
+                    transition: drag && !dragging ? 'transform 150ms ease' : 'none',
+                    position: 'relative', zIndex: dragging ? 10 : 'auto',
+                  }}
+                  className={`flex items-center p-3 pl-1 rounded-xl border select-none ${dragging ? 'bg-white border-gray-300 shadow-lg' : 'bg-gray-50 border-gray-100'}`}>
+                <span
+                  onPointerDown={(e) => onDown(e, i)} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+                  style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
+                  className="shrink-0 px-2 py-1 text-gray-400 cursor-grab active:cursor-grabbing"
+                  aria-label="Drag to reorder">
+                  <GripVertical className="w-4 h-5" />
+                </span>
+                {renderItem(item)}
+              </li>
+            );
+          })}
+        </ul>
+      );
     }
 
     // --- Default Phrases ---
@@ -2592,15 +2714,24 @@
          }
        };
 
+       // Every change to either list -- add, remove, reorder -- is saved and sent
+       // to the device whole, in order: the device shows them in the order sent.
+       const saveFriends = async (list) => {
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: list });
+         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${list.join('|')}`, {qos: 1, retain: true});
+       };
+       const savePhrases = async (list) => {
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { phrases: list });
+         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_PHRASES,${list.join('|')}`, {qos: 1, retain: true});
+       };
+
        const handleAddFriend = async () => {
          if (!newFriendId.trim()) return;
          const fId = newFriendId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-         let updatedFriends = [...new Set([parentProfile.virtualId, ...(activeDevice.friends || [])].filter(Boolean))];
-         
-         if (!updatedFriends.includes(fId)) {
-             updatedFriends.push(fId);
-             await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: updatedFriends });
-             mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, {qos: 1, retain: true});
+         const current = friendsInOrder(activeDevice, parentProfile.virtualId);
+         if (!current.includes(fId)) {
+             if (current.length >= MAX_FRIENDS) return alert(`A device can hold ${MAX_FRIENDS} friends. Remove one to add another.`);
+             await saveFriends([fId, ...current]);        // newest at the top
          }
          setNewFriendId('');
        };
@@ -2608,32 +2739,22 @@
        const handleRemoveFriend = async (fIdToRemove) => {
          if (fIdToRemove === parentProfile.virtualId) return; 
          if (!window.confirm(`Remove ${fIdToRemove} from friends?`)) return;
-         let updatedFriends = [...new Set([parentProfile.virtualId, ...(activeDevice.friends || [])].filter(Boolean))];
-         updatedFriends = updatedFriends.filter(f => f !== fIdToRemove);
-         
-         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { friends: updatedFriends });
-         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, {qos: 1, retain: true});
+         await saveFriends(friendsInOrder(activeDevice, parentProfile.virtualId).filter(f => f !== fIdToRemove));
        };
 
        const handleAddPhrase = async () => {
          if (!newPhrase.trim()) return;
-         if (currentPhrases.length >= 20) return alert("Maximum of 20 phrases allowed.");
          const p = newPhrase.trim().toUpperCase();
-         let updatedPhrases = [...currentPhrases];
-         
-         if (!updatedPhrases.includes(p)) {
-             updatedPhrases.push(p);
-             await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { phrases: updatedPhrases });
-             mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_PHRASES,${updatedPhrases.join('|')}`, {qos: 1, retain: true});
+         if (!currentPhrases.includes(p)) {
+             if (currentPhrases.length >= MAX_PHRASES) return alert(`Maximum of ${MAX_PHRASES} phrases allowed.`);
+             await savePhrases([p, ...currentPhrases]);    // newest at the top
          }
          setNewPhrase('');
        };
 
        const handleRemovePhrase = async (pToRemove) => {
          if (!window.confirm(`Delete phrase "${pToRemove}"?`)) return;
-         let updatedPhrases = currentPhrases.filter(p => p !== pToRemove);
-         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { phrases: updatedPhrases });
-         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,SYNC_PHRASES,${updatedPhrases.join('|')}`, {qos: 1, retain: true});
+         await savePhrases(currentPhrases.filter(p => p !== pToRemove));
        };
 
 
@@ -2663,7 +2784,7 @@
           );
        }
 
-       const displayFriends = [...new Set([parentProfile?.virtualId, ...(activeDevice?.friends || [])].filter(Boolean))];
+       const displayFriends = friendsInOrder(activeDevice, parentProfile?.virtualId);
 
        return (
          <div className="p-6">
@@ -2687,8 +2808,6 @@
                  </select>
               </div>
               
-              <button onClick={startAddDeviceFlow} className="w-full py-3 bg-blue-50 text-blue-600 font-bold rounded-xl mb-6 flex items-center justify-center active:bg-blue-100"><Plus className="w-5 h-5 mr-1"/> Add another device</button>
-              
               {/* Approved Friends (collapsible) */}
               <button onClick={() => setOpenFriends(o => !o)} className={`w-full flex items-center justify-between p-4 bg-blue-50 border border-blue-100 active:bg-blue-100 transition-colors ${openFriends ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
                  <div className="flex items-center space-x-3 min-w-0">
@@ -2705,24 +2824,22 @@
               </button>
               {openFriends && (
                 <div className="border border-t-0 border-blue-100 rounded-b-2xl bg-white p-4 mb-3">
-                  <ul className="space-y-2 mb-4">
-                    {displayFriends.map((f, i) => (
-                       <li key={i} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                         <span className="font-bold text-gray-700 min-w-0 truncate">
-                            {f} {f === parentProfile.virtualId && <span className="text-xs text-blue-500 font-normal ml-2">(You)</span>}
-                         </span>
-                         {f !== parentProfile.virtualId && (
-                             <button onClick={() => handleRemoveFriend(f)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
-                               <Trash2 className="w-5 h-5"/>
-                             </button>
-                         )}
-                       </li>
-                    ))}
-                  </ul>
-                  <div className="flex space-x-2">
-                     <input type="text" placeholder="Friend ID" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newFriendId} onChange={e=>setNewFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}/>
+                  <div className="flex space-x-2 mb-4">
+                     <input type="text" placeholder="Friend ID" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newFriendId} onChange={e=>setNewFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} onKeyDown={e => { if (e.key === 'Enter') handleAddFriend(); }}/>
                      <button onClick={handleAddFriend} className="shrink-0 bg-blue-500 text-white px-5 py-2 font-bold rounded-xl active:bg-blue-600">Add</button>
                   </div>
+                  <ReorderList className="space-y-2" items={displayFriends} onReorder={saveFriends} renderItem={(f) => (
+                    <>
+                      <span className="flex-1 font-bold text-gray-700 min-w-0 truncate">
+                         {f} {f === parentProfile.virtualId && <span className="text-xs text-blue-500 font-normal ml-2">(You)</span>}
+                      </span>
+                      {f !== parentProfile.virtualId && (
+                          <button onClick={() => handleRemoveFriend(f)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
+                            <Trash2 className="w-5 h-5"/>
+                          </button>
+                      )}
+                    </>
+                  )} />
                 </div>
               )}
 
@@ -2742,20 +2859,18 @@
               </button>
               {openMessages && (
                 <div className="border border-t-0 border-indigo-100 rounded-b-2xl bg-white p-4 mb-3">
-                  <ul className="space-y-2 mb-4">
-                    {currentPhrases.map((p, i) => (
-                       <li key={i} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                         <span className="font-bold text-gray-700 text-sm min-w-0 truncate">{p}</span>
-                         <button onClick={() => handleRemovePhrase(p)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
-                           <Trash2 className="w-5 h-5"/>
-                         </button>
-                       </li>
-                    ))}
-                  </ul>
-                  <div className="flex space-x-2">
-                     <input type="text" placeholder="New message..." maxLength="20" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newPhrase} onChange={e=>setNewPhrase(e.target.value.toUpperCase())}/>
-                     <button onClick={handleAddPhrase} disabled={currentPhrases.length >= 20} className="shrink-0 bg-indigo-500 text-white px-5 py-2 font-bold rounded-xl active:bg-indigo-600 disabled:bg-indigo-300">Add</button>
+                  <div className="flex space-x-2 mb-4">
+                     <input type="text" placeholder="New message..." maxLength="20" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newPhrase} onChange={e=>setNewPhrase(e.target.value.toUpperCase())} onKeyDown={e => { if (e.key === 'Enter') handleAddPhrase(); }}/>
+                     <button onClick={handleAddPhrase} disabled={currentPhrases.length >= MAX_PHRASES} className="shrink-0 bg-indigo-500 text-white px-5 py-2 font-bold rounded-xl active:bg-indigo-600 disabled:bg-indigo-300">Add</button>
                   </div>
+                  <ReorderList className="space-y-2" items={currentPhrases} onReorder={savePhrases} renderItem={(p) => (
+                    <>
+                      <span className="flex-1 font-bold text-gray-700 text-sm min-w-0 truncate">{p}</span>
+                      <button onClick={() => handleRemovePhrase(p)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
+                        <Trash2 className="w-5 h-5"/>
+                      </button>
+                    </>
+                  )} />
                 </div>
               )}
 
@@ -3040,6 +3155,8 @@
               </div>
             )}
 
+            <button onClick={startAddDeviceFlow} className="w-full py-3 bg-white text-blue-600 font-bold rounded-2xl mb-6 flex items-center justify-center shadow-sm border border-gray-100 active:bg-blue-50"><Plus className="w-5 h-5 mr-1"/> Add another device</button>
+
             {/* In the web app this sits directly above Add to Home Screen on
                 purpose: on iPhone the one is a precondition for the other, and a
                 parent who taps this from a Safari tab needs the next box to be
@@ -3226,10 +3343,16 @@
           const dev = devices.find(d => d.id === req.childMac);
           if (dev) {
             // Same shape as adding a friend by hand in Settings: the parent's own
-            // id is always kept in the list, then the write and the device push.
-            const updatedFriends = [...new Set([parentProfile?.virtualId, ...(dev.friends || [])].filter(Boolean))];
-            if (!updatedFriends.includes(req.strangerId)) {
-              updatedFriends.push(req.strangerId);
+            // id is always kept in the list, the new friend goes on top, then the
+            // write and the device push.
+            const current = friendsInOrder(dev, parentProfile?.virtualId);
+            if (!current.includes(req.strangerId)) {
+              if (current.length >= MAX_FRIENDS) {
+                // Left unanswered on purpose, so it can be approved after a removal.
+                alert(`${displayName(`${dev.identity.name}${dev.identity.pin}`)} already has ${MAX_FRIENDS} friends, the most a device holds. Remove one in Settings, then approve this request.`);
+                return;
+              }
+              const updatedFriends = [req.strangerId, ...current];
               try {
                 await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', dev.id), { friends: updatedFriends });
                 if (mqttClient) mqttClient.publish(`doorbell/cmd/${dev.hashedId}`, `CMD,SYNC_FRIENDS,${updatedFriends.join('|')}`, { qos: 1, retain: true });
