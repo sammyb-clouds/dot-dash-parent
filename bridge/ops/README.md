@@ -130,3 +130,35 @@ The certificate renewal hook `/etc/letsencrypt/renewal-hooks/deploy/restart-mosq
 restarts mosquitto after renewal. Without it the broker keeps serving the old
 certificate, and keyed devices -- which verify it -- would fall back to the
 shared login once it expired.
+
+## Droplet hardening (2026-09-15)
+
+The droplet is 512 MB (458 usable) with ONE vCPU. The OOM killer fired twice on
+2026-09-15, both times taking `fwupd`; each event stalled the box long enough to
+drop every broker connection.
+
+- `fwupd`, `fwupd-refresh.service` and `fwupd-refresh.timer` are **masked**.
+  Firmware updates mean nothing on a cloud VM and fwupd ballooned to 150 MB.
+- 1 GB swap at `/swapfile` (in `/etc/fstab`), `vm.swappiness=10`
+  (`/etc/sysctl.d/60-dotdash-swap.conf`) -- overflow for bursts, not working
+  memory.
+- OOM priority via drop-ins `/etc/systemd/system/<svc>.service.d/oom.conf`:
+  mosquitto -900, dotdash-bridge -600, dotdash-enroll -300. Lower is killed
+  later.
+
+## The doorbell dashboard (`doorbell.service`)
+
+`/root/doorbell_app/mqtt_web_server.py` -- a Flask page showing the last 100
+messages on every topic the shared device login can read: children's messages
+with names and PINs, device commands including Wi-Fi sync payloads, presence,
+scores. Not in any repo.
+
+It was bound to 0.0.0.0:5000 with port 5000 open and no login, and outside
+addresses were connected to it. Since 2026-09-15 it listens on **127.0.0.1**
+only and 5000 is removed from ufw. Backup of the original beside the script.
+View it with:
+
+    ssh -L 5000:localhost:5000 root@45.55.47.32     # then http://localhost:5000
+
+It logs in with the SHARED device password, so it stops working at MQTT Stage 6
+unless it is given a read-only login of its own first.
