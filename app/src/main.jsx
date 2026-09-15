@@ -2553,16 +2553,19 @@
               </button>
               {openWifi && (
                 <div className="border border-t-0 border-teal-100 rounded-b-2xl bg-white p-4 mb-3">
-                  <p className="text-xs text-gray-500 leading-relaxed mb-4">
-                    Save up to 5 networks &mdash; home, a second home, a co-parent's house.
-                    The device picks whichever it finds, so it works in each place
-                    without being set up again.
-                  </p>
-                  <p className="text-xs text-gray-400 leading-relaxed mb-4">
-                    Passwords are sent straight to the device and kept there, not
-                    in your account &mdash; so they cannot be shown again here.
-                    To change one, remove the network and add it back.
-                  </p>
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Save up to 5 networks. The device picks whichever it finds.
+                    </p>
+                    {/* iOS app only: in-app setup joins the device's own network,
+                        which the web app cannot do. */}
+                    {isNativeApp() && (
+                      <button onClick={() => setWifiSetupOpen(true)}
+                        className="mt-2 text-xs font-bold text-teal-700 bg-white border border-teal-200 rounded-full px-3 py-1.5 active:bg-teal-50">
+                        WiFi Disconnected?
+                      </button>
+                    )}
+                  </div>
                   <ul className="space-y-2 mb-4">
                     {wifiNets.map((n) => (
                        <li key={n.ssid} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
@@ -2609,16 +2612,6 @@
                 </div>
               )}
 
-              {/* iOS app only: the in-app setup flow needs to join the device's
-                  own network, which the web app cannot do. */}
-              {isNativeApp() && activeDevice && (
-                <div className={`flex justify-end ${openWifi ? 'mt-3' : '-mt-1'} mb-3`}>
-                  <button onClick={() => setWifiSetupOpen(true)}
-                    className="text-xs font-bold text-teal-700 bg-white border border-teal-200 rounded-full px-3 py-1.5 active:bg-teal-50">
-                    WiFi Disconnected?
-                  </button>
-                </div>
-              )}
 
               {/* Arcade (collapsible) */}
               {activeDevice && (
