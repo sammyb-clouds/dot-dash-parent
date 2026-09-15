@@ -1956,6 +1956,8 @@
        const [openFriends, setOpenFriends] = useState(false);
        const [openMessages, setOpenMessages] = useState(false);
        const [openWifi, setOpenWifi] = useState(false);
+       const [openArcade, setOpenArcade] = useState(false);
+       const [openSecurity, setOpenSecurity] = useState(false);
        const [newSsid, setNewSsid] = useState('');
        const [newWifiPass, setNewWifiPass] = useState('');
        const [revealed, setRevealed] = useState({});
@@ -2550,6 +2552,110 @@
                 </div>
               )}
 
+              {/* Arcade (collapsible) */}
+              {activeDevice && (
+                <>
+                  <button onClick={() => setOpenArcade(o => !o)} className={`w-full flex items-center justify-between p-4 bg-amber-50 border border-amber-100 active:bg-amber-100 transition-colors ${openArcade ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                     <div className="flex items-center space-x-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+                        </div>
+                        <div className="text-left min-w-0">
+                           <div className="font-bold text-gray-800 text-base">Arcade</div>
+                           <div className="text-xs text-gray-500">{arcadeWanted ? 'Games shown on this device' : 'Only Train shown'}</div>
+                        </div>
+                     </div>
+                     <div className="flex items-center space-x-2 shrink-0 ml-2">
+                        <span className={`text-white text-xs font-bold h-[22px] px-2 flex items-center justify-center rounded-full ${arcadeWanted ? 'bg-amber-500' : 'bg-gray-400'}`}>{arcadeWanted ? 'ON' : 'OFF'}</span>
+                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-amber-400 transition-transform duration-200 ${openArcade ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                     </div>
+                  </button>
+                  {openArcade && (
+                    <div className="border border-t-0 border-amber-100 rounded-b-2xl bg-white p-4 mb-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="text-gray-500 text-sm leading-relaxed flex-1">
+                          Show the arcade games on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device.
+                          Turned off, only Train stays &mdash; the Morse practice.
+                        </p>
+                        <button
+                          role="switch"
+                          aria-checked={arcadeWanted}
+                          aria-label="Arcade games"
+                          onClick={handleToggleArcade}
+                          className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${arcadeWanted ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${arcadeWanted ? 'translate-x-6' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+                      <p className="mt-3 text-xs text-gray-400 leading-snug">{arcadeStatus}</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Connection security (collapsible). A conflict -- another device
+                  tried to enroll with this device's identity -- turns the row red
+                  so it is seen without being opened. Devices without a private
+                  broker key yet have no mqttKey, and get no reset. */}
+              {activeDevice && (() => {
+                const k = activeDevice.mqttKey || null;
+                const ms = (t) => (t && t.toMillis ? t.toMillis() : 0);
+                const conflict = !!k && ms(k.conflictAt) > ms(k.resetAt);
+                const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
+                const since = k?.enrolledAt?.toDate ? k.enrolledAt.toDate().toLocaleDateString() : null;
+                const summary = conflict ? 'Needs your attention'
+                  : !k ? 'Standard connection'
+                  : k.disabled ? 'Standard connection'
+                  : since ? 'Private connection' : 'Setting up private connection';
+                const tone = conflict
+                  ? { row: 'bg-red-50 border-red-200 active:bg-red-100', dot: 'bg-red-500', chev: 'text-red-400', panel: 'border-red-200' }
+                  : { row: 'bg-slate-50 border-slate-200 active:bg-slate-100', dot: 'bg-slate-500', chev: 'text-slate-400', panel: 'border-slate-200' };
+                return (
+                  <>
+                    <button onClick={() => setOpenSecurity(o => !o)} className={`w-full flex items-center justify-between p-4 border transition-colors ${tone.row} ${openSecurity ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                       <div className="flex items-center space-x-3 min-w-0">
+                          <div className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 ${tone.dot}`}>
+                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                          </div>
+                          <div className="text-left min-w-0">
+                             <div className="font-bold text-gray-800 text-base">Connection security</div>
+                             <div className={`text-xs ${conflict ? 'text-red-600 font-bold' : 'text-gray-500'}`}>{summary}</div>
+                          </div>
+                       </div>
+                       <div className="flex items-center space-x-2 shrink-0 ml-2">
+                          {conflict && <span className="bg-red-500 text-white text-xs font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">!</span>}
+                          <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-200 ${tone.chev} ${openSecurity ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                       </div>
+                    </button>
+                    {openSecurity && (
+                      <div className={`border border-t-0 rounded-b-2xl bg-white p-4 mb-3 ${tone.panel}`}>
+                        {conflict ? (
+                          <p className="text-red-800 text-sm leading-relaxed">
+                            Another device tried to use {name}'s private connection. If you recently reset or replaced this Dot Dash, that was probably it. If not, reset the connection so only {name}'s device can use it.
+                          </p>
+                        ) : !k ? (
+                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash uses the standard connection. It has not set up a private connection of its own yet.</p>
+                        ) : k.disabled ? (
+                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is using the standard connection. Private connection is turned off for this device.</p>
+                        ) : since ? (
+                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash has its own private connection, set up {since}.</p>
+                        ) : (
+                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is setting up its own private connection.</p>
+                        )}
+                        {k && (
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <p className="text-xs text-gray-500 leading-snug flex-1">{keyReset.msg}</p>
+                            <button onClick={handleResetKey} disabled={keyReset.busy}
+                              className={`shrink-0 text-sm font-bold rounded-full px-4 py-2 border disabled:opacity-50 ${conflict ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-200'}`}>
+                              {keyReset.busy ? 'Resetting…' : 'Reset connection'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
             </div>
 
             {wifiSetupOpen && activeDevice && (
@@ -2573,68 +2679,6 @@
                 </div>
               </div>
             )}
-
-            {activeDevice && (
-              <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
-                <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
-                  Arcade
-                </h3>
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-gray-500 text-sm leading-relaxed flex-1">
-                    Show the arcade games on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device.
-                    Turned off, only Train stays &mdash; the Morse practice.
-                  </p>
-                  <button
-                    role="switch"
-                    aria-checked={arcadeWanted}
-                    aria-label="Arcade games"
-                    onClick={handleToggleArcade}
-                    className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${arcadeWanted ? 'bg-green-500' : 'bg-gray-300'}`}>
-                    <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${arcadeWanted ? 'translate-x-6' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-                <p className="mt-3 text-sm text-gray-400 leading-snug">{arcadeStatus}</p>
-              </div>
-            )}
-
-            {/* Only for a device that has had a private broker key -- devices on
-                firmware without keys have no mqttKey and show nothing here. A
-                conflict is the one thing that needs a parent: another device
-                tried to enroll with this device's identity. */}
-            {activeDevice?.mqttKey && (() => {
-              const k = activeDevice.mqttKey;
-              const ms = (t) => (t && t.toMillis ? t.toMillis() : 0);
-              const conflict = ms(k.conflictAt) > ms(k.resetAt);
-              const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
-              const since = k.enrolledAt?.toDate ? k.enrolledAt.toDate().toLocaleDateString() : null;
-              return (
-                <div className={`rounded-3xl p-5 shadow-sm border mb-4 ${conflict ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
-                  <h3 className={`font-bold mb-3 text-sm uppercase tracking-wider flex items-center ${conflict ? 'text-red-700' : 'text-gray-800'}`}>
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                    Connection security
-                  </h3>
-                  {conflict ? (
-                    <p className="text-red-800 text-sm leading-relaxed">
-                      Another device tried to use {name}'s private connection. If you recently reset or replaced this Dot Dash, that was probably it. If not, reset the connection so only {name}'s device can use it.
-                    </p>
-                  ) : k.disabled ? (
-                    <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is using the standard connection. Private connection is turned off for this device.</p>
-                  ) : since ? (
-                    <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash has its own private connection, set up {since}.</p>
-                  ) : (
-                    <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is setting up its own private connection.</p>
-                  )}
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <p className="text-xs text-gray-500 leading-snug flex-1">{keyReset.msg}</p>
-                    <button onClick={handleResetKey} disabled={keyReset.busy}
-                      className={`shrink-0 text-sm font-bold rounded-full px-4 py-2 border disabled:opacity-50 ${conflict ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-200'}`}>
-                      {keyReset.busy ? 'Resetting…' : 'Reset connection'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* In the web app this sits directly above Add to Home Screen on
                 purpose: on iPhone the one is a precondition for the other, and a
