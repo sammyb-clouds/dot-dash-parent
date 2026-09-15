@@ -428,6 +428,10 @@
       const [devices, setDevices] = useState([]);
       const [loading, setLoading] = useState(true);
       const [devicesLoaded, setDevicesLoaded] = useState(false);
+      // True once a devices snapshot has come from the SERVER. An empty list read
+      // from cache while offline, or a listener error, says nothing about whether
+      // this account has devices, so neither may launch the new-user wizard.
+      const [devicesConfirmed, setDevicesConfirmed] = useState(false);
       const [mqttClient, setMqttClient] = useState(null);
       
       const [isWizardActive, setIsWizardActive] = useState(false);
@@ -524,17 +528,43 @@
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
           if (currentUser) {
             setUser(currentUser);
-            try {
-              const profileRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'profile', 'parent');
-              const profileSnap = await getDoc(profileRef);
-              if (profileSnap.exists()) {
-                setParentProfile(profileSnap.data());
-              } else {
-                setParentProfile({ virtualId: null }); 
+            // A profile that could not be LOADED is not a profile that does not
+            // exist. Treating a failed read as "no profile" launched the new-user
+            // wizard on an established account whenever the read failed offline
+            // -- which in-app Wi-Fi setup reliably causes, since the phone sits on
+            // the device's internet-less network and iOS may reload the web view
+            // meanwhile. Sam hit it from the "WiFi Disconnected?" flow.
+            //
+            // So: the last profile seen on this phone stands in while offline,
+            // "unresolved" marks the case where there is none, and the read is
+            // retried until it answers.
+            const uid = currentUser.uid;
+            const cacheKey = `dotdash_profile_${uid}`;
+            const profileRef = doc(db, 'artifacts', appId, 'users', uid, 'profile', 'parent');
+            const loadProfile = async () => {
+              try {
+                const profileSnap = await getDoc(profileRef);
+                const p = profileSnap.exists() ? profileSnap.data() : { virtualId: null };
+                setParentProfile(p);
+                try { localStorage.setItem(cacheKey, JSON.stringify(p)); } catch (e) {}
+                return true;
+              } catch (err) {
+                console.error("Profile Fetch Error:", err);
+                let cached = null;
+                try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch (e) {}
+                setParentProfile(prev => (prev && prev.virtualId) ? prev
+                  : (cached && cached.virtualId) ? cached
+                  : { virtualId: null, unresolved: true });
+                return false;
               }
-            } catch (err) {
-              console.error("Profile Fetch Error:", err);
-              setParentProfile({ virtualId: null });
+            };
+            if (!(await loadProfile())) {
+              (async () => {
+                while (auth.currentUser && auth.currentUser.uid === uid) {
+                  await new Promise((r) => setTimeout(r, 5000));
+                  if (await loadProfile()) break;
+                }
+              })();
             }
           } else {
             setUser(null);
@@ -550,11 +580,15 @@
       useEffect(() => {
         if (!user) {
             setDevicesLoaded(false);
+            setDevicesConfirmed(false);
             return;
         }
         
         const devicesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'devices');
-        const unsubscribe = onSnapshot(devicesRef, (snapshot) => {
+        // includeMetadataChanges: a list first read from cache is re-announced when
+        // the server confirms it, even if nothing in it changed.
+        const unsubscribe = onSnapshot(devicesRef, { includeMetadataChanges: true }, (snapshot) => {
+          if (!snapshot.metadata.fromCache) setDevicesConfirmed(true);
           const loadedDevices = [];
           snapshot.forEach((doc) => {
             loadedDevices.push({ id: doc.id, ...doc.data() });
@@ -1115,10 +1149,15 @@
 
       // --- AUTO-LAUNCH WIZARD ---
       useEffect(() => {
-        if (!loading && user && devicesLoaded && (!parentProfile?.virtualId || devices.length === 0) && !isWizardActive) {
+        // Only on what the SERVER has confirmed: a profile that exists without a
+        // parent ID, or a device list the server returned empty. And never while
+        // in-app Wi-Fi setup is running, when the phone is expected to be offline.
+        const needsParentId = parentProfile && !parentProfile.unresolved && !parentProfile.virtualId;
+        const noDevices = devicesLoaded && devicesConfirmed && devices.length === 0;
+        if (!loading && user && (needsParentId || noDevices) && !isWizardActive && !wifiSetupRunning.active) {
            setIsWizardActive(true);
         }
-      }, [loading, user, parentProfile, devices, devicesLoaded, isWizardActive]);
+      }, [loading, user, parentProfile, devices, devicesLoaded, devicesConfirmed, isWizardActive]);
 
       if (loading || (user && !devicesLoaded)) return <div className="flex h-screen items-center justify-center"><Activity className="w-12 h-12 text-blue-500 animate-pulse" /></div>;
 
@@ -1310,6 +1349,11 @@
     // and an https page may not call the portal's plain-http address. The web
     // app keeps the portal flow.
     const SETUP_SSID = 'Dot Dash Setup';
+
+    // Set while DeviceWifiSetup is on screen. The phone is deliberately offline
+    // for part of it, and nothing that reacts to looking offline -- the new-user
+    // wizard above all -- should act on that.
+    const wifiSetupRunning = { active: false };
     const PORTAL = 'http://192.168.4.1';
 
     // Must match the options the device's own portal offers (WebUI.h), because
@@ -1405,9 +1449,13 @@
 
       // Leaving the flow part-way must not strand the phone on a network with
       // no internet.
-      useEffect(() => () => {
-        cancelled.current = true;
-        DeviceWifi.leave({ ssid: SETUP_SSID }).catch(() => {});
+      useEffect(() => {
+        wifiSetupRunning.active = true;
+        return () => {
+          wifiSetupRunning.active = false;
+          cancelled.current = true;
+          DeviceWifi.leave({ ssid: SETUP_SSID }).catch(() => {});
+        };
       }, []);
 
       const fail = (backTo, message, detail = '') => { setPhase(backTo); setError(message); setErrorDetail(detail); };
