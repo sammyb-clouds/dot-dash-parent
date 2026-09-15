@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// Dot Dash database rules. This file is the source of truth: deploy and test it
+// with bridge/tools/rules.mjs, never by editing in the Firebase console.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A parent's own tree: profile, devices, messages, push tokens, key resets.
+    match /artifacts/{appId}/users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Who holds each child ID and parent ID. The document id is the hash every
+    // MQTT topic is keyed on, so a record here is a claim to those topics --
+    // the broker login service grants a parent a hash only when this record
+    // names them as owner.
+    //
+    // GET only, never LIST: each record carries the NAME+PIN in plain text,
+    // and listing would hand out every child's ID. The app only ever looks
+    // one up by its hash (the "is this ID taken?" check).
+    match /artifacts/{appId}/public/data/identities/{hash} {
+      allow get: if request.auth != null;
+
+      allow create: if request.auth != null && validIdentity(hash);
+
+      // Only the owner, and ownership cannot be handed to someone else.
+      allow update: if request.auth != null
+        && resource.data.owner == request.auth.uid
+        && validIdentity(hash);
+
+      allow delete: if request.auth != null && resource.data.owner == request.auth.uid;
+
+      // Exactly the three fields the app writes, owned by the writer, and the
+      // document id really is the hash of the ID it names -- so nobody can park
+      // a record on a hash that is not theirs to describe. Hashing matches the
+      // app and firmware: sha256 of the trimmed, lowercased ID.
+      function validIdentity(hash) {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['owner', 'idString', 'type'])
+          && d.owner == request.auth.uid
+          && d.type in ['child', 'parent']
+          && d.idString is string
+          && d.idString.size() >= 2 && d.idString.size() <= 32
+          && hashing.sha256(d.idString.trim().lower()).toHexString().lower() == hash;
+      }
+    }
+  }
+}

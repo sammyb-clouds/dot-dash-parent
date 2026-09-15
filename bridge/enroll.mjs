@@ -54,6 +54,51 @@
  *
  * On anything but 200/201 the device keeps using the shared login and tries
  * again later. Nothing here can take a device offline.
+ *
+ * OWNERSHIP. A device record is written by the app under the parent's own
+ * account, so on its own it proves nothing: anyone signed in can write a record
+ * naming any hash. The hash's identity record (public/data/identities/<hash>)
+ * is what the database rules protect -- only one account can hold it -- so
+ * enrollment also requires that record to name the account holding the device.
+ *
+ * ---------------------------------------------------------------------------
+ * APP LOGINS
+ *
+ *   POST https://app.dotdashdevice.com/app-login
+ *   Authorization: Bearer <Firebase ID token>
+ *
+ * Gives a signed-in parent a broker login of their own, replacing the shared
+ * `dotdash-app` password that ships inside every copy of the app. The token is
+ * verified here against Google's signing keys; the login it buys reaches only
+ * that parent's topics:
+ *
+ *   their parent inbox       doorbell/msg/<parent hash>[/#]
+ *   each device they own     presence, msg/#, monitor/# (read and clear), cmd (write)
+ *   pairing, for everyone    doorbell/pairing/+ (write), doorbell/pairing/reply/+ (read)
+ *
+ * "Own" means the identity record for that hash names this account -- never
+ * just a device record, which the parent writes themselves.
+ *
+ * Username `app-<uid>`, role `app-<uid>` (topics naming each hash literally,
+ * since the plugin does not substitute %u), group `apps` for pairing. The
+ * password is an HMAC of the uid under APP_LOGIN_SECRET: the same every time,
+ * so a phone's automatic reconnects keep working, and nothing needs storing.
+ * Rotating the secret and deleting the app-* clients revokes them all.
+ *
+ * Every call recomputes the role and applies only the difference. When it
+ * changes, that parent's sessions are disconnected (the login is disabled and
+ * re-enabled in the same message -- a rule change alone disconnects nobody) and
+ * reconnect under the new rules, which is how a removed device stops reaching a
+ * phone that is already subscribed. A hash granted here is also taken away from any
+ * other parent's role still holding it (a child re-paired to a new family).
+ *
+ *   200 { username, password, url, granted: [hashes] }
+ *   401 unauthenticated    429 slow-down    503 unavailable
+ *
+ * These logins live in the same key store as device keys, on listener 8886
+ * (websockets). Both listeners load the plugin with the same file; in 2.0.18
+ * that is one shared store (tested 2026-09-15: a login made through either
+ * listener works on both, and deletes and password changes apply to both).
  */
 
 import http from 'node:http';
@@ -70,6 +115,13 @@ const KEY_PORT = parseInt(env.KEY_PORT || '8885', 10);
 const ADMIN_USER = env.DYNSEC_ADMIN_USER;
 const ADMIN_PASS = env.DYNSEC_ADMIN_PASS;
 const SERVICE_ACCOUNT = env.SERVICE_ACCOUNT || '/root/dotdash_bridge/service-account.json';
+const APP_ID = env.APP_ID || 'dotdash';
+const APP_PORT = parseInt(env.APP_PORT || '8886', 10);
+const APP_URL = env.APP_URL || `wss://${BROKER_HOST}:${APP_PORT}/mqtt`;
+const APP_LOGIN_SECRET = env.APP_LOGIN_SECRET;
+// Pages allowed to call /app-login from a browser: the web app, the iOS app's
+// web view, and a local dev server.
+const APP_ORIGINS = new Set((env.APP_ORIGINS || 'https://app.dotdashdevice.com,capacitor://localhost,http://localhost:5173').split(','));
 
 const log = (level, ...a) => console.log(new Date().toISOString(), level.padEnd(5), ...a);
 const short = (h) => String(h).slice(0, 12);
@@ -79,8 +131,20 @@ if (!ADMIN_USER || !ADMIN_PASS) {
   process.exit(1);
 }
 
-initializeApp({ credential: cert(JSON.parse(fs.readFileSync(SERVICE_ACCOUNT, 'utf8'))) });
+if (!APP_LOGIN_SECRET || APP_LOGIN_SECRET.length < 32) {
+  log('ERROR', 'APP_LOGIN_SECRET missing or short -- refusing to start');
+  process.exit(1);
+}
+
+const serviceAccount = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT, 'utf8'));
+const PROJECT_ID = serviceAccount.project_id;
+initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
+
+const HASH_RE = /^[0-9a-f]{64}$/;
+// Same as the app and firmware: sha256 of the trimmed, lowercased id.
+const hashId = (id) => crypto.createHash('sha256').update(String(id).trim().toLowerCase()).digest('hex');
+const identityRef = (appId, hash) => db.doc(`artifacts/${appId}/public/data/identities/${hash}`);
 
 // ------------------------------------------------------------ dynsec admin --
 // Key management goes through the plugin's control topic on the key listener.
@@ -202,9 +266,19 @@ function secretWorks(hash, secret) {
 
 // ----------------------------------------------------------------- pairing --
 
+// The device record for this hash and MAC whose account also owns the hash's
+// identity. Another account's look-alike record (same MAC, same hash, written
+// by hand) is passed over rather than allowed to shadow the real one.
 async function pairedDevice(hash, mac) {
   const snap = await db.collectionGroup('devices').where('hashedId', '==', hash).get();
-  return snap.docs.find((d) => d.id.replace(/:/g, '').toUpperCase() === mac) || null;
+  const candidates = snap.docs.filter((d) => d.id.replace(/:/g, '').toUpperCase() === mac);
+  if (!candidates.length) return null;
+  const [, appId] = candidates[0].ref.path.split('/');
+  const ident = await identityRef(appId, hash).get();
+  const owner = ident.exists ? ident.data().owner : null;
+  const device = candidates.find((d) => d.ref.path.split('/')[3] === owner) || null;
+  if (!device) log('WARN', `${short(hash)} mac=${mac}: ${candidates.length} device record(s), none under the identity's owner`);
+  return device;
 }
 
 // -------------------------------------------------------------- the request --
@@ -271,18 +345,23 @@ async function processReset(snap) {
     log('WARN', `reset ${snap.ref.path}: no usable hash -- dropped`);
     return snap.ref.delete();
   }
-  // The device record normally exists, and being under this account proves the
-  // requester owns it. When it does NOT -- the app unlinks right after asking --
-  // the hash in the request proves nothing: any signed-in user could name
-  // another family's device. So without a record, the key itself must have been
-  // enrolled for exactly this device path under this account.
-  if (!device.exists) {
-    const [info] = await dynsecBatch([{ command: 'getClient', username: hash }]);
-    if (info.error) return snap.ref.delete();                 // no key: nothing to do
-    if (info.data?.client?.textname !== deviceRef.path) {
-      log('WARN', `REFUSED reset of ${short(hash)} by ${uid.slice(0, 8)}..: key not enrolled for ${deviceRef.path}`);
-      return snap.ref.delete();
-    }
+  // Neither a device record nor the hash in the request proves ownership: any
+  // signed-in user can write a record naming another family's device under
+  // their own account. So the requester must hold the hash's identity record,
+  // or the key must have been enrolled for exactly this device path under this
+  // account -- the case when the app unlinks right after asking and the
+  // identity record is already gone.
+  const [, appId] = snap.ref.path.split('/');
+  const [ident, [info]] = await Promise.all([
+    identityRef(appId, hash).get(),
+    dynsecBatch([{ command: 'getClient', username: hash }]),
+  ]);
+  if (info.error && !device.exists) return snap.ref.delete();   // no key, no record: nothing to do
+  const ownsIdentity = ident.exists && ident.data().owner === uid;
+  const keyIsTheirs = !info.error && info.data?.client?.textname === deviceRef.path;
+  if (!ownsIdentity && !keyIsTheirs) {
+    log('WARN', `REFUSED reset of ${short(hash)} by ${uid.slice(0, 8)}..: neither the identity nor the key is theirs`);
+    return snap.ref.delete();
   }
   await removeKey(hash);
   if (device.exists) {
@@ -354,6 +433,274 @@ async function sweep() {
 setTimeout(() => sweep().catch((e) => log('WARN', 'sweep failed:', e.message)), 60_000);
 setInterval(() => sweep().catch((e) => log('WARN', 'sweep failed:', e.message)), SWEEP_EVERY_MS);
 
+// -------------------------------------------------------------- app logins --
+
+// Firebase ID tokens are RS256 JWTs signed with keys Google publishes here.
+const GOOGLE_CERTS = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+let certs = { keys: {}, until: 0, fetchedAt: 0 };
+
+async function signingKeys(force = false) {
+  const now = Date.now();
+  if (!force && now < certs.until) return certs.keys;
+  if (force && now - certs.fetchedAt < 60_000) return certs.keys;   // an unknown kid cannot make us hammer Google
+  const res = await fetch(GOOGLE_CERTS);
+  if (!res.ok) throw new Error(`signing keys: HTTP ${res.status}`);
+  const maxAge = parseInt(/max-age=(\d+)/.exec(res.headers.get('cache-control') || '')?.[1] || '3600', 10);
+  const pems = await res.json();
+  const keys = Object.fromEntries(Object.entries(pems).map(([kid, pem]) => [kid, new crypto.X509Certificate(pem).publicKey]));
+  certs = { keys, until: now + Math.min(maxAge, 6 * 3600) * 1000, fetchedAt: now };
+  return keys;
+}
+
+// The uid a valid token belongs to, or null. Checks what Firebase's own
+// verifier checks: signature, algorithm, audience, issuer, expiry, subject.
+async function verifyIdToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return null;
+  let header, claims;
+  try {
+    header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+    claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+  } catch { return null; }
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string') return null;
+  let key = (await signingKeys())[header.kid];
+  if (!key) key = (await signingKeys(true))[header.kid];
+  if (!key) return null;
+  const signed = crypto.verify('RSA-SHA256', Buffer.from(`${parts[0]}.${parts[1]}`), key, Buffer.from(parts[2], 'base64url'));
+  if (!signed) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const SKEW = 300;
+  if (claims.aud !== PROJECT_ID || claims.iss !== `https://securetoken.google.com/${PROJECT_ID}`) return null;
+  if (typeof claims.sub !== 'string' || !claims.sub || claims.sub.length > 128) return null;
+  if (!(claims.exp > now) || !(claims.iat <= now + SKEW) || !(claims.auth_time <= now + SKEW)) return null;
+  return claims.sub;
+}
+
+const APP_GROUP = 'apps';
+const appUser = (uid) => `app-${uid}`;
+const appPassword = (uid) => crypto.createHmac('sha256', APP_LOGIN_SECRET).update(`app-login:${uid}`).digest('base64url');
+
+// What pairing needs, for every signed-in parent: send a claim or ping to a
+// code, hear the device's reply.
+const APP_SHARED_ACLS = [
+  ['publishClientSend', 'doorbell/pairing/+'],
+  ['subscribePattern', 'doorbell/pairing/reply/+'],
+];
+const parentHashAcls = (h) => [
+  ['subscribePattern', `doorbell/msg/${h}`],
+  ['subscribePattern', `doorbell/msg/${h}/#`],
+  ['publishClientSend', `doorbell/msg/${h}`],          // clearing a retained message once saved
+  ['publishClientSend', `doorbell/msg/${h}/#`],
+];
+const deviceHashAcls = (h) => [
+  ['subscribePattern', `doorbell/presence/${h}`],
+  ['subscribePattern', `doorbell/msg/${h}/#`],
+  ['subscribePattern', `doorbell/monitor/${h}/#`],
+  ['publishClientSend', `doorbell/msg/${h}/#`],        // chatting with the child
+  ['publishClientSend', `doorbell/monitor/${h}/#`],    // clearing Monitor alerts
+  ['publishClientSend', `doorbell/cmd/${h}`],
+];
+const aclKey = ([acltype, topic]) => `${acltype} ${topic}`;
+const aclObj = ([acltype, topic]) => ({ acltype, topic, allow: true, priority: 0 });
+// Every rule that could name this hash, in either form.
+const aclsNaming = (h) => [...parentHashAcls(h), ...deviceHashAcls(h)];
+const hashInTopic = (topic) => topic.split('/').find((s) => HASH_RE.test(s)) || null;
+
+// The hashes this account may reach: its parent ID and its devices, each only
+// if the identity record names this account.
+async function grantsFor(uid) {
+  const base = `artifacts/${APP_ID}/users/${uid}`;
+  const [profile, devices] = await Promise.all([
+    db.doc(`${base}/profile/parent`).get(),
+    db.collection(`${base}/devices`).get(),
+  ]);
+  const virtualId = profile.exists ? profile.data().virtualId : null;
+  const parentHash = virtualId && virtualId !== 'PENDING' ? hashId(virtualId) : null;
+  const deviceHashes = [...new Set(devices.docs.map((d) => d.data().hashedId).filter((h) => HASH_RE.test(h || '')))];
+  const wanted = [...new Set([parentHash, ...deviceHashes].filter(Boolean))];
+  const idents = wanted.length ? await db.getAll(...wanted.map((h) => identityRef(APP_ID, h))) : [];
+  const owned = new Set(idents.filter((s) => s.exists && s.data().owner === uid).map((s) => s.id));
+  return {
+    parent: owned.has(parentHash) ? parentHash : null,
+    devices: deviceHashes.filter((h) => owned.has(h)),
+    refused: wanted.filter((h) => !owned.has(h)),
+    hasAccount: profile.exists || !devices.empty,
+  };
+}
+
+const wantedAcls = (g) => [
+  ...(g.parent ? parentHashAcls(g.parent) : []),
+  ...g.devices.flatMap(deviceHashAcls),
+];
+
+// hash -> Set of app role names whose rules name it. Built from the broker at
+// start, kept current by every change made here.
+const holders = new Map();
+let holdersReady = null;
+
+function indexRole(rolename, acls) {
+  for (const set of holders.values()) set.delete(rolename);
+  for (const a of acls) {
+    const h = hashInTopic(a.topic);
+    if (!h) continue;
+    if (!holders.has(h)) holders.set(h, new Set());
+    holders.get(h).add(rolename);
+  }
+}
+
+async function loadHolders() {
+  const [list] = await dynsecBatch([{ command: 'listRoles', verbose: true, count: -1, offset: 0 }]);
+  if (list.error) throw new Error(`listRoles: ${list.error}`);
+  holders.clear();
+  const roles = (list.data?.roles || []).filter((r) => r.rolename.startsWith('app-'));
+  for (const r of roles) indexRole(r.rolename, r.acls || []);
+  return roles;
+}
+
+// The shared pairing role and group. Adds only what is missing: changing a
+// role disconnects everyone holding it.
+async function ensureAppGroup() {
+  const [role, group] = await dynsecBatch([
+    { command: 'getRole', rolename: APP_GROUP },
+    { command: 'getGroup', groupname: APP_GROUP },
+  ]);
+  const cmds = [];
+  if (role.error) cmds.push({ command: 'createRole', rolename: APP_GROUP, acls: APP_SHARED_ACLS.map(aclObj) });
+  else {
+    const have = new Set((role.data.role.acls || []).map((a) => `${a.acltype} ${a.topic}`));
+    for (const a of APP_SHARED_ACLS) if (!have.has(aclKey(a))) cmds.push({ command: 'addRoleACL', rolename: APP_GROUP, ...aclObj(a) });
+  }
+  if (group.error) cmds.push({ command: 'createGroup', groupname: APP_GROUP, roles: [{ rolename: APP_GROUP }] });
+  if (!cmds.length) return;
+  const out = await dynsecBatch(cmds);
+  const bad = out.find((r) => r.error);
+  if (bad) throw new Error(`app group: ${bad.command}: ${bad.error}`);
+  log('INFO', `app group set up (${cmds.map((c) => c.command).join(', ')})`);
+}
+
+// One change at a time: two logins racing would each diff against a stale role.
+let appQueue = Promise.resolve();
+const serially = (fn) => { const run = appQueue.then(fn, fn); appQueue = run.catch(() => {}); return run; };
+
+// Bring one account's login and role in line with its grants. Returns whether
+// anything changed.
+function applyGrants(uid, g) {
+  return serially(async () => {
+    await (holdersReady ||= Promise.all([ensureAppGroup(), loadHolders()]).catch((e) => { holdersReady = null; throw e; }));
+    const username = appUser(uid);
+    const rolename = username;
+    const want = wantedAcls(g);
+    const [roleInfo, clientInfo] = await dynsecBatch([
+      { command: 'getRole', rolename },
+      { command: 'getClient', username },
+    ]);
+    const cmds = [];
+    // Sessions to disconnect so they reconnect under the changed rules. Changing a
+    // role's rules does NOT disconnect anyone using it (2.0.18, logins created
+    // while the broker runs -- tested 2026-09-15): an existing subscription would
+    // go on delivering a removed child's messages. Disabling and re-enabling the
+    // login in the same message does disconnect, and the phone's automatic
+    // reconnect -- same password -- resubscribes under the new rules.
+    const kick = new Set();
+    if (roleInfo.error) {
+      cmds.push({ command: 'createRole', rolename, acls: want.map(aclObj) });
+    } else {
+      const have = roleInfo.data.role.acls || [];
+      const wantKeys = new Set(want.map(aclKey));
+      const haveKeys = new Set(have.map((a) => `${a.acltype} ${a.topic}`));
+      for (const a of have) if (!wantKeys.has(`${a.acltype} ${a.topic}`)) cmds.push({ command: 'removeRoleACL', rolename, acltype: a.acltype, topic: a.topic });
+      for (const a of want) if (!haveKeys.has(aclKey(a))) cmds.push({ command: 'addRoleACL', rolename, ...aclObj(a) });
+      // Additions too: a subscription the phone attempted before this change was
+      // refused, and only a reconnect makes it try again.
+      if (cmds.length && !clientInfo.error) kick.add(username);
+    }
+    if (clientInfo.error) {
+      cmds.push({ command: 'createClient', username, password: appPassword(uid), textname: `app:${uid}`,
+        roles: [{ rolename }], groups: [{ groupname: APP_GROUP }] });
+    }
+    // A hash this account now owns comes off every other parent's role.
+    const stripped = [];
+    for (const h of [g.parent, ...g.devices].filter(Boolean)) {
+      for (const other of holders.get(h) || []) {
+        if (other === rolename) continue;
+        for (const [acltype, topic] of aclsNaming(h)) cmds.push({ command: 'removeRoleACL', rolename: other, acltype, topic });
+        kick.add(other);                                     // role name == its login's username
+        stripped.push(`${short(h)} from ${other.slice(0, 12)}..`);
+      }
+    }
+    for (const u of kick) cmds.push({ command: 'disableClient', username: u }, { command: 'enableClient', username: u });
+    if (!cmds.length) return false;
+    const out = await dynsecBatch(cmds);
+    const bad = out.find((r) => r.error && !(r.command === 'removeRoleACL' && /not found/i.test(r.error)));
+    if (bad) throw new Error(`${bad.command}: ${bad.error}`);
+    indexRole(rolename, want.map(aclObj));
+    for (const h of [g.parent, ...g.devices].filter(Boolean)) {
+      for (const other of [...(holders.get(h) || [])]) if (other !== rolename) holders.get(h).delete(other);
+    }
+    log('INFO', `APP ROLE ${uid.slice(0, 8)}.. parent=${g.parent ? short(g.parent) : '-'} devices=${g.devices.length}` +
+      `${g.refused.length ? ` refused=${g.refused.map(short).join(',')}` : ''}${stripped.length ? ` stripped ${stripped.join('; ')}` : ''}` +
+      ` (${cmds.length} change${cmds.length === 1 ? '' : 's'})`);
+    return true;
+  });
+}
+
+async function removeAppLogin(uid) {
+  return serially(async () => {
+    await dynsecBatch([
+      { command: 'deleteClient', username: appUser(uid) },
+      { command: 'deleteRole', rolename: appUser(uid) },
+    ]);
+    indexRole(appUser(uid), []);
+  });
+}
+
+const appRecent = new Map();          // uid -> call timestamps
+const APP_CALLS_PER_10_MIN = 40;
+
+async function appLogin(token, ip) {
+  const uid = await verifyIdToken(token);
+  if (!uid) {
+    log('INFO', `app-login refused from ${ip}: bad token`);
+    return [401, { status: 'unauthenticated' }];
+  }
+  const now = Date.now();
+  const calls = (appRecent.get(uid) || []).filter((t) => now - t < 600_000);
+  calls.push(now); appRecent.set(uid, calls);
+  if (calls.length > APP_CALLS_PER_10_MIN) return [429, { status: 'slow-down' }];
+
+  const g = await grantsFor(uid);
+  await applyGrants(uid, g);
+  return [200, {
+    status: 'ok',
+    username: appUser(uid),
+    password: appPassword(uid),
+    url: APP_URL,
+    granted: [g.parent, ...g.devices].filter(Boolean),
+  }];
+}
+
+// Daily: every app role re-derived from the database, so a grant can never
+// outlive the identity behind it for long -- whatever the phone does. An account
+// with no profile and no devices left (deleted, or never set up) loses its login;
+// the app asks for a new one if it ever comes back.
+const APP_RECONCILE_EVERY_MS = parseInt(env.APP_RECONCILE_EVERY_MS || String(24 * 3600_000), 10);
+
+async function reconcileApps() {
+  const roles = await serially(loadHolders);
+  let changed = 0, removed = 0;
+  for (const r of roles) {
+    const uid = r.rolename.slice('app-'.length);
+    const g = await grantsFor(uid);
+    if (!g.hasAccount) { await removeAppLogin(uid); removed++; log('INFO', `APP LOGIN REMOVED ${uid.slice(0, 8)}..: no account data`); continue; }
+    if (await applyGrants(uid, g)) changed++;
+  }
+  log('INFO', `app reconcile: ${roles.length} app logins checked, ${changed} updated, ${removed} removed`);
+  return { checked: roles.length, changed, removed };
+}
+
+setTimeout(() => reconcileApps().catch((e) => log('WARN', 'app reconcile failed:', e.message)), 90_000);
+setInterval(() => reconcileApps().catch((e) => log('WARN', 'app reconcile failed:', e.message)), APP_RECONCILE_EVERY_MS);
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
@@ -369,13 +716,39 @@ function parse(body, type) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+  const extra = {};
+  const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', ...extra }); res.end(JSON.stringify(obj)); };
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress);
   // Run a sweep now. Only reachable on the droplet itself: nginx proxies nothing
-  // but /enroll, and anything that did come through nginx carries this header.
-  if (req.url === '/internal/sweep' && req.method === 'POST' && !req.headers['x-forwarded-for']) {
+  // but /enroll and /app-login, and anything that did come through nginx carries
+  // this header.
+  const internal = req.method === 'POST' && !req.headers['x-forwarded-for'];
+  if (req.url === '/internal/sweep' && internal) {
     try { return send(200, await sweep()); } catch (e) { return send(503, { status: 'unavailable', detail: e.message }); }
   }
+  if (req.url === '/internal/app-reconcile' && internal) {
+    try { return send(200, await reconcileApps()); } catch (e) { return send(503, { status: 'unavailable', detail: e.message }); }
+  }
+
+  if (req.url === '/app-login') {
+    const origin = req.headers.origin;
+    if (origin && APP_ORIGINS.has(origin)) Object.assign(extra, { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' });
+    extra['Cache-Control'] = 'no-store';
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { ...extra, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600' });
+      return res.end();
+    }
+    if (req.method !== 'POST') return send(405, { status: 'method' });
+    const token = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '')?.[1];
+    try {
+      const [code, body] = await appLogin(token, ip);
+      return send(code, body);
+    } catch (e) {
+      log('ERROR', `app-login failed: ${e.message}`);
+      return send(503, { status: 'unavailable' });
+    }
+  }
+
   if (req.url !== '/enroll') return send(404, { status: 'not-found' });
   if (req.method !== 'POST') return send(405, { status: 'method' });
 

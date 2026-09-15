@@ -183,3 +183,63 @@ View it with:
 
 It logs in with the SHARED device password, so it stops working at MQTT Stage 6
 unless it is given a read-only login of its own first.
+
+## App logins (`/app-login`, port 8886) -- 2026-09-15
+
+Replaces the shared `dotdash-app` password (public: it is in every copy of the
+app, and it reads every family's messages). `bridge/enroll.mjs` verifies the
+caller's Firebase ID token and gives that parent a broker login of their own,
+`app-<uid>`, whose role names only their parent hash and the devices whose
+**identity records** name their account. Pairing topics are shared through the
+`apps` group. The file header documents the protocol.
+
+- Port 8886 is a websockets listener loading the dynamic security plugin with
+  the SAME file as 8885. In 2.0.18 that is one store shared by both listeners.
+- The password is an HMAC of the uid under `APP_LOGIN_SECRET`
+  (`/root/dotdash_dynsec/app-login.env`, 0600). Revoke every app login at once
+  by changing it and deleting the `app-*` clients.
+- **A role's rules changing disconnects nobody** for logins created while the
+  broker runs (tested). So every change also sends `disableClient` +
+  `enableClient` for that login in the same message; the phone reconnects and
+  resubscribes under the new rules. Without it a removed child's messages keep
+  flowing to an already-subscribed phone.
+- Taking a hash away: when a parent is granted a hash, it is stripped from any
+  other parent's role (a child re-paired to a new family), and they are kicked.
+- Daily reconcile re-derives every app role from the database; an account with
+  no profile and no devices loses its login. Run one now:
+  `curl -X POST http://127.0.0.1:8790/internal/app-reconcile`
+- nginx: `location = /app-login`, zone `applogin` 30 r/m, burst 20.
+- The app falls back to the shared login only if `/app-login` is unreachable.
+  **Retiring `dotdash-app`** (remove it from `/etc/mosquitto/passwd` and
+  `aclfile`, `systemctl reload mosquitto`) closes the hole for good -- but breaks
+  every app build still carrying the shared login, so only after the web app and
+  a TestFlight/App Store build with personal logins are the ones people use.
+  Check who still uses it: `grep "u'dotdash-app'" /var/log/mosquitto/mosquitto.log | tail`.
+
+Test it end to end (42 checks, two throwaway parents, all cleaned up):
+
+    ssh root@45.55.47.32 'cd /root/dotdash_bridge && set -a && . /root/dotdash_demo/authtest.env \
+      && . /root/dotdash_dynsec/admin.env && set +a \
+      && node applogintest.mjs https://app.dotdashdevice.com/app-login mqtt.dotdashdevice.com 8883 8886'
+
+`testusers.mjs` must sit beside it: it signs custom tokens with the service
+account to make throwaway Firebase users (and deletes them).
+
+Enrollment and key resets now also require the hash's identity record to name
+the account (a device record alone is writable by anyone for any hash).
+`enrolltest.mjs` covers both (28 checks).
+
+## Database rules
+
+`firestore.rules` at the repo root is the source of truth. The service account
+may release rules but not use Google's offline rules tester, so
+`bridge/tools/rules.mjs` tests live with two throwaway users on throwaway records:
+
+    scp firestore.rules root@45.55.47.32:/root/dotdash_rules/
+    ssh root@45.55.47.32 'cd /root/dotdash_bridge && node rules.mjs deploy /root/dotdash_rules/firestore.rules'
+
+`deploy` compiles, releases, runs 18 cases (retrying for two minutes while new
+rules spread), and re-releases the previous ruleset by itself if they fail.
+`node rules.mjs livetest` runs the cases against whatever is live;
+`node rules.mjs rollback <ruleset>` restores one. The ruleset before the
+identities fix was `projects/dotdash-6833f/rulesets/e4a5bfb6-81cf-4df0-b090-4521b65136d9`.

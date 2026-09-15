@@ -38,6 +38,8 @@ const MAC_B = 'DDEF' + crypto.randomBytes(4).toString('hex').toUpperCase();
 const SECRET_B = crypto.randomBytes(24).toString('hex');
 const docRefB = db.doc(`artifacts/dotdash/users/${DEMO_UID}/devices/${MAC_B}`);
 const INTRUDER_UID = 'enrolltest-intruder-' + crypto.randomBytes(3).toString('hex');
+const identRef = (h) => db.doc(`artifacts/dotdash/public/data/identities/${h}`);
+const lookalikeRef = db.doc(`artifacts/dotdash/users/${INTRUDER_UID}/devices/${MAC}`);
 const adminLogin = { username: process.env.DYNSEC_ADMIN_USER, password: process.env.DYNSEC_ADMIN_PASS };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -110,6 +112,9 @@ const sweepNow = async () => (await fetch('http://127.0.0.1:8790/internal/sweep'
 async function cleanup() {
   await docRef.delete().catch(() => {});
   await docRefB.delete().catch(() => {});
+  await lookalikeRef.delete().catch(() => {});
+  await identRef(HASH).delete().catch(() => {});
+  await identRef(HASH_B).delete().catch(() => {});
   const admin = mqtt.connect(`mqtts://${host}:${keyPort}`, { username: process.env.DYNSEC_ADMIN_USER, password: process.env.DYNSEC_ADMIN_PASS, reconnectPeriod: 0 });
   await new Promise((r) => { admin.once('connect', r); admin.once('error', r); });
   admin.publish('$CONTROL/dynamic-security/v1', JSON.stringify({ commands: [
@@ -129,9 +134,13 @@ try {
   await check('unpaired device refused', { code: 403, status: 'not-paired' }, () => post({ hash: HASH, mac: MAC, secret: SECRET }));
 
   await docRef.set({ hashedId: HASH, identity: { name: 'ENROLLTEST', pin: '0000' }, friends: [], phrases: [], pairingCode: MAC.slice(-6) });
+  // A device record alone proves nothing -- any account can write one naming any hash.
+  await check('device record without the identity record refused', { code: 403, status: 'not-paired' }, () => post({ hash: HASH, mac: MAC, secret: SECRET }));
+  await identRef(HASH).set({ owner: DEMO_UID, idString: 'ENROLLTEST0000', type: 'child' });
+  await lookalikeRef.set({ hashedId: HASH, identity: { name: 'LOOKALIKE', pin: '0000' }, friends: [], phrases: [] });
 
   await check('paired hash with the wrong MAC refused', { code: 403, status: 'not-paired' }, () => post({ hash: HASH, mac: 'DDEE00000000', secret: SECRET }));
-  await check('paired device enrolls', { code: 201, status: 'enrolled' }, () => post({ hash: HASH, mac: MAC, secret: SECRET }));
+  await check('paired device enrolls (a look-alike record in another account does not get in the way)', { code: 201, status: 'enrolled' }, () => post({ hash: HASH, mac: MAC, secret: SECRET }));
   await check('its new key logs in', true, () => login(HASH, SECRET));
   await check('same device, same secret again: accepted', { code: 200, status: 'already-enrolled' }, () => post({ hash: HASH, mac: MAC, secret: SECRET }, { json: true }));
   await check('same device, DIFFERENT secret: locked', { code: 409, status: 'locked' }, () => post({ hash: HASH, mac: MAC, secret: OTHER_SECRET }));
@@ -150,7 +159,7 @@ try {
   // ---- reset, unlink, sweep
   await check('key records its device record path', docRef.path, async () => (await dynsecGet(HASH)).data?.client?.textname);
 
-  await check('someone else\'s reset request is refused (no record under their account)', true, async () => {
+  await check('someone else\'s reset request is refused, even with a look-alike device record under their account', true, async () => {
     await requestReset(INTRUDER_UID, MAC, HASH);
     return login(HASH, SECRET);
   });
@@ -163,6 +172,7 @@ try {
   await check('and that new key logs in', true, () => login(HASH, OTHER_SECRET));
 
   await docRefB.set({ hashedId: HASH_B, identity: { name: 'ENROLLTESTB', pin: '0000' }, friends: [], phrases: [] });
+  await identRef(HASH_B).set({ owner: DEMO_UID, idString: 'ENROLLTESTB0000', type: 'child' });
   await check('second test device enrolls', { code: 201, status: 'enrolled' }, () => post({ hash: HASH_B, mac: MAC_B, secret: SECRET_B }));
   await docRefB.delete();
   await check('unlink: reset after the record is gone still removes a key enrolled for that path', true, () => requestReset(DEMO_UID, MAC_B, HASH_B));

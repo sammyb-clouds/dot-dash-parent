@@ -424,6 +424,65 @@
       }
     }
 
+    // --- Broker login ---
+    // Each parent signs in to the broker with a login of their own, handed out by
+    // /app-login (bridge/enroll.mjs) in exchange for their Firebase ID token. It
+    // reaches only this account's parent inbox and devices, plus pairing -- the
+    // broker refuses everything else, including another family's child.
+    //
+    // The shared login below is the old way: its password is in every copy of
+    // this file, and it can read every family's messages. It stays only as a
+    // fallback while every installed app moves over; once the broker stops
+    // accepting it, delete it from here.
+    const APP_LOGIN_URL = 'https://app.dotdashdevice.com/app-login';
+    const SHARED_BROKER = {
+      url: 'wss://mqtt.dotdashdevice.com:8884/mqtt',
+      username: 'dotdash-app',
+      password: 'sqEh8Vx6hNE5ZaBKDG2LP1X',
+    };
+
+    // What the current personal login may reach. `personal` is false on the
+    // shared login, which reaches everything and never needs refreshing.
+    const brokerAccess = { personal: false, granted: new Set(), inFlight: null, lastAsked: '' };
+
+    async function fetchBrokerLogin(user) {
+      const token = await user.getIdToken();
+      const res = await fetch(APP_LOGIN_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!res.ok) throw new Error(`app-login HTTP ${res.status}`);
+      const login = await res.json();
+      brokerAccess.granted = new Set(login.granted || []);
+      return login;
+    }
+
+    // Make the broker's rules for this parent match `hashes` (their parent ID and
+    // every device) before anything is published to them. The server re-reads
+    // the account; when the rules change it disconnects this phone, which
+    // reconnects on its own with the same password and resubscribes under the
+    // new rules. A publish sent BEFORE this finished would be silently dropped
+    // by the broker -- so pairing awaits it before its first commands.
+    //
+    // `exact` also asks when access should shrink (a device was unlinked).
+    // Asking twice for the same set is skipped, so a hash the server refuses
+    // (its identity record belongs to someone else) cannot cause a loop.
+    async function ensureBrokerAccess(user, hashes, { exact = false } = {}) {
+      if (!brokerAccess.personal || !user) return;
+      const want = [...new Set(hashes.filter(Boolean))].sort();
+      const key = want.join(',');
+      const satisfied = () => want.every(h => brokerAccess.granted.has(h))
+        && (!exact || [...brokerAccess.granted].every(h => want.includes(h)));
+      while (brokerAccess.inFlight) await brokerAccess.inFlight.catch(() => {});
+      if (satisfied() || brokerAccess.lastAsked === key) return;
+      brokerAccess.lastAsked = key;
+      brokerAccess.inFlight = fetchBrokerLogin(user);
+      try { await brokerAccess.inFlight; }
+      catch (e) { console.warn('[mqtt] could not refresh broker access:', e.message); }
+      finally { brokerAccess.inFlight = null; }
+    }
+
     // --- Default Phrases ---
     const defaultPhrases = ["HELLO!", "HOW ARE YOU?", "COME OVER?", "MEET AT PARK?", "GREAT!", "OK", "MAYBE LATER", "BUSY", ":)", ":(", "ASKING PARENT", "CALL MY PARENT", "BYE!"];
 
@@ -668,14 +727,11 @@
            return;
         }
 
-        // =========================================================================
-        // ✅ HIVEMQ SERVER CONFIGURATION ✅
-        // =========================================================================
-        const brokerUrl = 'wss://mqtt.dotdashdevice.com:8884/mqtt';
         let client = null;
+        let cancelled = false;
 
         let isCanvasBlocked = false;
-        try { const testWs = new WebSocket(brokerUrl); testWs.close(); } 
+        try { const testWs = new WebSocket(SHARED_BROKER.url); testWs.close(); } 
         catch (err) { isCanvasBlocked = true; }
 
         if (isCanvasBlocked) {
@@ -688,23 +744,9 @@
           };
           setMqttClient(client);
           setTimeout(() => { client.connected = true; client.emit('connect'); }, 800);
-        } else {
-          // Broker credentials. These are PUBLIC by necessity -- this file is served
-          // to every parent, so treat them as an identity, not a secret. Security
-          // comes from the broker ACL: this account may command and claim devices
-          // and read Monitor, and nothing outside doorbell/. Devices use a separate
-          // account that cannot read Monitor or claim a device.
-          const options = { 
-            username: 'dotdash-app', 
-            password: 'sqEh8Vx6hNE5ZaBKDG2LP1X', 
-            clientId: 'web_' + Math.random().toString(16).substr(2, 8) 
-          };
-          client = mqtt.connect(brokerUrl, options);
-          setMqttClient(client);
         }
-        // =========================================================================
 
-        client.on('message', async (topic, message) => {
+        const onMessage = async (topic, message) => {
           const payload = message.toString();
 
           // ---- Low battery ----
@@ -944,9 +986,45 @@
               if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
             }
           }
-        });
+        };
 
-        return () => { if (client && typeof client.end === 'function') client.end(); };
+        // This parent's own broker login (see ensureBrokerAccess), or -- only if
+        // the login service cannot be reached -- the shared one.
+        const connectBroker = async () => {
+          let login = null;
+          try { login = await fetchBrokerLogin(user); }
+          catch (e) { console.warn('[mqtt] personal broker login unavailable, using the shared login:', e.message); }
+          if (cancelled) return;
+          brokerAccess.personal = !!login;
+          brokerAccess.lastAsked = '';
+          const target = login || SHARED_BROKER;
+          client = mqtt.connect(target.url, {
+            username: target.username,
+            password: target.password,
+            clientId: 'web_' + Math.random().toString(16).substr(2, 8),
+          });
+          client.on('message', onMessage);
+          // A personal login the broker no longer accepts (the server's daily
+          // clean-up removes logins of accounts with nothing paired) is asked for
+          // again -- at most once a minute -- and the next automatic reconnect
+          // uses it.
+          let lastRenew = 0;
+          client.on('error', async (err) => {
+            if (!brokerAccess.personal || !/not authori[sz]ed|bad user ?name or password/i.test(err?.message || '')) return;
+            if (Date.now() - lastRenew < 60000) return;
+            lastRenew = Date.now();
+            try {
+              const renewed = await fetchBrokerLogin(user);
+              client.options.password = renewed.password;
+            } catch (e) {}
+          });
+          setMqttClient(client);
+        };
+
+        if (isCanvasBlocked) client.on('message', onMessage);
+        else connectBroker();
+
+        return () => { cancelled = true; if (client && typeof client.end === 'function') client.end(); };
       }, [user]); 
 
       // 4. Dynamic Subscriptions
@@ -954,13 +1032,21 @@
         if (!mqttClient) return;
 
         const updateSubscriptions = async () => {
-           if (parentProfile?.virtualId) {
-               const hashedParent = await hashId(parentProfile.virtualId);
-               mqttClient.subscribe(`doorbell/msg/${hashedParent}`, { qos: 1 });
-               mqttClient.subscribe(`doorbell/msg/${hashedParent}/#`, { qos: 1 });
+           // The broker's rules for this parent follow the device list: a newly
+           // paired device is added, an unlinked one taken away.
+           const parentHash = parentProfile?.virtualId && parentProfile.virtualId !== 'PENDING'
+             ? await hashId(parentProfile.virtualId) : null;
+           const deviceHashes = await Promise.all(devices.map(d => d.hashedId || hashId(d.identity.name + d.identity.pin)));
+           // Only once the profile has loaded: before that the lists are merely
+           // empty, and asking would be a wasted request. (The server decides from
+           // the database either way -- the app cannot widen or narrow it.)
+           if (parentProfile) await ensureBrokerAccess(user, [parentHash, ...deviceHashes], { exact: true });
+
+           if (parentHash) {
+               mqttClient.subscribe(`doorbell/msg/${parentHash}`, { qos: 1 });
+               mqttClient.subscribe(`doorbell/msg/${parentHash}/#`, { qos: 1 });
            }
-           for (const d of devices) {
-               const hash = d.hashedId || await hashId(d.identity.name + d.identity.pin);
+           for (const hash of deviceHashes) {
                mqttClient.subscribe(`doorbell/presence/${hash}`);
                mqttClient.subscribe(`doorbell/msg/${hash}/#`, { qos: 1 });
                mqttClient.subscribe(`doorbell/monitor/${hash}/#`, { qos: 1 });
@@ -1802,6 +1888,10 @@
                   await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', childHash), {
                      owner: user.uid, idString: childName+childPin, type: 'child'
                   });
+                  // The broker refuses commands to a device this parent's login
+                  // does not cover yet -- silently -- so the first sync below must
+                  // wait for the records just written to be granted.
+                  await ensureBrokerAccess(user, [childHash, parentProfile?.virtualId ? await hashId(parentProfile.virtualId) : null]);
 
                   setClaimedMac(mac);
                   setLoading(false);
@@ -1849,6 +1939,7 @@
          const childHash = await hashId(childName + childPin);
          const devRef = doc(db, 'artifacts', appId, 'users', user.uid, 'devices', claimedMac);
          await updateDoc(devRef, { friends: [pId] });
+         await ensureBrokerAccess(user, [pHash, childHash]);
          mqttClient.publish(`doorbell/cmd/${childHash}`, `CMD,SYNC_FRIENDS,${pId}`, {qos: 1, retain: true});
 
          setFriends([pId]);

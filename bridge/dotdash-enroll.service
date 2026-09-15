@@ -1,5 +1,5 @@
 [Unit]
-Description=Dot Dash device key enrollment
+Description=Dot Dash device key enrollment and app broker logins
 After=network-online.target mosquitto.service
 Wants=network-online.target
 
@@ -8,6 +8,8 @@ Type=simple
 WorkingDirectory=/root/dotdash_bridge
 # Admin login for the broker's key store. 0600, root only, never in git.
 EnvironmentFile=/root/dotdash_dynsec/admin.env
+# APP_LOGIN_SECRET: the key app broker passwords are derived from. 0600, never in git.
+EnvironmentFile=/root/dotdash_dynsec/app-login.env
 ExecStart=/usr/bin/node /root/dotdash_bridge/enroll.mjs
 Restart=always
 RestartSec=5
