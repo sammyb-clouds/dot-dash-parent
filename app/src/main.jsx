@@ -131,6 +131,11 @@
     // seen stay visible; this only bounds what is re-read from the server.
     const MESSAGE_PAGE = 100;
 
+    // Beta only: the "Beta firmware" row in Settings, which asks a device to install
+    // its latest -t test build (firmware CMD,BETA_UPDATE). Set to false -- and
+    // remove the firmware side -- when the product leaves beta.
+    const SHOW_BETA_FIRMWARE = true;
+
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const PUSH_MINT_KEY = 'dotdash_push_minted';
     const VAPID_PUBLIC_KEY =
@@ -499,6 +504,8 @@
       const [deviceArcade, setDeviceArcade] = useState({});
       // Same idea for the morse typewriter ("Dot Dash Mode" in Settings).
       const [deviceTypewriter, setDeviceTypewriter] = useState({});
+      // What each device reports it is running: { version, line, build }.
+      const [deviceFirmware, setDeviceFirmware] = useState({});
       
       const isAppActiveRef = useRef(true); 
       
@@ -835,6 +842,13 @@
 
           if (monitorTopics[baseTopic]) {
             const sourceChildMac = monitorTopics[baseTopic];
+
+            // The device reporting its firmware: FW,<version>,<line>,<build date time>.
+            if (topicParts[3] === 'fw') {
+              const [tag, version, line, ...rest] = payload.split(',');
+              if (tag === 'FW') setDeviceFirmware(prev => ({ ...prev, [sourceChildMac]: { version, line, build: rest.join(',') } }));
+              return; // retained and device-owned; do not auto-clear
+            }
 
             // The device reporting its morse typewriter -- the receipt for SET_TYPEWRITER.
             if (topicParts[3] === 'typewriter') {
@@ -1201,7 +1215,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} />
             </div>}
           </div>
 
@@ -2025,7 +2039,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {} }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        const [unlinkCode, setUnlinkCode] = useState('');
        const [newFriendId, setNewFriendId] = useState('');
@@ -2035,6 +2049,9 @@
        const [openWifi, setOpenWifi] = useState(false);
        const [openArcade, setOpenArcade] = useState(false);
        const [openTypewriter, setOpenTypewriter] = useState(false);
+       const [openBeta, setOpenBeta] = useState(false);
+       // { deviceId, fromBuild, msg } while an update the app asked for is pending.
+       const [betaUpdate, setBetaUpdate] = useState(null);
        const [openSecurity, setOpenSecurity] = useState(false);
        const [newSsid, setNewSsid] = useState('');
        const [newWifiPass, setNewWifiPass] = useState('');
@@ -2111,6 +2128,26 @@
          typewriterReported === undefined ? 'Applies the next time the device connects.'
          : typewriterReported === typewriterWanted ? (typewriterWanted ? 'Morse typewriter is on for this device.' : 'Morse typewriter is off for this device.')
          : 'Waiting for the device to pick this up.';
+
+       // ---------- BETA FIRMWARE ----------
+       const firmware = activeDevice ? deviceFirmware[activeDevice.id] : undefined;
+       const handleBetaUpdate = () => {
+         if (!activeDevice || !mqttClient) return;
+         const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
+         if (!window.confirm(`Install the latest beta firmware on ${name}'s Dot Dash? Someone will need to press ENTER on the device to start, and it should stay plugged in until it restarts.`)) return;
+         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, 'CMD,BETA_UPDATE', { qos: 1, retain: true });
+         setBetaUpdate({ deviceId: activeDevice.id, fromBuild: firmware?.build || '',
+           msg: childOnlineStatus?.[activeDevice.id]
+             ? `Sent. Press ENTER on ${name}'s Dot Dash to start the update.`
+             : `Sent. It will ask for ENTER the next time ${name}'s Dot Dash is online.` });
+       };
+       // The device restarts into the new build and reports it: that is the proof.
+       useEffect(() => {
+         if (!betaUpdate || !activeDevice || betaUpdate.deviceId !== activeDevice.id) return;
+         if (firmware?.build && firmware.build !== betaUpdate.fromBuild) {
+           setBetaUpdate({ ...betaUpdate, fromBuild: firmware.build, msg: `Updated. Now running the build from ${firmware.build}.` });
+         }
+       }, [firmware?.build]);
 
        const arcadeStatus =
          arcadeReported === undefined ? 'Applies the next time the device connects.'
@@ -2801,6 +2838,49 @@
                   </>
                 );
               })()}
+
+              {/* Beta firmware (collapsible). Beta only -- SHOW_BETA_FIRMWARE. Asks
+                  the device to install its own latest test build; the device
+                  picks the URL and waits for ENTER, so this sends no URL and
+                  cannot install anything by itself. */}
+              {SHOW_BETA_FIRMWARE && activeDevice && (
+                <>
+                  <button onClick={() => setOpenBeta(o => !o)} className={`w-full flex items-center justify-between p-4 bg-fuchsia-50 border border-fuchsia-100 active:bg-fuchsia-100 transition-colors ${openBeta ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                     <div className="flex items-center space-x-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-fuchsia-500 text-white flex items-center justify-center shrink-0">
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6"/><path d="M10 3v6.5L4.6 18.2A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.7-2.8L14 9.5V3"/><path d="M7.5 15h9"/></svg>
+                        </div>
+                        <div className="text-left min-w-0">
+                           <div className="font-bold text-gray-800 text-base">Beta firmware</div>
+                           <div className="text-xs text-gray-500 truncate">{firmware ? `Build ${firmware.build}` : 'Build not reported'}</div>
+                        </div>
+                     </div>
+                     <div className="flex items-center space-x-2 shrink-0 ml-2">
+                        <span className="text-white text-xs font-bold h-[22px] px-2 flex items-center justify-center rounded-full bg-fuchsia-500">BETA</span>
+                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-fuchsia-400 transition-transform duration-200 ${openBeta ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                     </div>
+                  </button>
+                  {openBeta && (
+                    <div className="border border-t-0 border-fuchsia-100 rounded-b-2xl bg-white p-4 mb-3">
+                      <p className="text-gray-500 text-sm leading-relaxed">
+                        Install the newest test firmware on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device, ahead of the general release. Someone presses ENTER on the device to start; keep it plugged in until it restarts.
+                      </p>
+                      {firmware ? (
+                        <p className="mt-2 text-xs text-gray-400 font-mono">v{firmware.version} &middot; {String(firmware.line || '').toUpperCase()} &middot; {firmware.build}</p>
+                      ) : (
+                        <p className="mt-2 text-xs text-gray-400 leading-snug">This device hasn't reported its firmware. Devices need one update through their setup page before they can be updated from here.</p>
+                      )}
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-xs text-gray-500 leading-snug flex-1">{betaUpdate?.deviceId === activeDevice.id ? betaUpdate.msg : ''}</p>
+                        <button onClick={handleBetaUpdate} disabled={!firmware}
+                          className="shrink-0 text-sm font-bold rounded-full px-4 py-2 border bg-fuchsia-600 text-white border-fuchsia-600 disabled:opacity-40">
+                          Install beta
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
             </div>
 
