@@ -2049,10 +2049,9 @@
        const [openWifi, setOpenWifi] = useState(false);
        const [openArcade, setOpenArcade] = useState(false);
        const [openTypewriter, setOpenTypewriter] = useState(false);
-       const [openBeta, setOpenBeta] = useState(false);
+       const [openAdvanced, setOpenAdvanced] = useState(false);
        // { deviceId, fromBuild, msg } while an update the app asked for is pending.
        const [betaUpdate, setBetaUpdate] = useState(null);
-       const [openSecurity, setOpenSecurity] = useState(false);
        const [newSsid, setNewSsid] = useState('');
        const [newWifiPass, setNewWifiPass] = useState('');
        const [revealed, setRevealed] = useState({});
@@ -2775,62 +2774,97 @@
                 </>
               )}
 
-              {/* Connection security (collapsible). A conflict -- another device
-                  tried to enroll with this device's identity -- turns the row red
-                  so it is seen without being opened. Devices without a private
-                  broker key yet have no mqttKey, and get no reset. */}
+              {/* Advanced settings (collapsible): per-device settings that only
+                  testers or advanced users need. One row that opens onto its
+                  sections -- no rows nested inside it. Add future advanced
+                  per-device settings here as further sections. */}
               {activeDevice && (() => {
+                const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
                 const k = activeDevice.mqttKey || null;
                 const ms = (t) => (t && t.toMillis ? t.toMillis() : 0);
+                // A conflict -- another device tried to enroll with this device's
+                // identity -- needs a parent, so it shows on the collapsed row too.
                 const conflict = !!k && ms(k.conflictAt) > ms(k.resetAt);
-                const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
                 const since = k?.enrolledAt?.toDate ? k.enrolledAt.toDate().toLocaleDateString() : null;
-                const summary = conflict ? 'Needs your attention'
-                  : !k ? 'Standard connection'
-                  : k.disabled ? 'Standard connection'
-                  : since ? 'Private connection' : 'Setting up private connection';
-                const tone = conflict
-                  ? { row: 'bg-red-50 border-red-200 active:bg-red-100', dot: 'bg-red-500', chev: 'text-red-400', panel: 'border-red-200' }
-                  : { row: 'bg-slate-50 border-slate-200 active:bg-slate-100', dot: 'bg-slate-500', chev: 'text-slate-400', panel: 'border-slate-200' };
+                const sectionTitle = "text-xs font-bold uppercase tracking-wider flex items-center mb-2";
                 return (
                   <>
-                    <button onClick={() => setOpenSecurity(o => !o)} className={`w-full flex items-center justify-between p-4 border transition-colors ${tone.row} ${openSecurity ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                    <button onClick={() => setOpenAdvanced(o => !o)} className={`w-full flex items-center justify-between p-4 border transition-colors ${conflict ? 'bg-red-50 border-red-200 active:bg-red-100' : 'bg-slate-50 border-slate-200 active:bg-slate-100'} ${openAdvanced ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
                        <div className="flex items-center space-x-3 min-w-0">
-                          <div className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 ${tone.dot}`}>
-                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                          <div className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 ${conflict ? 'bg-red-500' : 'bg-slate-500'}`}>
+                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
                           </div>
                           <div className="text-left min-w-0">
-                             <div className="font-bold text-gray-800 text-base">Connection security</div>
-                             <div className={`text-xs ${conflict ? 'text-red-600 font-bold' : 'text-gray-500'}`}>{summary}</div>
+                             <div className="font-bold text-gray-800 text-base">Advanced settings</div>
+                             <div className={`text-xs ${conflict ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                               {conflict ? 'Connection security needs your attention' : (SHOW_BETA_FIRMWARE ? 'Connection security, beta firmware' : 'Connection security')}
+                             </div>
                           </div>
                        </div>
                        <div className="flex items-center space-x-2 shrink-0 ml-2">
                           {conflict && <span className="bg-red-500 text-white text-xs font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">!</span>}
-                          <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-200 ${tone.chev} ${openSecurity ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                          <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-200 ${conflict ? 'text-red-400' : 'text-slate-400'} ${openAdvanced ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                        </div>
                     </button>
-                    {openSecurity && (
-                      <div className={`border border-t-0 rounded-b-2xl bg-white p-4 mb-3 ${tone.panel}`}>
-                        {conflict ? (
-                          <p className="text-red-800 text-sm leading-relaxed">
-                            Another device tried to use {name}'s private connection. If you recently reset or replaced this Dot Dash, that was probably it. If not, reset the connection so only {name}'s device can use it.
-                          </p>
-                        ) : !k ? (
-                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash uses the standard connection. It has not set up a private connection of its own yet.</p>
-                        ) : k.disabled ? (
-                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is using the standard connection. Private connection is turned off for this device.</p>
-                        ) : since ? (
-                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash has its own private connection, set up {since}.</p>
-                        ) : (
-                          <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is setting up its own private connection.</p>
-                        )}
-                        {k && (
-                          <div className="mt-3 flex items-center justify-between gap-3">
-                            <p className="text-xs text-gray-500 leading-snug flex-1">{keyReset.msg}</p>
-                            <button onClick={handleResetKey} disabled={keyReset.busy}
-                              className={`shrink-0 text-sm font-bold rounded-full px-4 py-2 border disabled:opacity-50 ${conflict ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-200'}`}>
-                              {keyReset.busy ? 'Resetting…' : 'Reset connection'}
-                            </button>
+                    {openAdvanced && (
+                      <div className={`border border-t-0 rounded-b-2xl bg-white p-4 mb-3 divide-y divide-gray-100 ${conflict ? 'border-red-200' : 'border-slate-200'}`}>
+
+                        {/* ---- Connection security ---- */}
+                        <div className="pb-4">
+                          <h4 className={`${sectionTitle} ${conflict ? 'text-red-700' : 'text-gray-700'}`}>
+                            <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            Connection security
+                          </h4>
+                          {conflict ? (
+                            <p className="text-red-800 text-sm leading-relaxed">
+                              Another device tried to use {name}'s private connection. If you recently reset or replaced this Dot Dash, that was probably it. If not, reset the connection so only {name}'s device can use it.
+                            </p>
+                          ) : !k ? (
+                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash uses the standard connection. It has not set up a private connection of its own yet.</p>
+                          ) : k.disabled ? (
+                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is using the standard connection. Private connection is turned off for this device.</p>
+                          ) : since ? (
+                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash has its own private connection, set up {since}.</p>
+                          ) : (
+                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is setting up its own private connection.</p>
+                          )}
+                          {k && (
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <p className="text-xs text-gray-500 leading-snug flex-1">{keyReset.msg}</p>
+                              <button onClick={handleResetKey} disabled={keyReset.busy}
+                                className={`shrink-0 text-sm font-bold rounded-full px-4 py-2 border disabled:opacity-50 ${conflict ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-200'}`}>
+                                {keyReset.busy ? 'Resetting…' : 'Reset connection'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ---- Beta firmware (beta only -- SHOW_BETA_FIRMWARE). Asks the
+                            device to install its own latest test build; the device
+                            picks the URL and waits for ENTER, so this sends no URL
+                            and cannot install anything by itself. ---- */}
+                        {SHOW_BETA_FIRMWARE && (
+                          <div className="pt-4">
+                            <h4 className={`${sectionTitle} text-gray-700`}>
+                              <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6"/><path d="M10 3v6.5L4.6 18.2A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.7-2.8L14 9.5V3"/><path d="M7.5 15h9"/></svg>
+                              Beta firmware
+                              <span className="ml-2 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-fuchsia-500">BETA</span>
+                            </h4>
+                            <p className="text-gray-500 text-sm leading-relaxed">
+                              Install the newest test firmware on {name}'s device, ahead of the general release. Someone presses ENTER on the device to start; keep it plugged in until it restarts.
+                            </p>
+                            {firmware ? (
+                              <p className="mt-2 text-xs text-gray-400 font-mono">v{firmware.version} &middot; {String(firmware.line || '').toUpperCase()} &middot; {firmware.build}</p>
+                            ) : (
+                              <p className="mt-2 text-xs text-gray-400 leading-snug">This device hasn't reported its firmware. Devices need one update through their setup page before they can be updated from here.</p>
+                            )}
+                            <div className="mt-3 flex items-center justify-between gap-3">
+                              <p className="text-xs text-gray-500 leading-snug flex-1">{betaUpdate?.deviceId === activeDevice.id ? betaUpdate.msg : ''}</p>
+                              <button onClick={handleBetaUpdate} disabled={!firmware}
+                                className="shrink-0 text-sm font-bold rounded-full px-4 py-2 border bg-fuchsia-600 text-white border-fuchsia-600 disabled:opacity-40">
+                                Install beta
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2838,49 +2872,6 @@
                   </>
                 );
               })()}
-
-              {/* Beta firmware (collapsible). Beta only -- SHOW_BETA_FIRMWARE. Asks
-                  the device to install its own latest test build; the device
-                  picks the URL and waits for ENTER, so this sends no URL and
-                  cannot install anything by itself. */}
-              {SHOW_BETA_FIRMWARE && activeDevice && (
-                <>
-                  <button onClick={() => setOpenBeta(o => !o)} className={`w-full flex items-center justify-between p-4 bg-fuchsia-50 border border-fuchsia-100 active:bg-fuchsia-100 transition-colors ${openBeta ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
-                     <div className="flex items-center space-x-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-fuchsia-500 text-white flex items-center justify-center shrink-0">
-                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6"/><path d="M10 3v6.5L4.6 18.2A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.7-2.8L14 9.5V3"/><path d="M7.5 15h9"/></svg>
-                        </div>
-                        <div className="text-left min-w-0">
-                           <div className="font-bold text-gray-800 text-base">Beta firmware</div>
-                           <div className="text-xs text-gray-500 truncate">{firmware ? `Build ${firmware.build}` : 'Build not reported'}</div>
-                        </div>
-                     </div>
-                     <div className="flex items-center space-x-2 shrink-0 ml-2">
-                        <span className="text-white text-xs font-bold h-[22px] px-2 flex items-center justify-center rounded-full bg-fuchsia-500">BETA</span>
-                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-fuchsia-400 transition-transform duration-200 ${openBeta ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                     </div>
-                  </button>
-                  {openBeta && (
-                    <div className="border border-t-0 border-fuchsia-100 rounded-b-2xl bg-white p-4 mb-3">
-                      <p className="text-gray-500 text-sm leading-relaxed">
-                        Install the newest test firmware on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device, ahead of the general release. Someone presses ENTER on the device to start; keep it plugged in until it restarts.
-                      </p>
-                      {firmware ? (
-                        <p className="mt-2 text-xs text-gray-400 font-mono">v{firmware.version} &middot; {String(firmware.line || '').toUpperCase()} &middot; {firmware.build}</p>
-                      ) : (
-                        <p className="mt-2 text-xs text-gray-400 leading-snug">This device hasn't reported its firmware. Devices need one update through their setup page before they can be updated from here.</p>
-                      )}
-                      <div className="mt-3 flex items-center justify-between gap-3">
-                        <p className="text-xs text-gray-500 leading-snug flex-1">{betaUpdate?.deviceId === activeDevice.id ? betaUpdate.msg : ''}</p>
-                        <button onClick={handleBetaUpdate} disabled={!firmware}
-                          className="shrink-0 text-sm font-bold rounded-full px-4 py-2 border bg-fuchsia-600 text-white border-fuchsia-600 disabled:opacity-40">
-                          Install beta
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
 
             </div>
 
