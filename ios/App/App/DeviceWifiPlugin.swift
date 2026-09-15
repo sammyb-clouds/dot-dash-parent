@@ -50,7 +50,10 @@ public class DeviceWifiPlugin: CAPPlugin, CAPBridgedPlugin {
                     break
                 }
             }
-            call.reject(error.localizedDescription, "JOIN_FAILED")
+            // Domain and code, not just the sentence: "internal error" (code 8)
+            // usually means the build lacks the Hotspot Configuration capability,
+            // which reads nothing like the network simply not being in range.
+            call.reject("\(error.localizedDescription) [\(error.domain) \(error.code)]", "JOIN_FAILED")
         }
     }
 

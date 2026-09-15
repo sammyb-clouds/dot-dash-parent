@@ -1390,6 +1390,9 @@
       const [phase, setPhase] = useState('INTRO');   // INTRO | WORKING | CHOOSE | OFFLINE | DONE
       const [status, setStatus] = useState('');
       const [error, setError] = useState('');
+      // What iOS or the plugin actually reported, shown small under the message.
+      // Without it every failure looked like "couldn't find the network".
+      const [errorDetail, setErrorDetail] = useState('');
       const [networks, setNetworks] = useState([]);
       const [ssid, setSsid] = useState('');
       const [manualSsid, setManualSsid] = useState('');
@@ -1407,16 +1410,25 @@
         DeviceWifi.leave({ ssid: SETUP_SSID }).catch(() => {});
       }, []);
 
-      const fail = (backTo, message) => { setPhase(backTo); setError(message); };
+      const fail = (backTo, message, detail = '') => { setPhase(backTo); setError(message); setErrorDetail(detail); };
 
       const joinAndScan = async () => {
-        setError(''); setPhase('WORKING'); setStatus('Joining your Dot Dash’s network…');
+        setError(''); setErrorDetail(''); setPhase('WORKING'); setStatus('Joining your Dot Dash’s network…');
         try {
           await withTimeout(DeviceWifi.join({ ssid: SETUP_SSID }), 25000, 'JOIN_TIMEOUT');
         } catch (e) {
-          return fail('INTRO', e?.code === 'USER_DENIED'
-            ? 'The app needs to join the “Dot Dash Setup” network to reach your Dot Dash. Tap Next again and choose Join.'
-            : 'Couldn’t find the “Dot Dash Setup” network. Check that your Dot Dash’s screen says WI-FI SETUP, then try again.');
+          const code = e?.code || '';
+          const detail = [code, e?.message].filter(Boolean).join(' — ');
+          if (code === 'USER_DENIED') {
+            return fail('INTRO', 'The app needs to join the “Dot Dash Setup” network to reach your Dot Dash. Tap Next again and choose Join.', detail);
+          }
+          if (code === 'UNIMPLEMENTED') {
+            return fail('INTRO', 'This version of the app can’t set up Wi-Fi yet. Update the app, or use your Dot Dash’s own setup page.', detail);
+          }
+          if (code === 'JOIN_TIMEOUT') {
+            return fail('INTRO', 'iOS didn’t answer when asked to join “Dot Dash Setup”. Close the app completely, reopen it, and try again.', detail);
+          }
+          return fail('INTRO', 'Couldn’t join the “Dot Dash Setup” network. Check that your Dot Dash’s screen says WI-FI SETUP, then try again.', detail);
         }
 
         setStatus('Finding Wi-Fi networks your Dot Dash can see…');
@@ -1539,7 +1551,12 @@
                 <Step n={isNew ? 2 : 1}>Press <strong>SELECT</strong> (front button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong>, then press <strong>ENTER</strong> (top button).</Step>
                 <Step n={isNew ? 3 : 2}>Press <strong>ENTER</strong> on <strong>WIFI</strong>. When the screen says <strong>WI-FI SETUP</strong>, tap Next.</Step>
               </div>
-              {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
+              {error && (
+                <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">
+                  {error}
+                  {errorDetail && <div className="mt-2 text-xs text-red-400 font-mono break-words">{errorDetail}</div>}
+                </div>
+              )}
               <button onClick={joinAndScan} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4">Next</button>
               <p className="text-xs text-gray-400 leading-relaxed text-center">
                 Your phone will briefly join your Dot Dash’s own network. iOS asks first — tap <strong>Join</strong>, and <strong>Allow</strong> if it asks about devices on your local network.
