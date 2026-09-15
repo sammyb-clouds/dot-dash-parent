@@ -2895,7 +2895,7 @@
                         which the web app cannot do. */}
                     {isNativeApp() && (
                       <button onClick={() => setWifiSetupOpen(true)}
-                        className="mb-2 text-xs font-bold text-teal-700 bg-white border border-teal-200 rounded-full px-3 py-1.5 active:bg-teal-50">
+                        className="mb-2 text-sm font-bold text-white bg-green-600 rounded-full px-4 py-2 shadow-sm active:bg-green-700">
                         WiFi Disconnected?
                       </button>
                     )}
