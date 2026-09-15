@@ -2554,17 +2554,17 @@
               {openWifi && (
                 <div className="border border-t-0 border-teal-100 rounded-b-2xl bg-white p-4 mb-3">
                   <div className="mb-4">
-                    <p className="text-xs text-gray-500 leading-relaxed">
-                      Save up to 5 networks. The device picks whichever it finds.
-                    </p>
                     {/* iOS app only: in-app setup joins the device's own network,
                         which the web app cannot do. */}
                     {isNativeApp() && (
                       <button onClick={() => setWifiSetupOpen(true)}
-                        className="mt-2 text-xs font-bold text-teal-700 bg-white border border-teal-200 rounded-full px-3 py-1.5 active:bg-teal-50">
+                        className="mb-2 text-xs font-bold text-teal-700 bg-white border border-teal-200 rounded-full px-3 py-1.5 active:bg-teal-50">
                         WiFi Disconnected?
                       </button>
                     )}
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Save up to 5 networks. The device picks whichever it finds.
+                    </p>
                   </div>
                   <ul className="space-y-2 mb-4">
                     {wifiNets.map((n) => (
