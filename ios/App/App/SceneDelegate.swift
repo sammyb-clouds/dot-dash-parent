@@ -8,7 +8,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
-        window?.rootViewController = CAPBridgeViewController()
+        // MainViewController, not a bare CAPBridgeViewController: it registers the
+        // app's own native plugins (DeviceWifiPlugin). This line builds the window
+        // in code and so overrides Main.storyboard -- setting the class there alone
+        // left the plugin unregistered, and Wi-Fi setup failed with UNIMPLEMENTED.
+        window?.rootViewController = MainViewController()
         window?.makeKeyAndVisible()
 
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
