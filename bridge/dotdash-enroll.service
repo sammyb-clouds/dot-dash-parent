@@ -1,0 +1,18 @@
+[Unit]
+Description=Dot Dash device key enrollment
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/dotdash_bridge
+# Admin login for the broker's key store. 0600, root only, never in git.
+EnvironmentFile=/root/dotdash_dynsec/admin.env
+ExecStart=/usr/bin/node /root/dotdash_bridge/enroll.mjs
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

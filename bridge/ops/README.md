@@ -71,3 +71,35 @@ Check keys with `bridge/tools/keytest.mjs` (22 checks), alongside `authtest.mjs`
 
 8885 is NOT open in the firewall yet. The tests run from the droplet itself.
 Open it (`ufw allow 8885`) when the first real device needs it.
+
+## Enrollment (`/enroll`)
+
+`bridge/enroll.mjs`, running as `dotdash-enroll.service` from
+`/root/dotdash_bridge` (it shares the bridge's `node_modules` and service
+account) on `127.0.0.1:8790`, reached through nginx at
+`https://app.dotdashdevice.com/enroll`. The file header documents the protocol.
+
+- Issues a key only to a device some parent has already paired: a device record
+  whose id is the MAC and whose `hashedId` is the hash.
+- First enrollment locks. The same secret again succeeds (a device that lost the
+  reply); a different one is refused with 409 and recorded as
+  `mqttKey.conflictAt` / `mqttKey.conflicts` on the device record.
+- Writes `mqttKey.enrolledAt` on success. Never logs or stores a secret; the
+  repeat check is a real broker login with the offered secret.
+- nginx rate limit: 10 requests/minute per address, burst 10
+  (`nginx-dotdash-enroll-zone.conf`, `location = /enroll` in
+  `nginx-dotdash.conf`). After `systemctl reload nginx`, allow a second before
+  testing -- a request that races the reload hits the old workers and 404s.
+
+Check it end to end with `bridge/tools/enrolltest.mjs` (14 checks). It creates a
+throwaway device record under the demo account, enrolls it through the public
+URL, and removes both record and key afterwards:
+
+    ssh root@45.55.47.32 'cd /root/dotdash_bridge && set -a \
+      && . /root/dotdash_demo/authtest.env && . /root/dotdash_dynsec/admin.env && set +a \
+      && node enrolltest.mjs https://app.dotdashdevice.com/enroll mqtt.dotdashdevice.com 8885 8884'
+
+Known gaps, for later stages:
+- Unpairing a device does not delete its key yet.
+- Re-pairing the same name and PIN onto DIFFERENT hardware produces the same hash
+  and hits the lock (409). The parent needs a way to reset a device's key.
