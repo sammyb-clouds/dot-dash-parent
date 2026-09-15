@@ -103,3 +103,30 @@ Known gaps, for later stages:
 - Unpairing a device does not delete its key yet.
 - Re-pairing the same name and PIN onto DIFFERENT hardware produces the same hash
   and hits the lock (409). The parent needs a way to reset a device's key.
+
+## Stage 3 test firmware and per-device revert
+
+C3 firmware that uses per-device keys lives on the `mqtt-keys` branch of the C3
+repo, checked out as a separate worktree at
+`~/Documents/Arduino/Dot Dash/worktrees/mqtt-keys/dot_dash_7_3`, and is published
+as **`dot-dash-code-m.bin`** -- never through the `-t` slots, so ordinary test
+builds cannot pick it up. Build it by hand:
+
+    arduino-cli compile --warnings none --output-dir /tmp/dd-m-build \
+      "~/Documents/Arduino/Dot Dash/worktrees/mqtt-keys/dot_dash_7_3"
+    cp /tmp/dd-m-build/dot_dash_7_3.ino.bin ~/Documents/GitHub/dot-dash-code/dot-dash-code-m.bin
+
+A device on it can be reverted without reflashing:
+
+    ssh root@45.55.47.32 'cd /root/dotdash_bridge && set -a && . /root/dotdash_dynsec/admin.env \
+      && set +a && node devicekey.mjs revoke INSTA0515'
+
+`revoke` removes the key and sets `mqttKey.disabled` so enrollment is refused:
+the device falls back to the shared login and stays there. `allow` lifts it;
+`status` shows the key, enrollment state and conflicts. Flashing the `-t` bin is
+the full revert.
+
+The certificate renewal hook `/etc/letsencrypt/renewal-hooks/deploy/restart-mosquitto.sh`
+restarts mosquitto after renewal. Without it the broker keeps serving the old
+certificate, and keyed devices -- which verify it -- would fall back to the
+shared login once it expired.

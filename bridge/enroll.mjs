@@ -26,8 +26,13 @@
  *
  * Responses (JSON):
  *   201 enrolled          200 already-enrolled     -- both carry { port }
- *   400 bad-request       403 not-paired           409 locked
+ *   400 bad-request       403 not-paired / disabled  409 locked
  *   405 method            429 slow-down            503 unavailable (try later)
+ *
+ * DISABLED. `mqttKey.disabled: true` on a device record refuses enrollment
+ * (403 disabled). With its key also removed, that is the per-device revert: the
+ * device falls back to the shared login and stays there. bridge/tools/devicekey.mjs
+ * does both.
  *
  * On anything but 200/201 the device keeps using the shared login and tries
  * again later. Nothing here can take a device offline.
@@ -183,6 +188,10 @@ async function enroll({ hash, mac, secret }, ip) {
   if (!device) {
     log('INFO', `refused ${short(hash)} mac=${mac} from ${ip}: not paired`);
     return [403, { status: 'not-paired' }];
+  }
+  if (device.data()?.mqttKey?.disabled === true) {
+    log('INFO', `refused ${short(hash)} mac=${mac} from ${ip}: keys disabled for this device`);
+    return [403, { status: 'disabled' }];
   }
 
   if (await clientExists(hash)) {
