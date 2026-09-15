@@ -1961,6 +1961,7 @@
        const [revealed, setRevealed] = useState({});
        const [wifiSyncMsg, setWifiSyncMsg] = useState('');
        const [wifiSetupOpen, setWifiSetupOpen] = useState(false);
+       const [keyReset, setKeyReset] = useState({ busy: false, msg: '' });
 
        // ---------- ARCADE SWITCH ----------
        // Firestore holds what the PARENT chose (absent means on, which is every
@@ -2241,6 +2242,39 @@
          }
        };
 
+       // ---------- DEVICE KEY RESET ----------
+       // A device with its own broker key can be locked out of it: storage wiped,
+       // or a child re-paired onto new hardware under the same name and PIN. The
+       // server only ever issues a device's first key (bridge/enroll.mjs), so the
+       // way back is a parent reset. The request is written under this account,
+       // which the database rules restrict to its owner; the enrollment service
+       // deletes the key and then the request. Once the request is gone the
+       // device is told to enroll again straight away.
+       const requestKeyReset = async (dev, waitMs) => {
+         const ref = doc(db, 'artifacts', appId, 'users', user.uid, 'keyResets', dev.id);
+         await setDoc(ref, { hashedId: dev.hashedId, requestedAt: Date.now() });
+         for (let waited = 0; waited < waitMs; waited += 1000) {
+           await new Promise((r) => setTimeout(r, 1000));
+           if (!(await getDoc(ref)).exists()) return true;
+         }
+         return false;
+       };
+
+       const handleResetKey = async () => {
+         if (!activeDevice) return;
+         const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
+         if (!window.confirm(`Reset ${name}'s private connection? The device will set up a new one by itself within a minute. Messages keep working the whole time.`)) return;
+         setKeyReset({ busy: true, msg: 'Resetting…' });
+         try {
+           const done = await requestKeyReset(activeDevice, 20000);
+           if (!done) return setKeyReset({ busy: false, msg: 'The reset is queued, but the server has not confirmed it yet. Check back in a few minutes.' });
+           try { mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, 'CMD,REENROLL', { qos: 1, retain: true }); } catch (e) {}
+           setKeyReset({ busy: false, msg: `Reset. ${name}'s Dot Dash will set up a new private connection in a moment.` });
+         } catch (e) {
+           setKeyReset({ busy: false, msg: `Could not reset: ${e.message}` });
+         }
+       };
+
        const handleUnlink = async () => {
          if (unlinkCode.toUpperCase() !== activeDevice.pairingCode) return alert("Incorrect pairing code.");
          if (window.confirm("Are you sure you want to unlink this device from your account?")) {
@@ -2256,6 +2290,10 @@
             // and never returns to this topic -- so without this the flag would
             // sit on the broker for good.
             try { mqttClient.publish(`doorbell/monitor/${activeDevice.hashedId}/battery`, "", { retain: true }); } catch(e){}
+            // Remove its broker key while the device record still proves this
+            // account owns it. Briefly waited on, not required: if the server is
+            // slow the orphan sweep removes the key within hours anyway.
+            if (activeDevice.mqttKey) { try { await requestKeyReset(activeDevice, 8000); } catch(e){} }
             await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id));
             try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', activeDevice.hashedId)); } catch(e){}
             setUnlinkMode(false);
@@ -2559,6 +2597,44 @@
                 <p className="mt-3 text-sm text-gray-400 leading-snug">{arcadeStatus}</p>
               </div>
             )}
+
+            {/* Only for a device that has had a private broker key -- devices on
+                firmware without keys have no mqttKey and show nothing here. A
+                conflict is the one thing that needs a parent: another device
+                tried to enroll with this device's identity. */}
+            {activeDevice?.mqttKey && (() => {
+              const k = activeDevice.mqttKey;
+              const ms = (t) => (t && t.toMillis ? t.toMillis() : 0);
+              const conflict = ms(k.conflictAt) > ms(k.resetAt);
+              const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
+              const since = k.enrolledAt?.toDate ? k.enrolledAt.toDate().toLocaleDateString() : null;
+              return (
+                <div className={`rounded-3xl p-5 shadow-sm border mb-4 ${conflict ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100'}`}>
+                  <h3 className={`font-bold mb-3 text-sm uppercase tracking-wider flex items-center ${conflict ? 'text-red-700' : 'text-gray-800'}`}>
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Connection security
+                  </h3>
+                  {conflict ? (
+                    <p className="text-red-800 text-sm leading-relaxed">
+                      Another device tried to use {name}'s private connection. If you recently reset or replaced this Dot Dash, that was probably it. If not, reset the connection so only {name}'s device can use it.
+                    </p>
+                  ) : k.disabled ? (
+                    <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is using the standard connection. Private connection is turned off for this device.</p>
+                  ) : since ? (
+                    <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash has its own private connection, set up {since}.</p>
+                  ) : (
+                    <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is setting up its own private connection.</p>
+                  )}
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-500 leading-snug flex-1">{keyReset.msg}</p>
+                    <button onClick={handleResetKey} disabled={keyReset.busy}
+                      className={`shrink-0 text-sm font-bold rounded-full px-4 py-2 border disabled:opacity-50 ${conflict ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-200'}`}>
+                      {keyReset.busy ? 'Resetting…' : 'Reset connection'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* In the web app this sits directly above Add to Home Screen on
                 purpose: on iPhone the one is a precondition for the other, and a

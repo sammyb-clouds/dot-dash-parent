@@ -34,6 +34,24 @@
  * device falls back to the shared login and stays there. bridge/tools/devicekey.mjs
  * does both.
  *
+ * RESET. A parent resets a device's key from the app by writing
+ * users/<uid>/keyResets/<deviceId> -- under their own account, so the database
+ * rules already prove it is the device's owner. This service deletes the key,
+ * clears the device record's conflicts, and deletes the request; the app sees the
+ * request disappear and tells the device to enroll again. That is the way out of
+ * a lock (409) for a device whose storage was wiped, or a child re-paired onto
+ * new hardware.
+ *
+ * SWEEP. Every few hours, keys whose device record no longer exists -- or no
+ * longer carries that hash -- are deleted, after being missing on two sweeps in
+ * a row. A key's `textname` holds its device record's path. Clients whose
+ * textname starts "keep:" (the hand-made test key) are never swept.
+ *
+ * ONE WRITE PER CHANGE. Every dynamic-security command makes mosquitto rewrite
+ * the whole key store; one control message with several commands rewrites it
+ * once. Measured on the live broker 2026-09-15: 9 separate messages = 9 saves,
+ * 1 batched message = 1. So every change here is a single batched message.
+ *
  * On anything but 200/201 the device keeps using the shared login and tries
  * again later. Nothing here can take a device offline.
  */
@@ -96,6 +114,22 @@ function dynsec(command) {
   });
 }
 
+// Several commands in ONE control message -- one rewrite of the key store.
+// Resolves with the responses in command order.
+function dynsecBatch(commands) {
+  return new Promise((resolve, reject) => {
+    if (!admin.connected) return reject(new Error('broker admin connection is down'));
+    const ids = commands.map(() => crypto.randomBytes(8).toString('hex'));
+    const got = new Map();
+    const timer = setTimeout(() => { ids.forEach((id) => pending.delete(id)); reject(new Error('batch timed out')); }, 8000);
+    ids.forEach((id) => pending.set(id, (r) => {
+      got.set(id, r);
+      if (got.size === ids.length) { clearTimeout(timer); resolve(ids.map((i) => got.get(i))); }
+    }));
+    admin.publish(CONTROL, JSON.stringify({ commands: commands.map((c, i) => ({ ...c, correlationData: ids[i] })) }));
+  });
+}
+
 async function mustSucceed(command) {
   const r = await dynsec(command);
   if (r.error) throw new Error(`${command.command}: ${r.error}`);
@@ -123,24 +157,32 @@ const ownAcls = (h) => [
   ['subscribePattern', `doorbell/cmd/${h}`],
 ];
 
-async function createKey(hash, secret) {
+async function createKey(hash, secret, devicePath) {
   const rolename = `device-${hash}`;
-  // Role first, client last: a client's existence is the lock, so it must not
-  // appear until everything it needs is in place.
-  await dynsec({ command: 'deleteRole', rolename });   // leftover from a half-finished attempt
-  await mustSucceed({ command: 'createRole', rolename });
-  try {
-    for (const [acltype, topic] of ownAcls(hash)) {
-      await mustSucceed({ command: 'addRoleACL', rolename, acltype, topic, allow: true, priority: 0 });
-    }
-    await mustSucceed({
-      command: 'createClient', username: hash, password: secret,
-      roles: [{ rolename }], groups: [{ groupname: 'devices' }],
-    });
-  } catch (e) {
-    await dynsec({ command: 'deleteRole', rolename }).catch(() => {});
-    throw e;
+  // One message, one rewrite. Commands run in order, so the role (with its rules
+  // inline) exists before the client -- whose existence is the lock -- appears.
+  // The leading deleteRole clears a leftover from a half-finished attempt; it
+  // failing because there is nothing to delete is expected.
+  const [, role, client] = await dynsecBatch([
+    { command: 'deleteRole', rolename },
+    { command: 'createRole', rolename,
+      acls: ownAcls(hash).map(([acltype, topic]) => ({ acltype, topic, allow: true, priority: 0 })) },
+    { command: 'createClient', username: hash, password: secret, textname: devicePath,
+      roles: [{ rolename }], groups: [{ groupname: 'devices' }] },
+  ]);
+  if (role.error || client.error) {
+    await dynsecBatch([{ command: 'deleteClient', username: hash }, { command: 'deleteRole', rolename }]).catch(() => {});
+    throw new Error(`createKey: ${role.error || client.error}`);
   }
+}
+
+// Delete a key and its role: one message, one rewrite. Deleting a client also
+// disconnects any session using it.
+async function removeKey(hash) {
+  await dynsecBatch([
+    { command: 'deleteClient', username: hash },
+    { command: 'deleteRole', rolename: `device-${hash}` },
+  ]);
 }
 
 // Does this secret actually log in as this device? A real login, so passwords
@@ -207,7 +249,7 @@ async function enroll({ hash, mac, secret }, ip) {
     return [409, { status: 'locked' }];
   }
 
-  await createKey(hash, secret);
+  await createKey(hash, secret, device.ref.path);
   await device.ref.update({
     'mqttKey.enrolledAt': FieldValue.serverTimestamp(),
     'mqttKey.port': KEY_PORT,
@@ -215,6 +257,102 @@ async function enroll({ hash, mac, secret }, ip) {
   log('INFO', `ENROLLED ${short(hash)} mac=${mac} from ${ip}`);
   return [201, { status: 'enrolled', port: KEY_PORT }];
 }
+
+// ------------------------------------------------------------------- reset --
+
+const RESETS = 'keyResets';
+
+async function processReset(snap) {
+  const uid = snap.ref.path.split('/')[3];          // artifacts/<appId>/users/<uid>/keyResets/<deviceId>
+  const deviceRef = db.doc(`artifacts/${snap.ref.path.split('/')[1]}/users/${uid}/devices/${snap.id}`);
+  const device = await deviceRef.get();
+  const hash = device.exists ? device.data().hashedId : String(snap.data()?.hashedId || '');
+  if (!/^[0-9a-f]{64}$/.test(hash || '')) {
+    log('WARN', `reset ${snap.ref.path}: no usable hash -- dropped`);
+    return snap.ref.delete();
+  }
+  // The device record normally exists, and being under this account proves the
+  // requester owns it. When it does NOT -- the app unlinks right after asking --
+  // the hash in the request proves nothing: any signed-in user could name
+  // another family's device. So without a record, the key itself must have been
+  // enrolled for exactly this device path under this account.
+  if (!device.exists) {
+    const [info] = await dynsecBatch([{ command: 'getClient', username: hash }]);
+    if (info.error) return snap.ref.delete();                 // no key: nothing to do
+    if (info.data?.client?.textname !== deviceRef.path) {
+      log('WARN', `REFUSED reset of ${short(hash)} by ${uid.slice(0, 8)}..: key not enrolled for ${deviceRef.path}`);
+      return snap.ref.delete();
+    }
+  }
+  await removeKey(hash);
+  if (device.exists) {
+    await deviceRef.update({
+      'mqttKey.resetAt': FieldValue.serverTimestamp(),
+      'mqttKey.enrolledAt': FieldValue.delete(),
+      'mqttKey.conflictAt': FieldValue.delete(),
+      'mqttKey.conflicts': FieldValue.delete(),
+    }).catch((e) => log('WARN', 'recording reset failed:', e.message));
+  }
+  await snap.ref.delete();
+  log('INFO', `RESET ${short(hash)} by ${uid.slice(0, 8)}..${device.exists ? '' : ' (device record already gone)'}`);
+}
+
+const resetting = new Set();
+async function handleResets(docs) {
+  for (const d of docs) {
+    if (resetting.has(d.ref.path)) continue;
+    resetting.add(d.ref.path);
+    try { await processReset(d); }
+    catch (e) { log('WARN', `reset ${d.ref.path} failed, will retry: ${e.message}`); }
+    finally { resetting.delete(d.ref.path); }
+  }
+}
+
+// Reads only pending requests, which are normally none.
+db.collectionGroup(RESETS).onSnapshot(
+  (qs) => handleResets(qs.docs),
+  (e) => log('ERROR', 'reset listener:', e.message),
+);
+// A request that failed (broker admin connection down, say) is retried.
+setInterval(async () => {
+  try { handleResets((await db.collectionGroup(RESETS).get()).docs); } catch {}
+}, 60_000);
+
+// ------------------------------------------------------------------- sweep --
+
+const SWEEP_EVERY_MS = parseInt(env.SWEEP_EVERY_MS || String(6 * 3600_000), 10);
+const missing = new Map();          // hash -> consecutive sweeps its device record was missing
+
+async function deviceStillHolds(hash, textname) {
+  if (textname && textname.startsWith('artifacts/')) {
+    const d = await db.doc(textname).get();
+    return d.exists && d.data().hashedId === hash;
+  }
+  // Keys made before textname carried the path.
+  return !(await db.collectionGroup('devices').where('hashedId', '==', hash).limit(1).get()).empty;
+}
+
+async function sweep() {
+  const [list] = await dynsecBatch([{ command: 'listClients', verbose: true, count: -1, offset: 0 }]);
+  if (list.error) throw new Error(`listClients: ${list.error}`);
+  const clients = (list.data?.clients || []).filter((c) => /^[0-9a-f]{64}$/.test(c.username));
+  let removed = 0;
+  for (const c of clients) {
+    if ((c.textname || '').startsWith('keep:')) continue;
+    if (await deviceStillHolds(c.username, c.textname)) { missing.delete(c.username); continue; }
+    const n = (missing.get(c.username) || 0) + 1;
+    if (n < 2) { missing.set(c.username, n); continue; }
+    await removeKey(c.username);
+    missing.delete(c.username);
+    removed++;
+    log('INFO', `SWEPT orphaned key ${short(c.username)}`);
+  }
+  log('INFO', `sweep: ${clients.length} device keys checked, ${removed} removed, ${missing.size} pending a second miss`);
+  return { checked: clients.length, removed, pending: missing.size };
+}
+
+setTimeout(() => sweep().catch((e) => log('WARN', 'sweep failed:', e.message)), 60_000);
+setInterval(() => sweep().catch((e) => log('WARN', 'sweep failed:', e.message)), SWEEP_EVERY_MS);
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -233,6 +371,11 @@ function parse(body, type) {
 const server = http.createServer(async (req, res) => {
   const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
   const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress);
+  // Run a sweep now. Only reachable on the droplet itself: nginx proxies nothing
+  // but /enroll, and anything that did come through nginx carries this header.
+  if (req.url === '/internal/sweep' && req.method === 'POST' && !req.headers['x-forwarded-for']) {
+    try { return send(200, await sweep()); } catch (e) { return send(503, { status: 'unavailable', detail: e.message }); }
+  }
   if (req.url !== '/enroll') return send(404, { status: 'not-found' });
   if (req.method !== 'POST') return send(405, { status: 'method' });
 

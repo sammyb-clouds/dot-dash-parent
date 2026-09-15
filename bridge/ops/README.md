@@ -91,7 +91,7 @@ account) on `127.0.0.1:8790`, reached through nginx at
   `nginx-dotdash.conf`). After `systemctl reload nginx`, allow a second before
   testing -- a request that races the reload hits the old workers and 404s.
 
-Check it end to end with `bridge/tools/enrolltest.mjs` (14 checks). It creates a
+Check it end to end with `bridge/tools/enrolltest.mjs`. It creates a
 throwaway device record under the demo account, enrolls it through the public
 URL, and removes both record and key afterwards:
 
@@ -99,10 +99,31 @@ URL, and removes both record and key afterwards:
       && . /root/dotdash_demo/authtest.env && . /root/dotdash_dynsec/admin.env && set +a \
       && node enrolltest.mjs https://app.dotdashdevice.com/enroll mqtt.dotdashdevice.com 8885 8884'
 
-Known gaps, for later stages:
-- Unpairing a device does not delete its key yet.
-- Re-pairing the same name and PIN onto DIFFERENT hardware produces the same hash
-  and hits the lock (409). The parent needs a way to reset a device's key.
+### Batched changes, reset, sweep (2026-09-15)
+
+- **One key-store write per change.** Every dynamic-security command rewrites
+  the whole key store; one control message with several commands rewrites it
+  once (measured live: 9 separate messages = 9 saves, 1 batched = 1). Enrollment,
+  key removal and resets are each a single batched message. `dynsec-add-device.sh`
+  still issues commands one at a time -- fine for hand use, not for bulk.
+- **Parent reset.** The app writes `users/<uid>/keyResets/<deviceId>`
+  (`{ hashedId, requestedAt }`); only the account owner can, per the database
+  rules. The service deletes the key, clears `mqttKey.conflicts/conflictAt/
+  enrolledAt`, sets `mqttKey.resetAt`, and deletes the request. The app then
+  publishes `CMD,REENROLL` and the device enrolls at once. Without a device
+  record (unlink), a reset is honoured only if the key's `textname` is exactly
+  that device path under the requester's account -- otherwise anyone could name
+  another family's hash.
+- **Unlink** resets the key before deleting the device record.
+- **Orphan sweep** every 6 hours (`SWEEP_EVERY_MS`) and a minute after start:
+  a key whose device record is gone, or no longer carries its hash, is removed
+  after two consecutive misses. Clients with `textname` starting `keep:` are
+  skipped -- the hand-made test key is `keep:keytest`. Run one now on the droplet:
+  `curl -X POST http://127.0.0.1:8790/internal/sweep` (not reachable through nginx).
+- **Conflicts** show in the app's Settings as a red "Connection security" card
+  with the reset button.
+
+`enrolltest.mjs` covers all of it (27 checks) and needs `testkey.env` loaded too.
 
 ## Stage 3 test firmware and per-device revert
 
