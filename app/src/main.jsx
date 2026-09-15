@@ -1438,7 +1438,10 @@
         for (let attempt = 0; attempt < 8; attempt++) {
           if (cancelled.current) return;
           try {
-            const res = await http.get({ url: `${PORTAL}/scan_wifi`, connectTimeout: 4000, readTimeout: 12000 });
+            // ?app=1 tells the device this is the app, so it stops answering
+            // Apple's captive-portal check with the setup page -- which is what
+            // pops that page up over the app. Joining by hand never sends it.
+            const res = await http.get({ url: `${PORTAL}/scan_wifi?app=1`, connectTimeout: 4000, readTimeout: 12000 });
             if (res.status === 200) {
               const code = headerValue(res.headers, 'x-pairing-code').trim().toUpperCase();
               if (!isNew && code && expectedCode && code !== expectedCode) {
