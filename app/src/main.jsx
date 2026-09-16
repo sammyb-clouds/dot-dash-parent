@@ -138,6 +138,11 @@
 
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const PUSH_MINT_KEY = 'dotdash_push_minted';
+    // The account this install's token is registered under, and the accounts whose
+    // owner switched notifications OFF here -- the one thing that must survive a
+    // relaunch, or the app would helpfully turn them back on every time.
+    const PUSH_UID_KEY = 'dotdash_push_uid';
+    const pushOffKey = (uid) => `dotdash_push_off_${uid}`;
     const VAPID_PUBLIC_KEY =
       'BFuCduXya7RRSfwlQoZWbKoOcJhkWtzr6mz9OsHJNGWUNA7j4LJB21kpVP__Vo8BayRxwh7MKy_IeGLorIvK2jU';
 
@@ -241,26 +246,56 @@
       try {
         localStorage.setItem(PUSH_ID_KEY, id);
         localStorage.setItem(PUSH_MINT_KEY, '1');
+        localStorage.setItem(PUSH_UID_KEY, uid);
       } catch (e) {}
       return { ok: true, reason: 'Notifications are on for this device.' };
     }
 
-    // A build shipping the re-mint has to apply it WITHOUT the user touching
-    // the toggle -- the toggle already reads on, so nothing would ever call
-    // enableWebPush and the inherited token would live on forever. Safe to run
-    // on launch: only the permission PROMPT needs a tap handler, and permission
-    // is already granted here, so this just mints and writes.
-    async function reconcileNativeToken(uid) {
-      if (!uid || !isNativeApp()) return;
+    // Notifications are ON by default in the app -- a parent who paired a device
+    // to be told when their child writes should not have to find a toggle first.
+    // So after signing in the app asks iOS once, and registers this account's
+    // token itself.
+    //
+    // Two things this has to get right:
+    //
+    // - A TOKEN BELONGS TO AN ACCOUNT. iOS grants permission to the app, but the
+    //   token is written under one account. Signing in as someone else on the
+    //   same phone left the new account with permission granted and no token --
+    //   the toggle read off, and turning it on by hand was the only way. Here a
+    //   new account registers straight away, with no second iOS dialog.
+    // - OFF MEANS OFF. Turning the toggle off leaves iOS permission granted, so
+    //   without pushOffKey the next launch would turn it back on.
+    //
+    // Only the WEB needs a tap handler to ask; the native app may ask whenever it
+    // likes, and iOS shows that dialog once per install -- after a refusal
+    // requestPermissions returns denied without showing anything.
+    async function ensureNativePush(uid) {
+      if (!uid || !isNativeApp()) return false;
+      try { if (localStorage.getItem(pushOffKey(uid))) return false; } catch (e) {}
       try {
-        let minted = null;
-        try { minted = localStorage.getItem(PUSH_MINT_KEY); } catch (e) {}
-        if (minted) return;
         const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
-        const perm = await FirebaseMessaging.checkPermissions();
-        if (perm.receive !== 'granted') return;
-        await registerNativeToken(uid);
-      } catch (e) {}
+        let perm = await FirebaseMessaging.checkPermissions();
+        if (perm.receive !== 'granted' && perm.receive !== 'denied') {
+          perm = await FirebaseMessaging.requestPermissions();
+          // Foreground banners come from LocalNotifications, the same iOS
+          // authorization -- asking now means notify() never has to.
+          if (perm.receive === 'granted') {
+            try {
+              const ln = window.Capacitor?.Plugins?.LocalNotifications;
+              if (ln) await ln.requestPermissions();
+            } catch (e) {}
+          }
+        }
+        if (perm.receive !== 'granted') return false;
+        // Already registered for THIS account on this install: nothing to write.
+        try {
+          if (localStorage.getItem(PUSH_UID_KEY) === uid
+            && localStorage.getItem(PUSH_MINT_KEY)
+            && localStorage.getItem(PUSH_ID_KEY)) return true;
+        } catch (e) {}
+        const r = await registerNativeToken(uid);
+        return !!r.ok;
+      } catch (e) { return false; }
     }
 
     async function enableBrowserPush(uid, { iOS, standalone }) {
@@ -1441,6 +1476,16 @@
            setIsWizardActive(true);
         }
       }, [loading, user, parentProfile, devices, devicesLoaded, devicesConfirmed, isWizardActive]);
+
+      // Notifications on by default in the app: asked for once signed in and past
+      // setup. Not during the wizard or in-app Wi-Fi setup -- an iOS dialog landing
+      // mid-flow, while the phone sits on the device's own network, is the worst
+      // possible moment. A parent who switches the toggle off is not asked again.
+      useEffect(() => {
+        if (loading || !user || isWizardActive || wifiSetupRunning.active) return;
+        const t = setTimeout(() => { if (!wifiSetupRunning.active) ensureNativePush(user.uid); }, 1500);
+        return () => clearTimeout(t);
+      }, [loading, user, isWizardActive]);
 
       if (loading || (user && !devicesLoaded)) return <div className="flex h-screen items-center justify-center"><Activity className="w-12 h-12 text-blue-500 animate-pulse" /></div>;
 
@@ -2633,7 +2678,7 @@
 
        useEffect(() => {
          let alive = true;
-         reconcileNativeToken(user?.uid)
+         ensureNativePush(user?.uid)
            .then(() => webPushState(user?.uid))
            .then((on) => { if (alive) setPushOn(on); });
          return () => { alive = false; };
@@ -2644,10 +2689,13 @@
          try {
            if (pushOn) {
              const r = await disableWebPush(user?.uid);
+             // Remembered, or the app would turn them back on at the next launch.
+             try { localStorage.setItem(pushOffKey(user?.uid), '1'); } catch (e) {}
              setPushOn(false);
              setPushState({ busy: false, msg: r.reason });
            } else {
              const r = await enableWebPush(user?.uid);
+             if (r.ok) { try { localStorage.removeItem(pushOffKey(user?.uid)); } catch (e) {} }
              setPushOn(!!r.ok);
              setPushState({ busy: false, msg: r.reason });
            }
