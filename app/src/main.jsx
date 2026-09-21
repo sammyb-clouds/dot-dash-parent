@@ -2603,6 +2603,21 @@
          return snap.size;
        };
 
+       // A publish the broker has confirmed receiving (or false after a timeout).
+       // UNPAIR goes out this way. One still in flight when the connection drops
+       // is resent when it comes back, and a copy that lands after the device has
+       // already unpaired is never cleared -- a nameless device no longer listens
+       // on that ID -- so it would sit there and wipe the next device paired under
+       // the same child ID. (Firmware now clears the slot at pairing too; this
+       // keeps older firmware safe.)
+       const publishConfirmed = (topic, payload, opts, ms = 5000) => new Promise((resolve) => {
+         if (!mqttClient || typeof mqttClient.publish !== 'function') return resolve(false);
+         const timer = setTimeout(() => resolve(false), ms);
+         try {
+           mqttClient.publish(topic, payload, opts, (err) => { clearTimeout(timer); resolve(!err); });
+         } catch (e) { clearTimeout(timer); resolve(false); }
+       });
+
        const handleDeleteAccount = async () => {
          if (!window.confirm(
            "Delete your account?\n\n" +
@@ -2616,14 +2631,25 @@
          try {
            // 1. Release the hardware while we still know each device's hash.
            setDeleting('Unpairing devices...');
+           // Each device's own broker key goes too, exactly as Unlink does it.
+           // Left behind, the key stayed locked to the deleted account: the device
+           // makes a new one after unpairing, and the server refused it
+           // ("already enrolled") for whoever paired the device next, until the
+           // orphan sweep caught up hours later. Asked for first, while the device
+           // records still prove ownership; the server finishes them in seconds.
+           const keyResets = Promise.all(devices.filter(d => d.mqttKey)
+             .map(d => requestKeyReset(d, 8000).catch(() => false)));
            for (const d of devices) {
              try {
-               mqttClient?.publish(`doorbell/cmd/${d.hashedId}`, 'CMD,UNPAIR', { qos: 1, retain: true });
+               await publishConfirmed(`doorbell/cmd/${d.hashedId}`, 'CMD,UNPAIR', { qos: 1, retain: true });
                // Drop this device's retained alerts too, or they outlive the account.
                ['battery', 'wifi'].forEach(k =>
                  mqttClient?.publish(`doorbell/monitor/${d.hashedId}/${k}`, '', { retain: true }));
-               await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', d.hashedId));
              } catch (e) {}
+           }
+           await keyResets;
+           for (const d of devices) {
+             try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', d.hashedId)); } catch (e) {}
            }
 
            setDeleting('Erasing your data...');
@@ -2746,7 +2772,7 @@
             // identity nobody was listening on any more, and messages vanished
             // silently. Retained so a device that is switched off is released the
             // next time it connects rather than being orphaned for good.
-            try { mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, `CMD,UNPAIR`, {qos: 1, retain: true}); } catch(e){}
+            await publishConfirmed(`doorbell/cmd/${activeDevice.hashedId}`, 'CMD,UNPAIR', { qos: 1, retain: true });
             // Drop any retained low-battery alert too. The device clears its own
             // once it is charging, but an unlinked one re-pairs under a new hash
             // and never returns to this topic -- so without this the flag would
