@@ -2768,28 +2768,151 @@
          }
        };
 
+       // Release a device from this account: tell it, drop its alerts and key, and
+       // free its child ID. Unlink (code from the device's screen) and "Remove it
+       // without replacing" (a device that cannot be switched on) both end here.
+       const releaseDevice = async (dev) => {
+         // Tell the device first, and while we still hold its hash. Removing
+         // the records alone left it believing it was still paired: it kept the
+         // name and PIN, so every friend's device carried on publishing to an
+         // identity nobody was listening on any more, and messages vanished
+         // silently. Retained so a device that is switched off is released the
+         // next time it connects rather than being orphaned for good.
+         await publishConfirmed(`doorbell/cmd/${dev.hashedId}`, 'CMD,UNPAIR', { qos: 1, retain: true });
+         // Drop any retained low-battery alert too. The device clears its own
+         // once it is charging, but an unlinked one re-pairs under a new hash
+         // and never returns to this topic -- so without this the flag would
+         // sit on the broker for good.
+         try { mqttClient.publish(`doorbell/monitor/${dev.hashedId}/battery`, "", { retain: true }); } catch(e){}
+         // Remove its broker key while the device record still proves this
+         // account owns it. Briefly waited on, not required: if the server is
+         // slow the orphan sweep removes the key within hours anyway.
+         if (dev.mqttKey) { try { await requestKeyReset(dev, 8000); } catch(e){} }
+         await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', dev.id));
+         try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', dev.hashedId)); } catch(e){}
+       };
+
        const handleUnlink = async () => {
          if (unlinkCode.toUpperCase() !== activeDevice.pairingCode) return alert("Incorrect pairing code.");
          if (window.confirm("Are you sure you want to unlink this device from your account?")) {
-            // Tell the device first, and while we still hold its hash. Removing
-            // the records alone left it believing it was still paired: it kept the
-            // name and PIN, so every friend's device carried on publishing to an
-            // identity nobody was listening on any more, and messages vanished
-            // silently. Retained so a device that is switched off is released the
-            // next time it connects rather than being orphaned for good.
-            await publishConfirmed(`doorbell/cmd/${activeDevice.hashedId}`, 'CMD,UNPAIR', { qos: 1, retain: true });
-            // Drop any retained low-battery alert too. The device clears its own
-            // once it is charging, but an unlinked one re-pairs under a new hash
-            // and never returns to this topic -- so without this the flag would
-            // sit on the broker for good.
-            try { mqttClient.publish(`doorbell/monitor/${activeDevice.hashedId}/battery`, "", { retain: true }); } catch(e){}
-            // Remove its broker key while the device record still proves this
-            // account owns it. Briefly waited on, not required: if the server is
-            // slow the orphan sweep removes the key within hours anyway.
-            if (activeDevice.mqttKey) { try { await requestKeyReset(activeDevice, 8000); } catch(e){} }
-            await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id));
-            try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', activeDevice.hashedId)); } catch(e){}
+            await releaseDevice(activeDevice);
             setUnlinkMode(false);
+         }
+       };
+
+       // ---------- DEVICE WON'T TURN ON ----------
+       // Release it without the on-screen code, or move its child ID -- friends,
+       // quick messages, settings -- onto new hardware.
+       const [brokenStep, setBrokenStep] = useState(null);     // null | 'remove' | 'replace'
+       const [brokenConfirm, setBrokenConfirm] = useState('');
+       const [replaceCode, setReplaceCode] = useState('');
+       const [brokenStatus, setBrokenStatus] = useState({ busy: false, msg: '', error: false });
+
+       const closeBroken = () => {
+         setBrokenMode(false); setBrokenStep(null); setBrokenConfirm(''); setReplaceCode('');
+         setBrokenStatus({ busy: false, msg: '', error: false });
+       };
+
+       const handleRemoveBroken = async () => {
+         const dev = activeDevice;
+         const childId = `${dev.identity.name}${dev.identity.pin}`;
+         if (brokenConfirm.trim().toUpperCase() !== childId.toUpperCase()) {
+           return setBrokenStatus({ busy: false, msg: `Type ${childId} to confirm.`, error: true });
+         }
+         setBrokenStatus({ busy: true, msg: 'Removing…', error: false });
+         try {
+           // The unpair is still left waiting for it: if this device ever powers
+           // back on, it lets go of the child ID by itself.
+           await releaseDevice(dev);
+           closeBroken();
+         } catch (e) {
+           setBrokenStatus({ busy: false, msg: `Could not remove it: ${e.message}`, error: true });
+         }
+       };
+
+       // Waits for a device to announce itself on its presence topic, which this
+       // app already subscribes to. Resolves false on timeout.
+       const waitForOnline = (hash, ms) => new Promise((resolve) => {
+         const topic = `doorbell/presence/${hash}`;
+         const onMsg = (t, m) => { if (t === topic && m.toString() === 'ONLINE') finish(true); };
+         const timer = setTimeout(() => finish(false), ms);
+         function finish(ok) { clearTimeout(timer); mqttClient.removeListener('message', onMsg); resolve(ok); }
+         mqttClient.on('message', onMsg);
+       });
+
+       const handleReplace = async () => {
+         const old = activeDevice;
+         const code = replaceCode.trim().toUpperCase();
+         const say = (msg) => setBrokenStatus({ busy: true, msg, error: false });
+         if (!/^[0-9A-F]{6}$/.test(code)) return setBrokenStatus({ busy: false, msg: 'The pairing code is 6 characters, shown under TOOLS > PAIRING on the new Dot Dash.', error: true });
+         if (code === String(old.pairingCode || '').toUpperCase()) return setBrokenStatus({ busy: false, msg: "That's the code of the device being replaced. Enter the new device's code.", error: true });
+         if (!mqttClient?.connected) return setBrokenStatus({ busy: false, msg: 'Not connected. Check your internet connection and try again.', error: true });
+
+         const { identity, hashedId } = old;
+         try {
+           // 1. The old device's broker key first, while its record still proves
+           //    ownership. The new device enrolls under the same child ID seconds
+           //    after it is claimed; with the old key still there it would be
+           //    refused ("already enrolled") and stay on the fallback login.
+           if (old.mqttKey) {
+             say('Releasing the old device…');
+             await requestKeyReset(old, 10000).catch(() => false);
+           }
+
+           // 2. Claim the new device under the same child ID. No UNPAIR goes to
+           //    the old device: it shares this child ID, so the new device would
+           //    receive it too. (A device being claimed also clears whatever was
+           //    waiting for its ID, on current firmware.)
+           say('Pairing the new Dot Dash…');
+           const replyTopic = `doorbell/pairing/reply/${code}`;
+           const reply = await new Promise((resolve) => {
+             const onMsg = (t, m) => {
+               if (t !== replyTopic) return;
+               const parts = m.toString().split(',');
+               if (parts.length >= 3) finish(parts[0]);        // a Wi-Fi check's PONG has one part
+             };
+             const timer = setTimeout(() => finish(null), 20000);
+             function finish(v) { clearTimeout(timer); mqttClient.removeListener('message', onMsg); mqttClient.unsubscribe(replyTopic); resolve(v); }
+             mqttClient.on('message', onMsg);
+             mqttClient.subscribe(replyTopic);
+             mqttClient.publish(`doorbell/pairing/${code}`, `CLAIM,${parentProfile?.virtualId || 'PENDING'},${identity.name},${identity.pin}`);
+           });
+           if (!reply) {
+             return setBrokenStatus({ busy: false, error: true, msg: "The new Dot Dash didn't answer. Make sure it is on, connected to Wi-Fi, and showing TOOLS > PAIRING, then try again." });
+           }
+           const mac = reply.replace(/:/g, '').toUpperCase();
+
+           // 3. The new record carries everything that belongs to the child --
+           //    friends, quick messages, Arcade and Dot Dash Mode -- and nothing
+           //    that belonged to the old hardware: its key, its code, its Wi-Fi
+           //    list (passwords are never stored; the new device keeps its own).
+           const { id: _id, mqttKey: _k, pairingCode: _c, wifiNets: _w, ...carried } = old;
+           await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', mac), { ...carried, pairingCode: code });
+           if (mac !== old.id) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', old.id));
+           setActiveChildId(mac);
+
+           // 4. Friends and quick messages. A device keeps only the latest
+           //    command waiting for it, and it restarts right after being
+           //    claimed -- so wait until it is back, then send them in turn.
+           //    (Arcade and Dot Dash Mode need nothing: the app re-sends those
+           //    whenever a device reports something other than the record.)
+           say('Waiting for the new Dot Dash to restart…');
+           const online = await waitForOnline(hashedId, 90000);
+           const friends = friendsInOrder(old, parentProfile?.virtualId);
+           const phrases = old.phrases?.length ? old.phrases : defaultPhrases;
+           say('Sending friends and quick messages…');
+           await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SYNC_FRIENDS,${friends.join('|')}`, { qos: 1, retain: true });
+           await new Promise((r) => setTimeout(r, 2500));
+           await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SYNC_PHRASES,${phrases.join('|')}`, { qos: 1, retain: true });
+
+           setBrokenStatus({
+             busy: false, error: false, done: true,
+             msg: online
+               ? `Done. ${displayName(`${identity.name}${identity.pin}`)} is on the new Dot Dash with its friends and quick messages.`
+               : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on: its quick messages are waiting for it. If its friends are missing once it's on, drag any friend in Approved Friends to send the list again.`,
+           });
+         } catch (e) {
+           setBrokenStatus({ busy: false, error: true, msg: `Could not replace it: ${e.message}` });
          }
        };
 
@@ -2838,29 +2961,65 @@
 
 
        if (brokenMode && activeDevice) {
-          const childName = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
-          const option = (title, body, tone) => (
-            <div className={`w-full text-left bg-white border ${tone} rounded-2xl p-4 mb-3 opacity-60`}>
-              <div className="flex items-center justify-between">
-                <div className="font-bold text-gray-800">{title}</div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">Coming next</span>
-              </div>
-              <p className="text-sm text-gray-500 mt-1 leading-relaxed">{body}</p>
+          const childId = `${activeDevice.identity.name}${activeDevice.identity.pin}`;
+          const childName = displayName(childId);
+          const busy = brokenStatus.busy;
+          const status = brokenStatus.msg ? (
+            <p className={`text-sm mt-3 leading-relaxed ${brokenStatus.error ? 'text-red-600' : brokenStatus.done ? 'text-green-700 font-bold' : 'text-gray-600'}`}>{brokenStatus.msg}</p>
+          ) : null;
+          const card = (key, title, body, tone, children) => (
+            <div className={`w-full text-left bg-white border ${tone} rounded-2xl mb-3 overflow-hidden`}>
+              <button disabled={busy} onClick={() => { setBrokenStep(k => k === key ? null : key); setBrokenStatus({ busy: false, msg: '', error: false }); }}
+                className="w-full text-left p-4 active:bg-gray-50 disabled:opacity-60">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-gray-800">{title}</div>
+                  <ChevronRight className={`w-5 h-5 text-gray-400 shrink-0 transition-transform ${brokenStep === key ? 'rotate-90' : ''}`} />
+                </div>
+                <p className="text-sm text-gray-500 mt-1 leading-relaxed">{body}</p>
+              </button>
+              {brokenStep === key && <div className="px-4 pb-4 pt-4 border-t border-gray-100">{children}</div>}
             </div>
           );
           return (
              <div className="p-6 h-full flex flex-col">
-                <button onClick={() => setBrokenMode(false)} className="flex items-center text-gray-500 font-bold mb-6"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
+                <button disabled={busy} onClick={closeBroken} className="flex items-center text-gray-500 font-bold mb-6 disabled:opacity-40"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
                 <h2 className="text-2xl font-bold mb-2">Device won't turn on?</h2>
                 <p className="text-gray-600 mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
-                {option(
-                  'Replace with a new Dot Dash',
-                  `Keep ${activeDevice.identity.name}${activeDevice.identity.pin}, with its friends, quick messages, Wi-Fi networks and settings, and move it to new hardware.`,
-                  'border-blue-100')}
-                {option(
-                  'Remove it without replacing',
-                  `Release the broken device from your account. ${activeDevice.identity.name}${activeDevice.identity.pin} becomes free to use again.`,
-                  'border-red-100')}
+
+                {card('replace', 'Replace with a new Dot Dash',
+                  `Keep ${childId}, with its friends, quick messages and settings, and move it to new hardware.`,
+                  'border-blue-100',
+                  <>
+                    <ol className="list-decimal list-inside text-sm text-gray-600 space-y-1 mb-3 leading-relaxed">
+                      <li>Turn on the new Dot Dash and connect it to Wi-Fi.</li>
+                      <li>On it, open <strong>TOOLS &gt; PAIRING</strong>.</li>
+                      <li>Enter the code it shows.</li>
+                    </ol>
+                    <input type="text" placeholder="New device's code" maxLength={6} disabled={busy || brokenStatus.done}
+                      className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none font-bold text-center uppercase text-lg tracking-widest border border-gray-200 focus:border-blue-400 mb-3"
+                      value={replaceCode} onChange={e => setReplaceCode(e.target.value.toUpperCase().replace(/[^0-9A-F]/g, ''))} />
+                    <button onClick={brokenStatus.done ? closeBroken : handleReplace} disabled={busy}
+                      className="w-full py-3 text-white font-bold bg-blue-500 rounded-xl active:bg-blue-600 disabled:opacity-50">
+                      {brokenStatus.done ? 'Done' : busy ? 'Working…' : `Move ${childId} to the new device`}
+                    </button>
+                    <p className="text-xs text-gray-400 mt-2 leading-relaxed">Wi-Fi stays with each device: the new one keeps the network it was set up on.</p>
+                    {status}
+                  </>)}
+
+                {card('remove', 'Remove it without replacing',
+                  `Release the broken device from your account. ${childId} becomes free to use again.`,
+                  'border-red-100',
+                  <>
+                    <p className="text-sm text-gray-600 mb-3 leading-relaxed">This can't be undone. Type <strong>{childId}</strong> to confirm.</p>
+                    <input type="text" placeholder={childId} disabled={busy}
+                      className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none font-bold text-center uppercase text-lg tracking-wider border border-gray-200 focus:border-red-400 mb-3"
+                      value={brokenConfirm} onChange={e => setBrokenConfirm(e.target.value.toUpperCase())} />
+                    <button onClick={handleRemoveBroken} disabled={busy}
+                      className="w-full py-3 text-white font-bold bg-red-500 rounded-xl active:bg-red-600 disabled:opacity-50">
+                      {busy ? 'Removing…' : `Remove ${childId}'s device`}
+                    </button>
+                    {status}
+                  </>)}
              </div>
           );
        }
@@ -2874,22 +3033,8 @@
                 <input type="text" placeholder="Pairing Code" className="w-full bg-white px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-xl tracking-widest border border-gray-200 focus:border-red-400 mb-6" value={unlinkCode} onChange={e=>setUnlinkCode(e.target.value)} />
                 <button onClick={handleUnlink} className="w-full py-4 text-white font-bold bg-red-500 rounded-xl shadow-sm active:bg-red-600">Confirm Unlink</button>
                 
-                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 text-left shadow-sm">
-                  <div className="flex items-start">
-                     <div className="shrink-0 mt-0.5">
-                        <Info className="w-5 h-5 text-blue-500" />
-                     </div>
-                     <div className="ml-3">
-                        <h3 className="text-sm font-bold text-blue-800">Can't find the Pairing code?</h3>
-                        <p className="text-sm text-blue-700 mt-1 leading-relaxed">
-                          Make sure your device is up to date. Go to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &rarr; UPDATE</strong> to download the latest firmware.
-                        </p>
-                     </div>
-                  </div>
-                </div>
-
                 <button onClick={() => { setUnlinkMode(false); setBrokenMode(true); }}
-                  className="mt-3 w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-left shadow-sm active:bg-gray-100 flex items-start">
+                  className="mt-6 w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-left shadow-sm active:bg-gray-100 flex items-start">
                   <div className="shrink-0 mt-0.5"><AlertTriangle className="w-5 h-5 text-gray-500" /></div>
                   <div className="ml-3 flex-1">
                     <h3 className="text-sm font-bold text-gray-800">Device won't turn on?</h3>
@@ -3172,7 +3317,7 @@
                           <div className="text-left min-w-0">
                              <div className="font-bold text-gray-800 text-base">Advanced settings</div>
                              <div className={`text-xs ${conflict ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
-                               {conflict ? 'Connection security needs your attention' : (SHOW_BETA_FIRMWARE ? 'Connection security, beta firmware' : 'Connection security')}
+                               {conflict ? 'Connection security needs your attention' : (SHOW_BETA_FIRMWARE ? 'Unlink, connection security, beta firmware' : 'Unlink, connection security')}
                              </div>
                           </div>
                        </div>
@@ -3184,8 +3329,14 @@
                     {openAdvanced && (
                       <div className={`border border-t-0 rounded-b-2xl bg-white p-4 mb-3 divide-y divide-gray-100 ${conflict ? 'border-red-200' : 'border-slate-200'}`}>
 
-                        {/* ---- Connection security ---- */}
+                        {/* ---- Unlink ---- */}
                         <div className="pb-4">
+                          <button onClick={() => setUnlinkMode(true)} className="w-full py-3 text-red-500 font-bold bg-white border border-red-100 rounded-2xl active:bg-red-50">Unlink Device</button>
+                          <button onClick={() => setBrokenMode(true)} className="w-full mt-2 py-1 text-sm text-gray-400 font-semibold active:text-gray-600">Device won't turn on? Replace or remove it</button>
+                        </div>
+
+                        {/* ---- Connection security ---- */}
+                        <div className="py-4">
                           <h4 className={`${sectionTitle} ${conflict ? 'text-red-700' : 'text-gray-700'}`}>
                             <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                             Connection security
@@ -3319,13 +3470,6 @@
                     <li>Scroll down and select "Add to Home Screen"</li>
                 </ol>
               </div>
-            )}
-
-            {activeDevice && (
-              <>
-                <button onClick={() => setUnlinkMode(true)} className="w-full py-4 text-red-500 font-bold bg-white border border-red-100 rounded-3xl shadow-sm active:bg-red-50">Unlink Device</button>
-                <button onClick={() => setBrokenMode(true)} className="w-full mt-2 py-2 text-sm text-gray-500 font-semibold active:text-gray-700">Device won't turn on? Replace or remove it</button>
-              </>
             )}
 
             {/* Account deletion. Required by App Store guideline 5.1.1(v), and
