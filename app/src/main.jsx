@@ -435,6 +435,8 @@
     const BookOpen = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
     const Volume2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>;
     const Send = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
+    const AlertTriangle = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+    const ChevronRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 18 15 12 9 6"/></svg>;
     const GripVertical = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>;
     const Trash2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
     const ArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
@@ -2351,6 +2353,9 @@
     // ==============================================
     function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
+       // A device that cannot be switched on: replace it (same child ID, carried
+       // over) or release it without the on-screen code Unlink asks for.
+       const [brokenMode, setBrokenMode] = useState(false);
        const [unlinkCode, setUnlinkCode] = useState('');
        const [newFriendId, setNewFriendId] = useState('');
        const [newPhrase, setNewPhrase] = useState('');
@@ -2832,6 +2837,34 @@
        };
 
 
+       if (brokenMode && activeDevice) {
+          const childName = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
+          const option = (title, body, tone) => (
+            <div className={`w-full text-left bg-white border ${tone} rounded-2xl p-4 mb-3 opacity-60`}>
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-gray-800">{title}</div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">Coming next</span>
+              </div>
+              <p className="text-sm text-gray-500 mt-1 leading-relaxed">{body}</p>
+            </div>
+          );
+          return (
+             <div className="p-6 h-full flex flex-col">
+                <button onClick={() => setBrokenMode(false)} className="flex items-center text-gray-500 font-bold mb-6"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
+                <h2 className="text-2xl font-bold mb-2">Device won't turn on?</h2>
+                <p className="text-gray-600 mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
+                {option(
+                  'Replace with a new Dot Dash',
+                  `Keep ${activeDevice.identity.name}${activeDevice.identity.pin}, with its friends, quick messages, Wi-Fi networks and settings, and move it to new hardware.`,
+                  'border-blue-100')}
+                {option(
+                  'Remove it without replacing',
+                  `Release the broken device from your account. ${activeDevice.identity.name}${activeDevice.identity.pin} becomes free to use again.`,
+                  'border-red-100')}
+             </div>
+          );
+       }
+
        if (unlinkMode) {
           return (
              <div className="p-6 h-full flex flex-col">
@@ -2854,6 +2887,16 @@
                      </div>
                   </div>
                 </div>
+
+                <button onClick={() => { setUnlinkMode(false); setBrokenMode(true); }}
+                  className="mt-3 w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-left shadow-sm active:bg-gray-100 flex items-start">
+                  <div className="shrink-0 mt-0.5"><AlertTriangle className="w-5 h-5 text-gray-500" /></div>
+                  <div className="ml-3 flex-1">
+                    <h3 className="text-sm font-bold text-gray-800">Device won't turn on?</h3>
+                    <p className="text-sm text-gray-600 mt-1 leading-relaxed">Replace it or remove it without the code.</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
+                </button>
              </div>
           );
        }
@@ -3279,7 +3322,10 @@
             )}
 
             {activeDevice && (
-              <button onClick={() => setUnlinkMode(true)} className="w-full py-4 text-red-500 font-bold bg-white border border-red-100 rounded-3xl shadow-sm active:bg-red-50">Unlink Device</button>
+              <>
+                <button onClick={() => setUnlinkMode(true)} className="w-full py-4 text-red-500 font-bold bg-white border border-red-100 rounded-3xl shadow-sm active:bg-red-50">Unlink Device</button>
+                <button onClick={() => setBrokenMode(true)} className="w-full mt-2 py-2 text-sm text-gray-500 font-semibold active:text-gray-700">Device won't turn on? Replace or remove it</button>
+              </>
             )}
 
             {/* Account deletion. Required by App Store guideline 5.1.1(v), and
