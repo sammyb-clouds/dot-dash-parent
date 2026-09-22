@@ -2968,7 +2968,7 @@
             <p className={`text-sm mt-3 leading-relaxed ${brokenStatus.error ? 'text-red-600' : brokenStatus.done ? 'text-green-700 font-bold' : 'text-gray-600'}`}>{brokenStatus.msg}</p>
           ) : null;
           const card = (key, title, body, tone, children) => (
-            <div className={`w-full text-left bg-white border ${tone} rounded-2xl mb-3 overflow-hidden`}>
+            <div className={`w-full shrink-0 text-left bg-white border ${tone} rounded-2xl mb-3 overflow-hidden`}>
               <button disabled={busy} onClick={() => { setBrokenStep(k => k === key ? null : key); setBrokenStatus({ busy: false, msg: '', error: false }); }}
                 className="w-full text-left p-4 active:bg-gray-50 disabled:opacity-60">
                 <div className="flex items-center justify-between">
@@ -2981,7 +2981,7 @@
             </div>
           );
           return (
-             <div className="p-6 h-full flex flex-col">
+             <div className="p-6 pb-10">
                 <button disabled={busy} onClick={closeBroken} className="flex items-center text-gray-500 font-bold mb-6 disabled:opacity-40"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
                 <h2 className="text-2xl font-bold mb-2">Device won't turn on?</h2>
                 <p className="text-gray-600 mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
