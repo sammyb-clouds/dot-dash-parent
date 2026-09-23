@@ -1858,11 +1858,19 @@
         }
 
         let joined = false;
+        let why = '';
         for (let i = 0; i < 12 && !cancelled.current; i++) {
           await pause(2000);
           try {
             const res = await http.get({ url: `${PORTAL}/wifi_status`, connectTimeout: 4000, readTimeout: 4000 });
-            if (String(res.data).trim() === 'CONNECTED') { joined = true; break; }
+            const state = String(res.data).trim();
+            // CONNECTED means the device joined THE NETWORK ASKED FOR: current
+            // firmware checks the name before saying so. It used to answer for
+            // whatever the radio happened to be on -- a network it remembered
+            // from before, say -- and setup carried on as though the chosen one
+            // had worked.
+            if (state === 'CONNECTED') { joined = true; break; }
+            if (state === 'FAILED') { why = headerValue(res.headers, 'x-wifi-error').trim().toUpperCase(); break; }
           } catch (e) {
             // While the device tries the home network its radio moves to the
             // router's channel, which can briefly drop the phone off the setup
@@ -1871,13 +1879,21 @@
           }
         }
         if (cancelled.current) return;
-        if (!joined) return fail('CHOOSE', `Your Dot Dash couldn’t join “${chosen}”. Check the password and try again.`);
+        if (!joined) {
+          if (why === 'NOT_FOUND') return fail('CHOOSE', `Your Dot Dash couldn’t find “${chosen}”. Check the name, and that the network is in range of the device (2.4GHz only).`);
+          return fail('CHOOSE', `Your Dot Dash couldn’t join “${chosen}”. Check the password and try again.`);
+        }
 
         setStatus('Saving…');
         // Timezone only for a new device. An existing one keeps its own -- the
         // device only overwrites it when one is sent.
-        try { await post('/save_and_reboot', isNew ? { ssid: chosen, pass, tz } : { ssid: chosen, pass }); }
-        catch (e) { /* the device restarts as it replies, so a dropped reply is expected */ }
+        // 409 means the device is no longer on that network after all, and it
+        // refuses to store credentials it could not use. Anything else dropping
+        // is expected: the device restarts as it replies.
+        try {
+          const res = await post('/save_and_reboot', isNew ? { ssid: chosen, pass, tz } : { ssid: chosen, pass });
+          if (res.status === 409) return fail('CHOOSE', `Your Dot Dash dropped off “${chosen}” before it could save it. Check the password and try again.`);
+        } catch (e) {}
         await comeHome();
       };
 
