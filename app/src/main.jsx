@@ -439,6 +439,7 @@
     const ChevronRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 18 15 12 9 6"/></svg>;
     const Eye = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
     const EyeOff = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>;
+    const Star = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
     const GripVertical = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>;
     const Trash2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
     const ArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
@@ -746,6 +747,9 @@
       // Separate from the parent's choice in Firestore on purpose: the gap
       // between the two is how the app knows a change has not landed yet.
       const [deviceArcade, setDeviceArcade] = useState({});
+      // What each device says its point total is. Kept on the device record too,
+      // so a replacement can be given them back even when the old device is dead.
+      const [devicePoints, setDevicePoints] = useState({});
       // Same idea for the morse typewriter ("Dot Dash Mode" in Settings).
       const [deviceTypewriter, setDeviceTypewriter] = useState({});
       // What each device reports it is running: { version, line, build }.
@@ -1087,6 +1091,24 @@
               return; // retained and device-owned; do not auto-clear
             }
 
+            // The device reporting the child's points.
+            if (topicParts[3] === 'points') {
+              const [tag, val] = payload.split(',');
+              const n = parseInt(val, 10);
+              if (tag === 'PTS' && Number.isFinite(n)) {
+                setDevicePoints(prev => (prev[sourceChildMac] === n ? prev : { ...prev, [sourceChildMac]: n }));
+                // Written down so the total outlives the hardware. Only on a
+                // change, so a device reporting the same figure on every connect
+                // costs nothing.
+                const dev = currentDevices.find(d => d.id === sourceChildMac);
+                if (dev && dev.points !== n) {
+                  updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', sourceChildMac),
+                    { points: n, pointsAt: Date.now() }).catch(() => {});
+                }
+              }
+              return; // retained and device-owned; do not auto-clear
+            }
+
             // The device reporting its arcade switch -- the receipt for SET_ARCADE.
             if (topicParts[3] === 'arcade') {
               const [tag, val] = payload.split(',');
@@ -1359,6 +1381,40 @@
         return () => unsub();
       }, [user]);
 
+      // The Monitor feed, from the database rather than from whoever happened to
+      // catch the live copy. Each entry used to live only in the local storage of
+      // the one client that read it -- the app then deleted it from the broker --
+      // so a second phone never saw it and a reinstall lost the history. The
+      // bridge now writes every copy down; the live MQTT copy below still arrives
+      // first and is merged by id.
+      useEffect(() => {
+        if (!user || !db) return;
+        const ref = query(
+          collection(db, 'artifacts', appId, 'users', user.uid, 'monitor'),
+          orderBy('id', 'desc'),
+          limit(MESSAGE_PAGE)
+        );
+        const unsub = onSnapshot(ref, (snap) => {
+          const incoming = snap.docs.map((d) => {
+            const m = d.data();
+            const id = m.id || Number(d.id);
+            return {
+              id, type: m.type, text: m.text, direction: m.direction,
+              childMac: m.childMac, otherParty: m.otherParty,
+              timestamp: new Date(id).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            };
+          });
+          if (!incoming.length) return;
+          setMonitorMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id));
+            const add = incoming.filter((m) => !seen.has(m.id));
+            if (!add.length) return prev;
+            return [...prev, ...add].sort((a, b) => a.id - b.id);
+          });
+        }, (e) => console.error('monitor sync failed', e));
+        return () => unsub();
+      }, [user]);
+
       // Notification taps on NATIVE arrive through the Firebase plugin, not a
       // service worker -- the iOS app is a Capacitor WebView and has no SW at
       // all, which is why deep linking worked on the Home Screen PWA and did
@@ -1524,7 +1580,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} />
             </div>}
           </div>
 
@@ -2410,7 +2466,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {} }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        // A device that cannot be switched on: replace it (same child ID, carried
        // over) or release it without the on-screen code Unlink asks for.
@@ -2973,10 +3029,21 @@
            await new Promise((r) => setTimeout(r, 2500));
            await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SYNC_PHRASES,${phrases.join('|')}`, { qos: 1, retain: true });
 
+           // The child's points. A newly claimed device starts at zero, and the
+           // total is whatever the old one last reported -- which is on its record
+           // even if it never comes on again. An absolute figure, so a repeat does
+           // not double it.
+           const points = devicePoints[old.id] ?? old.points ?? 0;
+           if (points > 0) {
+             say('Moving points across…');
+             await new Promise((r) => setTimeout(r, 2500));
+             await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SET_POINTS,${points}`, { qos: 1, retain: true });
+           }
+
            setBrokenStatus({
              busy: false, error: false, done: true,
              msg: online
-               ? `Done. ${displayName(`${identity.name}${identity.pin}`)} is on the new Dot Dash with its friends and quick messages.`
+               ? `Done. ${displayName(`${identity.name}${identity.pin}`)} is on the new Dot Dash with its friends, quick messages${points > 0 ? ` and ${points} points` : ''}.`
                : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on: its quick messages are waiting for it. If its friends are missing once it's on, drag any friend in Approved Friends to send the list again.`,
            });
          } catch (e) {
@@ -3055,7 +3122,7 @@
                 <p className="text-gray-600 mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
 
                 {card('replace', 'Replace with a new Dot Dash',
-                  `Keep ${childId}, with its friends, quick messages and settings, and move it to new hardware.`,
+                  `Keep ${childId}, with its friends, quick messages, points and settings, and move it to new hardware.`,
                   'border-blue-100',
                   <>
                     <ol className="list-decimal list-inside text-sm text-gray-600 space-y-1 mb-3 leading-relaxed">
@@ -3137,7 +3204,23 @@
                    {devices.map(d => <option key={d.id} value={d.id}>{d.identity.name}{d.identity.pin}</option>)}
                  </select>
               </div>
-              
+
+              {/* The child's points, as the device last reported them. Shown from
+                  the device record when it has not reported this session, so the
+                  figure is there whether or not the device is awake. */}
+              {activeDevice && (devicePoints[activeDevice.id] ?? activeDevice.points) !== undefined && (
+                <div className="flex items-center justify-between mb-4 -mt-1">
+                  <div className="flex items-center text-gray-700">
+                    <Star className="w-4 h-4 text-amber-500 mr-2" />
+                    <span className="font-bold">{devicePoints[activeDevice.id] ?? activeDevice.points}</span>
+                    <span className="text-gray-500 text-sm ml-1">points</span>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {devicePoints[activeDevice.id] !== undefined ? 'now' : 'last reported'}
+                  </span>
+                </div>
+              )}
+
               {/* Approved Friends (collapsible) */}
               <button onClick={() => setOpenFriends(o => !o)} className={`w-full flex items-center justify-between p-4 bg-blue-50 border border-blue-100 active:bg-blue-100 transition-colors ${openFriends ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
                  <div className="flex items-center space-x-3 min-w-0">
@@ -3676,6 +3759,26 @@
     function MonitorView({ monitorMessages, devices, activeChildId, setActiveChildId, activeChildLabel, pendingApprovals = [], setPendingApprovals, mqttClient, lowBattery = {}, pendingFriendReqs = [], setPendingFriendReqs, user, parentProfile }) {
       const activeMonitorMsgs = monitorMessages.filter(m => m.childMac === activeChildId).sort((a, b) => b.id - a.id);
 
+      // Entries from the database carry the recipient's HASH -- that is what
+      // travels on the wire, so a recipient stays pseudonymous there. Turned back
+      // into the friend's id here, against this family's own friend lists.
+      const [friendByHash, setFriendByHash] = useState({});
+      useEffect(() => {
+        let alive = true;
+        (async () => {
+          const ids = new Set();
+          if (parentProfile?.virtualId) ids.add(parentProfile.virtualId);
+          for (const d of devices) {
+            (d.friends || []).forEach((f) => ids.add(f));
+            if (d.identity) ids.add(`${d.identity.name}${d.identity.pin}`);
+          }
+          const pairs = await Promise.all([...ids].map(async (id) => [await hashId(id), id]));
+          if (alive) setFriendByHash(Object.fromEntries(pairs));
+        })();
+        return () => { alive = false; };
+      }, [devices, parentProfile]);
+      const whoIs = (v) => (/^[0-9a-f]{64}$/.test(v || '') ? (friendByHash[v] || 'A Friend') : v);
+
       // Shown for EVERY linked device, not just the selected one: a flat battery
       // on the child you are not currently looking at is exactly the one you
       // would otherwise miss.
@@ -3852,11 +3955,11 @@
                          <>
                            <span className="text-indigo-600">{displayName(activeChildLabel)}</span>
                            <ArrowRight className="w-4 h-4 text-gray-400" />
-                           <span className="text-gray-500 italic">{displayName(msg.otherParty)}</span>
+                           <span className="text-gray-500 italic">{displayName(whoIs(msg.otherParty))}</span>
                          </>
                        ) : (
                          <>
-                           <span className="text-gray-600">{displayName(msg.otherParty)}</span>
+                           <span className="text-gray-600">{displayName(whoIs(msg.otherParty))}</span>
                            <ArrowRight className="w-4 h-4 text-gray-400" />
                            <span className="text-green-600">{displayName(activeChildLabel)}</span>
                          </>

@@ -233,6 +233,32 @@ function parseMessage(parts, payload) {
   };
 }
 
+/**
+ * A copy of a message a child SENT, carried on doorbell/monitor/<hash>/<stamp>.
+ * Payload is "TYPE,TEXT,SENDER" with the recipient's hash appended by firmware
+ * that knows how: "TYPE,TEXT,SENDER,<64 hex>".
+ *
+ * Anchored on the ends like parseMessage, because the text in the middle can
+ * contain commas.
+ */
+export function parseMonitorCopy(payload) {
+  const firstComma = payload.indexOf(',');
+  if (firstComma < 1) return null;
+  const type = payload.slice(0, firstComma);
+  if (!['TEXT', 'MORSE', 'PULSE'].includes(type)) return null;
+
+  let rest = payload.slice(firstComma + 1);
+  let target = '';
+  const tail = rest.lastIndexOf(',');
+  if (tail > 0 && /^[0-9a-f]{64}$/.test(rest.slice(tail + 1))) {
+    target = rest.slice(tail + 1);          // recipient hash, resolved by the app
+    rest = rest.slice(0, tail);
+  }
+  const senderComma = rest.lastIndexOf(',');
+  if (senderComma < 0) return null;            // an empty text is a PULSE (a buzz)
+  return { type, text: rest.slice(0, senderComma), sender: rest.slice(senderComma + 1), target };
+}
+
 // ------------------------------------------------------------- stage B ----
 // Routing: which parent owns the device this event came from, and what devices
 // should be notified.
@@ -287,6 +313,29 @@ async function initFirestore() {
     error(`firestore init failed (${e.message}) -- staying at stage A`);
     return null;
   }
+}
+
+// Which device record a child hash belongs to: the parent AND the device id the
+// app keys its Monitor feed on.
+async function resolveDevice(childHash) {
+  const key = `dev:${childHash}`;
+  const hit = cacheGet(key);
+  if (hit !== undefined) return hit;
+
+  let found = null;
+  try {
+    const snap = await db.collectionGroup('devices')
+      .where('hashedId', '==', childHash).limit(1).get();
+    if (!snap.empty) {
+      const segs = snap.docs[0].ref.path.split('/');   // artifacts/<appId>/users/<uid>/devices/<id>
+      found = { uid: segs[3], deviceId: snap.docs[0].id };
+    }
+  } catch (e) {
+    error(`resolveDevice(${childHash.slice(0, 12)}) failed: ${e.message}`);
+    return null;                                       // transient: do not cache
+  }
+  cacheSet(key, found, found ? CACHE_OK_MS : CACHE_MISS_MS);
+  return found;
 }
 
 const CACHE_OK_MS = 60 * 60 * 1000;   // device -> parent almost never changes
@@ -461,25 +510,78 @@ const lastPrune = new Map();
 // the documents: count bills roughly one read per thousand index entries, where
 // fetching them to count would bill one read EACH -- which is the very cost this
 // is here to avoid.
-async function pruneMessages(uid) {
+async function pruneMessages(uid, collectionName = 'messages', keep = KEEP_MESSAGES) {
   const now = Date.now();
-  if (now - (lastPrune.get(uid) || 0) < PRUNE_EVERY_MS) return;
-  lastPrune.set(uid, now);
+  const key = `${uid}/${collectionName}`;
+  if (now - (lastPrune.get(key) || 0) < PRUNE_EVERY_MS) return;
+  lastPrune.set(key, now);
 
-  const col = db.collection(`artifacts/${APP_ID}/users/${uid}/messages`);
+  const col = db.collection(`artifacts/${APP_ID}/users/${uid}/${collectionName}`);
   try {
     const total = (await col.count().get()).data().count;
-    if (total <= KEEP_MESSAGES) return;
+    if (total <= keep) return;
 
-    const excess = total - KEEP_MESSAGES;
+    const excess = total - keep;
     const oldest = await col.orderBy('id', 'asc').limit(excess).get();
     const batch = db.batch();
     oldest.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
-    info(`  pruned ${oldest.size} old message(s) for parent=${uid.slice(0, 8)}.. (kept ${KEEP_MESSAGES})`);
+    info(`  pruned ${oldest.size} old ${collectionName} entr${oldest.size === 1 ? 'y' : 'ies'} for parent=${uid.slice(0, 8)}.. (kept ${keep})`);
   } catch (e) {
     // Never fatal: a failed prune costs storage, a thrown one costs delivery.
-    error(`  prune failed for parent=${uid.slice(0, 8)}..: ${e.message}`);
+    error(`  prune of ${collectionName} failed for parent=${uid.slice(0, 8)}..: ${e.message}`);
+  }
+}
+
+// The Monitor feed, written down for the same reason messages are.
+//
+// A Monitor copy used to exist ONLY as a retained MQTT message, and the app
+// deleted it as soon as it had stored it in that phone's local storage. So it
+// lived in exactly one place: whichever client happened to see it first. A
+// second phone never saw it, and reinstalling the app lost the lot. The bridge
+// is always connected, so it writes every copy here; the app still takes the
+// live MQTT one for immediacy.
+const KEEP_MONITOR = 200;
+
+async function recordMonitor(uid, deviceId, id, entry) {
+  try {
+    await db.doc(`artifacts/${APP_ID}/users/${uid}/monitor/${id}`).set({
+      id: Number(id), childMac: deviceId, receivedAt: Date.now(), ...entry,
+    });
+  } catch (e) {
+    error(`  could not record monitor entry for parent=${uid.slice(0, 8)}..: ${e.message}`);
+    return;
+  }
+  await pruneMessages(uid, 'monitor', KEEP_MONITOR);
+}
+
+// A message a child SENT (the monitor copy), or one SENT TO a child (its inbox
+// topic, which belongs to no parent and so notifies nobody).
+async function recordMonitorFromTopic(topic, payload) {
+  if (!db) return;
+  const parts = topic.split('/');
+  const hash = parts[2];
+  const stamp = parts[3];
+  if (!/^\d+$/.test(stamp || '')) return;
+  const outgoing = parts[1] === 'monitor';
+  const copy = outgoing ? parseMonitorCopy(payload) : null;
+  if (outgoing && !copy) return;
+
+  const dev = await resolveDevice(hash);
+  if (!dev) return;                                    // not a child of ours
+  // The app derives its ids from the topic stamp; old firmware sends uptime
+  // rather than a clock, which sorts before every real timestamp.
+  const id = Number(stamp) > 1600000000000 ? stamp : String(Date.now());
+  if (outgoing) {
+    await recordMonitor(dev.uid, dev.deviceId, id, {
+      type: copy.type, text: copy.text, direction: 'out', otherParty: copy.target || copy.sender,
+    });
+  } else {
+    const m = parseMessage(parts, payload);
+    if (!m) return;
+    await recordMonitor(dev.uid, dev.deviceId, id, {
+      type: m.msgType, text: m.text, direction: 'in', otherParty: m.sender,
+    });
   }
 }
 
@@ -661,6 +763,14 @@ async function main() {
     // Record EVERY topic, alert or not, so a cleared battery flag updates the
     // guard and the next genuine low reading counts as new.
     const isNew = seen.isNew(topic, payload);
+
+    // The Monitor feed: every message a child sends or receives, written down
+    // whether or not it is worth a notification (it never is -- see parseEvent).
+    // Skipped while priming, like alerts: a retained backlog is history the app
+    // has already dealt with.
+    if (isNew && payload && !(priming && packet?.retain)) {
+      recordMonitorFromTopic(topic, payload).catch((e) => error(`monitor record failed: ${e.message}`));
+    }
 
     if (!ev || !isNew) return;
 

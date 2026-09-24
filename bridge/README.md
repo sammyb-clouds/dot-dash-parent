@@ -93,3 +93,24 @@ A parent's topic is `sha256(virtualId.toLowerCase().trim())`, matching the app's
 is built by hashing every parent profile and cached for ten minutes. With a
 handful of families that is cheaper and simpler than adding a field to every
 profile and backfilling it.
+
+## The Monitor feed is written down too (2026-09-24)
+
+`users/<uid>/monitor/<stamp>` holds every message a child sends or receives --
+`{ id, type, text, direction: 'in'|'out', childMac, otherParty, receivedAt }` --
+pruned to the most recent 200 per parent by the same counter as `messages`.
+
+Why: a Monitor copy used to exist ONLY as a retained MQTT message, and the app
+deleted it as soon as it had stored it in that phone's local storage. So it
+lived in exactly one place -- whichever client saw it first. A parent's second
+phone never saw it, and reinstalling the app (every TestFlight build is a fresh
+container) lost the history outright. The bridge is always connected, so it
+writes each copy here; the app still takes the live MQTT copy for immediacy and
+merges by id.
+
+`otherParty` on an outgoing entry is the recipient's HASH when the firmware
+appends one -- that is what travels on the wire, and the app resolves it against
+the family's own friend lists. Incoming entries carry the sender's id as sent.
+
+Cost: roughly one extra small write per child message, the same shape as the
+message writes already sized in the scaling note.
