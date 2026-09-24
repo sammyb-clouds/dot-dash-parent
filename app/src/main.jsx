@@ -1773,6 +1773,11 @@
       const [pass, setPass] = useState('');
       const [tz, setTz] = useState(guessDeviceTz);
       const codeRef = useRef('');
+      // Set once a join or a first contact has failed: the intro then carries
+      // what to try, rather than one red line and a button that did nothing
+      // visible last time.
+      const [trouble, setTrouble] = useState(false);
+      const [showManual, setShowManual] = useState(false);
       const cancelled = useRef(false);
       const onlineRef = useRef(isDeviceOnline);
       onlineRef.current = isDeviceOnline;
@@ -1788,7 +1793,10 @@
         };
       }, []);
 
-      const fail = (backTo, message, detail = '') => { setPhase(backTo); setError(message); setErrorDetail(detail); };
+      const fail = (backTo, message, detail = '') => {
+        setPhase(backTo); setError(message); setErrorDetail(detail);
+        if (backTo === 'INTRO') setTrouble(true);
+      };
 
       const joinAndScan = async () => {
         setError(''); setErrorDetail(''); setPhase('WORKING'); setStatus('Joining your Dot Dash’s network…');
@@ -1806,7 +1814,7 @@
           if (code === 'JOIN_TIMEOUT') {
             return fail('INTRO', 'iOS didn’t answer when asked to join “Dot Dash Setup”. Close the app completely, reopen it, and try again.', detail);
           }
-          return fail('INTRO', 'Couldn’t join the “Dot Dash Setup” network. Check that your Dot Dash’s screen says WI-FI SETUP, then try again.', detail);
+          return fail('INTRO', 'Couldn’t join the “Dot Dash Setup” network. It can take a few seconds to appear after the screen says WI-FI SETUP.', detail);
         }
 
         setStatus('Finding Wi-Fi networks your Dot Dash can see…');
@@ -1954,9 +1962,31 @@
                   {errorDetail && <div className="mt-2 text-xs text-red-400 font-mono break-words">{errorDetail}</div>}
                 </div>
               )}
-              <button onClick={joinAndScan} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4">Next</button>
+              {trouble && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700 space-y-2">
+                  <div className="font-bold text-gray-800">If it doesn’t work, try this</div>
+                  <ul className="list-disc list-outside pl-5 space-y-1.5 leading-relaxed">
+                    <li>Check your Dot Dash still says <strong>WI-FI SETUP</strong>. If not, open <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &rarr; WIFI</strong> again.</li>
+                    <li>Hold your phone next to your Dot Dash.</li>
+                    <li>On your iPhone, open Settings &rarr; Wi-Fi and turn Wi-Fi <strong>off, then on</strong>. Come back and tap Next.</li>
+                    <li>Still stuck? Turn your Dot Dash off and on, then open <strong>TOOLS &rarr; WIFI</strong> again.</li>
+                  </ul>
+                  <button onClick={() => setShowManual((v) => !v)} className="text-blue-500 font-bold pt-1">
+                    {showManual ? 'Hide' : 'Set it up without the app'}
+                  </button>
+                  {showManual && (
+                    <ol className="list-decimal list-outside pl-5 space-y-1.5 leading-relaxed border-t border-gray-200 pt-2">
+                      <li>Open your iPhone’s Settings &rarr; Wi-Fi.</li>
+                      <li>Join <strong>Dot Dash Setup</strong>.</li>
+                      <li>A setup page opens by itself. If it doesn’t, open Safari and go to <strong>192.168.4.1</strong>.</li>
+                      <li>Follow it, then come back here{isNew ? ' and tap “My Dot Dash is already on Wi-Fi”' : ''}.</li>
+                    </ol>
+                  )}
+                </div>
+              )}
+              <button onClick={joinAndScan} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4">{trouble ? 'Try again' : 'Next'}</button>
               <p className="text-xs text-gray-400 leading-relaxed text-center">
-                Your phone will briefly join your Dot Dash’s own network. iOS asks first — tap <strong>Join</strong>, and <strong>Allow</strong> if it asks about devices on your local network.
+                Your phone will briefly join your Dot Dash’s own network. iOS asks first — tap <strong>Join</strong>, and <strong>Allow</strong> if it asks about devices on your local network. If a Dot Dash setup page opens on top, tap <strong>Cancel</strong> — setup carries on here.
               </p>
               {isNew && onSkip && (
                 <button onClick={onSkip} className="w-full text-blue-500 text-sm font-bold py-2">My Dot Dash is already on Wi-Fi</button>
