@@ -437,6 +437,8 @@
     const Send = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
     const AlertTriangle = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
     const ChevronRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="9 18 15 12 9 6"/></svg>;
+    const Eye = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
+    const EyeOff = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>;
     const GripVertical = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>;
     const Trash2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
     const ArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
@@ -1759,7 +1761,7 @@
       });
     }
 
-    function DeviceWifiSetup({ mode, expectedCode, childName, mqttClient, isDeviceOnline, onDone, onSkip }) {
+    function DeviceWifiSetup({ mode, expectedCode, childName, mqttClient, isDeviceOnline, onDone, onSkip, presetSsid, presetPass }) {
       const isNew = mode === 'new';
       const [phase, setPhase] = useState('INTRO');   // INTRO | WORKING | CHOOSE | OFFLINE | DONE
       const [status, setStatus] = useState('');
@@ -1768,9 +1770,13 @@
       // Without it every failure looked like "couldn't find the network".
       const [errorDetail, setErrorDetail] = useState('');
       const [networks, setNetworks] = useState([]);
+      // A network the parent just added in Settings, carried in so they do not
+      // type it twice. Chosen from the scan if the device can see it, typed in
+      // by hand if it cannot.
       const [ssid, setSsid] = useState('');
-      const [manualSsid, setManualSsid] = useState('');
-      const [pass, setPass] = useState('');
+      const [manualSsid, setManualSsid] = useState(presetSsid || '');
+      const [pass, setPass] = useState(presetPass || '');
+      const [showPass, setShowPass] = useState(false);
       const [tz, setTz] = useState(guessDeviceTz);
       const codeRef = useRef('');
       // Set once a join or a first contact has failed: the intro then carries
@@ -1836,7 +1842,8 @@
               codeRef.current = code;
               const seen = [...new Set(String(res.data || '').split('\n').map((n) => n.trim()).filter(Boolean))];
               setNetworks(seen);
-              setSsid(seen[0] || '__other__');
+              if (presetSsid) setSsid(seen.includes(presetSsid) ? presetSsid : '__other__');
+              else setSsid(seen[0] || '__other__');
               setPhase('CHOOSE');
               return;
             }
@@ -2023,9 +2030,15 @@
                   className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-200 focus:border-blue-400"
                   value={manualSsid} onChange={(e) => setManualSsid(e.target.value)} />
               )}
-              <input type="password" placeholder="Password (leave blank if none)" autoComplete="off"
-                className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-200 focus:border-blue-400"
-                value={pass} onChange={(e) => setPass(e.target.value)} />
+              <div className="relative">
+                <input type={showPass ? 'text' : 'password'} placeholder="Password (leave blank if none)" autoComplete="off" autoCapitalize="none" autoCorrect="off"
+                  className="w-full bg-gray-50 pl-4 pr-12 py-3 rounded-xl outline-none border border-gray-200 focus:border-blue-400"
+                  value={pass} onChange={(e) => setPass(e.target.value)} />
+                <button type="button" onClick={() => setShowPass((v) => !v)} aria-label={showPass ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 active:text-gray-600">
+                  {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
               {isNew && (
                 <div>
                   <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Timezone</div>
@@ -2418,6 +2431,10 @@
        const [revealed, setRevealed] = useState({});
        const [wifiSyncMsg, setWifiSyncMsg] = useState('');
        const [wifiSetupOpen, setWifiSetupOpen] = useState(false);
+       // Asked after a network is added: saved for another day, or wanted now?
+       const [wifiWhen, setWifiWhen] = useState(null);       // { ssid, pass } | null
+       const [wifiPreset, setWifiPreset] = useState(null);   // handed to the setup flow
+       const [showNewPass, setShowNewPass] = useState(false);
        const [keyReset, setKeyReset] = useState({ busy: false, msg: '' });
 
        // ---------- ARCADE SWITCH ----------
@@ -2607,8 +2624,13 @@
          if (!ssid) return;
          if (wifiNets.length >= 5) return;
          if (wifiNets.some(n => n.ssid === ssid)) return setWifiSyncMsg('That network is already saved.');
-         await saveWifiNets([...wifiNets, { ssid, pass: newWifiPass }]);
-         setNewSsid(''); setNewWifiPass('');
+         const pass = newWifiPass;
+         await saveWifiNets([...wifiNets, { ssid, pass }]);
+         setNewSsid(''); setNewWifiPass(''); setShowNewPass(false);
+         // A saved network only reaches a device that is ONLINE to be told about
+         // it -- useless when the point was to get a disconnected device back.
+         // So ask which one this is; the app can walk the device onto it now.
+         if (isNativeApp()) setWifiWhen({ ssid, pass });
        };
 
        const handleRemoveWifi = async (ssid) => {
@@ -3248,10 +3270,32 @@
                   <div className="space-y-2">
                      <input type="text" placeholder="Network name (SSID)" className="w-full bg-gray-50 px-4 py-2 rounded-xl outline-none font-bold border border-gray-200" value={newSsid} onChange={e=>setNewSsid(e.target.value)}/>
                      <div className="flex space-x-2">
-                       <input type="password" placeholder="Password" autoComplete="new-password" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none border border-gray-200" value={newWifiPass} onChange={e=>setNewWifiPass(e.target.value)}/>
+                       <div className="flex-1 min-w-0 relative">
+                         <input type={showNewPass ? 'text' : 'password'} placeholder="Password" autoComplete="new-password" autoCapitalize="none" autoCorrect="off"
+                           className="w-full bg-gray-50 pl-4 pr-11 py-2 rounded-xl outline-none border border-gray-200"
+                           value={newWifiPass} onChange={e=>setNewWifiPass(e.target.value)}/>
+                         <button type="button" onClick={() => setShowNewPass(v => !v)} aria-label={showNewPass ? 'Hide password' : 'Show password'}
+                           className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 active:text-gray-600">
+                           {showNewPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                         </button>
+                       </div>
                        <button onClick={handleAddWifi} disabled={wifiNets.length >= 5 || !newSsid.trim()} className="shrink-0 bg-teal-500 text-white px-5 py-2 font-bold rounded-xl active:bg-teal-600 disabled:bg-teal-300">Add</button>
                      </div>
                   </div>
+                  {wifiWhen && (
+                    <div className="mt-3 bg-teal-50 border border-teal-200 rounded-2xl p-4">
+                      <div className="font-bold text-gray-800 text-sm">Connect to “{wifiWhen.ssid}” now?</div>
+                      <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                        It is saved either way. A saved network reaches the device the next time it is online — so if it is offline now, walk it onto this network instead.
+                      </p>
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => setWifiWhen(null)}
+                          className="flex-1 py-2 text-sm font-bold rounded-xl bg-white border border-gray-200 text-gray-700 active:bg-gray-50">Save for later</button>
+                        <button onClick={() => { setWifiPreset(wifiWhen); setWifiWhen(null); setWifiSetupOpen(true); }}
+                          className="flex-1 py-2 text-sm font-bold rounded-xl bg-teal-500 text-white active:bg-teal-600">Connect now</button>
+                      </div>
+                    </div>
+                  )}
                   {wifiNets.length >= 5 && <p className="text-xs text-gray-400 mt-2">The device holds 5 networks. Remove one to add another.</p>}
                   {wifiSyncMsg && <p className="text-xs text-gray-600 mt-2">{wifiSyncMsg}</p>}
                 </div>
@@ -3460,11 +3504,13 @@
                       even on devices paired before the code was stored. */}
                   <DeviceWifiSetup
                     mode="reconnect"
+                    presetSsid={wifiPreset?.ssid}
+                    presetPass={wifiPreset?.pass}
                     expectedCode={String(activeDevice.id).replace(/:/g, '').slice(-6).toUpperCase()}
                     childName={displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}
                     mqttClient={mqttClient}
                     isDeviceOnline={() => !!childOnlineStatus?.[activeDevice.id]}
-                    onDone={() => setWifiSetupOpen(false)} />
+                    onDone={() => { setWifiSetupOpen(false); setWifiPreset(null); }} />
                 </div>
               </div>
             )}
