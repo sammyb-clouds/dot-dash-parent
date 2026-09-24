@@ -1633,7 +1633,7 @@
       const handleSave = async () => {
         const pName = parentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         const pPin = parentPin.trim();
-        if (pName.length < 2 || pPin.length !== 4 || isNaN(pPin)) return alert("Enter a valid name and 4-digit PIN.");
+        if (pName.length < 2 || pPin.length !== 4 || isNaN(pPin)) return alert("Enter a valid name and a 4-digit birthday (MMDD).");
         const vid = pName + pPin;
         
         const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'parent');
@@ -1653,7 +1653,7 @@
             <input type="text" placeholder="Dad, Mama or Your Name" required maxLength="10"
               className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-100 focus:border-blue-300"
               value={parentName} onChange={e => setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
-            <input type="text" placeholder="Birthday PIN (MMDD)" required maxLength="4"
+            <input type="text" placeholder="Birthday (MMDD)" required maxLength="4"
               className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-100 focus:border-blue-300"
               value={parentPin} onChange={e => setParentPin(e.target.value.replace(/\D/g, ''))} />
             <button onClick={handleSave} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl active:bg-blue-600 transition-colors mt-2">
@@ -2093,7 +2093,7 @@
          const cName = childName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
          const cPin = childPin.trim();
          if (cName.length < 2 || cPin.length !== 4 || isNaN(cPin)) {
-             setLoading(false); return setError("Enter a valid name and 4-digit PIN.");
+             setLoading(false); return setError("Enter a valid name and a 4-digit birthday (MMDD).");
          }
          
          const isUnique = await checkUniqueness(cName + cPin);
@@ -2187,7 +2187,7 @@
          const pName = parentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
          const pPin = parentPin.trim();
          if (pName.length < 2 || pPin.length !== 4 || isNaN(pPin)) {
-             setLoading(false); return setError("Enter a valid name and 4-digit PIN.");
+             setLoading(false); return setError("Enter a valid name and a 4-digit birthday (MMDD).");
          }
          const pId = pName + pPin;
 
@@ -2318,10 +2318,10 @@
                 <div className="w-full max-w-sm my-auto space-y-4">
                    {autoCode && <div className="text-green-700 text-sm bg-green-50 p-3 rounded-xl font-bold">Your Dot Dash is online.</div>}
                    <h2 className="text-xl font-bold mb-2">Create Device ID</h2>
-                   <p className="text-gray-500 mb-6">Choose a screen name and 4-digit PIN for your child.</p>
+                   <p className="text-gray-500 mb-6">Choose a screen name and a birthday (MMDD) for your child. Together they make the ID their friends use.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
                    <input type="text" placeholder="Child's Name (e.g. ARTHUR)" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childName} onChange={e=>setChildName(e.target.value)} />
-                   <input type="text" placeholder="Birthday PIN (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childPin} onChange={e=>setChildPin(e.target.value.replace(/\D/g, ''))} />
+                   <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childPin} onChange={e=>setChildPin(e.target.value.replace(/\D/g, ''))} />
                    <button onClick={handleChildIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
                      {loading ? (autoCode ? 'Linking your Dot Dash...' : 'Checking...') : 'Next'}
                    </button>
@@ -2360,7 +2360,7 @@
                    <p className="text-gray-500 mb-6">This is the ID your child will see when you message them (e.g., MOM0101).</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
                    <input type="text" placeholder="Dad, Mama or Your Name" maxLength="10" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentName} onChange={e=>setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
-                   <input type="text" placeholder="Birthday PIN (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentPin} onChange={e=>setParentPin(e.target.value.replace(/\D/g, ''))} />
+                   <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentPin} onChange={e=>setParentPin(e.target.value.replace(/\D/g, ''))} />
                    <button onClick={handleParentIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
                      {loading ? 'Checking...' : 'Save Parent ID'}
                    </button>
