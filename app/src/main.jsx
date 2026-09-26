@@ -799,6 +799,8 @@
       // What each device says its point total is. Kept on the device record too,
       // so a replacement can be given them back even when the old device is dead.
       const [devicePoints, setDevicePoints] = useState({});
+      // Per device: { free, late } -- the arcade limits its owner has lifted.
+      const [deviceArcadeRules, setDeviceArcadeRules] = useState({});
       // Same idea for the morse typewriter ("Dot Dash Mode" in Settings).
       const [deviceTypewriter, setDeviceTypewriter] = useState({});
       // What each device reports it is running: { version, line, build }.
@@ -1154,6 +1156,15 @@
                   updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', sourceChildMac),
                     { points: n, pointsAt: Date.now() }).catch(() => {});
                 }
+              }
+              return; // retained and device-owned; do not auto-clear
+            }
+
+            // The device reporting which arcade limits are lifted: RULES,<free>,<late>.
+            if (topicParts[3] === 'arcaderules') {
+              const [tag, free, late] = payload.split(',');
+              if (tag === 'RULES') {
+                setDeviceArcadeRules(prev => ({ ...prev, [sourceChildMac]: { free: free === '1', late: late === '1' } }));
               }
               return; // retained and device-owned; do not auto-clear
             }
@@ -1629,7 +1640,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} deviceArcadeRules={deviceArcadeRules} />
             </div>}
           </div>
 
@@ -2515,7 +2526,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {} }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {}, deviceArcadeRules = {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        // A device that cannot be switched on: replace it (same child ID, carried
        // over) or release it without the on-screen code Unlink asks for.
@@ -2584,6 +2595,41 @@
          if (Date.now() - (lastArcadeSend.current[activeDevice.id] || 0) < 20000) return;
          sendArcade(activeDevice, arcadeWanted);
        }, [activeDevice?.id, arcadeOnline, arcadeReported, arcadeWanted]);
+
+       // The two limits the arcade puts on play: points to unlock a game, and
+       // nothing after 8pm. Both stay ON unless the owner lifts them, so a Dot
+       // Dash behaves the same out of the box as it always has. Same shape as
+       // the switch above: the owner's choice on the record, the device's own
+       // report, and a resend while they disagree.
+       const rulesWanted = {
+         free: activeDevice?.arcadeFreePlay === true,
+         late: activeDevice?.arcadeLatePlay === true,
+       };
+       const rulesReported = activeDevice ? deviceArcadeRules[activeDevice.id] : undefined;
+       const lastRulesSend = useRef({});
+
+       const sendRule = (dev, which, on) => {
+         if (!mqttClient || !dev?.hashedId) return;
+         lastRulesSend.current[dev.id] = Date.now();
+         const cmd = which === 'free' ? 'SET_FREEPLAY' : 'SET_LATEPLAY';
+         mqttClient.publish(`doorbell/cmd/${dev.hashedId}`, `CMD,${cmd},${on ? 1 : 0}`, { qos: 1, retain: true });
+       };
+
+       const handleToggleRule = async (which) => {
+         if (!activeDevice) return;
+         const next = !rulesWanted[which];
+         const field = which === 'free' ? 'arcadeFreePlay' : 'arcadeLatePlay';
+         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', activeDevice.id), { [field]: next });
+         sendRule(activeDevice, which, next);
+       };
+
+       useEffect(() => {
+         if (!activeDevice || !arcadeOnline || rulesReported === undefined) return;
+         if (Date.now() - (lastRulesSend.current[activeDevice.id] || 0) < 20000) return;
+         for (const which of ['free', 'late']) {
+           if (rulesReported[which] !== rulesWanted[which]) sendRule(activeDevice, which, rulesWanted[which]);
+         }
+       }, [activeDevice?.id, arcadeOnline, rulesReported?.free, rulesReported?.late, rulesWanted.free, rulesWanted.late]);
 
        // ---------- DOT DASH MODE (morse typewriter) ----------
        // Same shape as the arcade switch: the parent's choice in Firestore
@@ -3616,6 +3662,39 @@
                         </button>
                       </div>
                       <p className="mt-3 text-xs text-gray-400 leading-snug">{arcadeStatus}</p>
+
+                      {/* The limits the arcade normally keeps. Both off by default:
+                          a Dot Dash out of the box still charges points and still
+                          closes at 8pm. */}
+                      {arcadeWanted && (
+                        <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
+                          {[
+                            { key: 'free', label: 'Play without points',
+                              hint: 'Games open straight away instead of costing points. Points already earned are kept.' },
+                            { key: 'late', label: 'Play after 8pm',
+                              hint: 'Lifts the 8pm to 7am close. Without this the arcade sleeps overnight.' },
+                          ].map(({ key, label, hint }) => (
+                            <div key={key} className="flex items-center justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="font-bold text-gray-700 text-sm">{label}</div>
+                                <p className="text-gray-500 text-xs leading-relaxed mt-0.5">{hint}</p>
+                              </div>
+                              <button role="switch" aria-checked={rulesWanted[key]} aria-label={label}
+                                onClick={() => handleToggleRule(key)}
+                                className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${rulesWanted[key] ? 'bg-green-500' : 'bg-gray-300'}`}>
+                                <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${rulesWanted[key] ? 'translate-x-6' : 'translate-x-0'}`} />
+                              </button>
+                            </div>
+                          ))}
+                          {rulesReported !== undefined
+                            && (rulesReported.free !== rulesWanted.free || rulesReported.late !== rulesWanted.late) && (
+                            <p className="text-xs text-gray-400 leading-snug">Sending to the Dot Dash…</p>
+                          )}
+                          {rulesReported === undefined && (rulesWanted.free || rulesWanted.late) && (
+                            <p className="text-xs text-gray-400 leading-snug">Applies the next time the Dot Dash connects. A Dot Dash on older firmware ignores these.</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
