@@ -442,6 +442,7 @@
     const Star = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
     const GripVertical = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>;
     const Trash2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
+    const Phone = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
     const ArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
     const ArrowLeft = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>;
     const Cpu = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>;
@@ -502,6 +503,46 @@
       return login;
     }
 
+    // --- Phone contacts (SMS bridge) ---
+    // A phone contact is a virtual friend: bridge/sms.mjs gives it a friend ID
+    // (GRANDMA4821) and texts on its behalf, so the device treats it like any
+    // friend. The number goes to the bridge once, when it is added, and never
+    // comes back -- the app only ever sees the last four digits. See
+    // bridge/sms/README.md.
+    const SMS_CONTACTS_URL = 'https://app.dotdashdevice.com/sms/contacts';
+
+    // { ok, status, body }. A network failure (the bridge not running) comes back
+    // as status 0 rather than throwing, so callers can say so plainly.
+    async function smsApi(user, method, path = '', body) {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(SMS_CONTACTS_URL + path, {
+          method,
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        let out = {};
+        try { out = await res.json(); } catch (e) {}
+        return { ok: res.ok, status: res.status, body: out };
+      } catch (e) {
+        return { ok: false, status: 0, body: {} };
+      }
+    }
+
+    // What to tell a parent for each refusal the bridge can give.
+    const SMS_ERRORS = {
+      'invalid-number': "That doesn't look like a mobile number. Include the area code.",
+      'invalid-name': 'Give them a name with at least two letters, like GRANDMA.',
+      'friends-full': 'A Dot Dash can hold 10 contacts. Remove one to add another.',
+      'already-added': 'That number is already a contact on this Dot Dash.',
+      'pool-exhausted': "We can't add that number to another device just yet. We've been told and are adding capacity. Try again in a day or two.",
+      'slow-down': 'Too many phone numbers added today. Try again tomorrow.',
+      'not-owner': 'This device is not linked to your account.',
+      'no-device': 'This device is not linked to your account.',
+    };
+    const smsError = (r) => SMS_ERRORS[r.body?.status]
+      || (r.status === 0 ? "Phone contacts aren't available right now. Check your connection and try again." : 'Something went wrong. Try again in a moment.');
+
     // The login is saved on the phone so the app connects at once on open, and
     // still connects if the login service is down: the password never changes
     // for an account, so a saved one stays good. Same exposure as the Firebase
@@ -553,6 +594,14 @@
     // go at the top -- so the app refuses rather than let one fall off.
     const MAX_FRIENDS = 10;
     const MAX_PHRASES = 20;
+
+    // "MAYA" -> "Maya", for sentences the parent reads.
+    const titleCaseName = (n) => String(n || '').toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
+    // +18005550100 -> (800) 555-0100; anything not North American as given.
+    const formatPhone = (e164) => {
+      const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164 || '');
+      return m ? `(${m[1]}) ${m[2]}-${m[3]}` : (e164 || '');
+    };
 
     // A device's friends in the parent's chosen order. The parent's own ID is
     // always on the list but may sit anywhere in it; nothing on the device treats
@@ -670,7 +719,7 @@
     }
 
     // --- Default Phrases ---
-    const defaultPhrases = ["HELLO!", "HOW ARE YOU?", "COME OVER?", "MEET AT PARK?", "GREAT!", "OK", "MAYBE LATER", "BUSY", ":)", ":(", "ASKING PARENT", "CALL MY PARENT", "BYE!"];
+    const defaultPhrases = ["HELLO!", "HOW ARE YOU?", "COME OVER?", "MEET AT PARK?", "GREAT!", "OK", "MAYBE LATER", "BUSY", ":)", ":(", "ASKING FIRST", "CALL MY BASE", "BYE!"];
 
     function App() {
       const [user, setUser] = useState(null);
@@ -1135,12 +1184,12 @@
               if (parts[0] === 'FRIENDREQ' && parts.length >= 2) {
                 const strangerId = parts[1];
                 const dev = currentDevices.find(d => d.id === sourceChildMac);
-                const childLabel = dev ? `${dev.identity.name}${dev.identity.pin}` : 'Your child';
+                const childLabel = dev ? `${dev.identity.name}${dev.identity.pin}` : 'A Dot Dash';
                 setPendingFriendReqs(prev => {
                   if (prev.some(r => r.childMac === sourceChildMac && r.strangerId === strangerId)) return prev;
                   return [...prev, { strangerId, childMac: sourceChildMac, childHash: topicParts[2], childLabel, topic }];
                 });
-                notify('👋 New friend request', `${displayName(strangerId)} sent ${displayName(childLabel)} a message. Add them as a friend?`);
+                notify('👋 New contact request', `${displayName(strangerId)} messaged ${displayName(childLabel)}. Add them as a contact?`);
               }
               return; // do NOT auto-clear; cleared when the parent answers
             }
@@ -1155,7 +1204,7 @@
                 const points = parseInt(parts[2]) || 0;
                 const childHash = topicParts[2];
                 const dev = currentDevices.find(d => d.id === sourceChildMac);
-                const childLabel = dev ? `${dev.identity.name}${dev.identity.pin}` : 'Your child';
+                const childLabel = dev ? `${dev.identity.name}${dev.identity.pin}` : 'A Dot Dash';
                 setPendingApprovals(prev => {
                   if (prev.some(p => p.reqId === reqId)) return prev;
                   return [...prev, { reqId, minutes, points, childMac: sourceChildMac, childHash, childLabel, topic }];
@@ -1167,7 +1216,7 @@
 
             const parts = payload.split(',');
             if (parts.length >= 3) {
-              let targetFriend = "A Friend";
+              let targetFriend = "A contact";
               if (parts.length > 3) {
                  const targetData = parts[3];
                  if (targetData.length === 64) {
@@ -1177,7 +1226,7 @@
                                  if (await hashId(f) === targetData) { targetFriend = f; break; }
                              }
                          }
-                         if (targetFriend !== "A Friend") break;
+                         if (targetFriend !== "A contact") break;
                      }
                  } else { targetFriend = targetData; }
               }
@@ -1589,7 +1638,7 @@
             {/* Count only alerts for devices still linked -- an unlinked device
                 leaves a stale key behind, and a badge you cannot clear is worse
                 than no badge. */}
-            <TabButton icon={<Shield className="w-6 h-6"/>} label="Monitor" active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} badge={monitorCount} />
+            <TabButton icon={<Shield className="w-6 h-6"/>} label="Log" active={activeTab === 'monitor'} onClick={() => setActiveTab('monitor')} badge={monitorCount} />
             <TabButton icon={<BookOpen className="w-6 h-6"/>} label="Tutorials" active={activeTab === 'tutorials'} onClick={() => setActiveTab('tutorials')} />
             <TabButton icon={<SettingsIcon className="w-6 h-6"/>} label="Settings" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
           </div>
@@ -1640,7 +1689,7 @@
               </button>
               
               <button onClick={() => setView('LOGIN')} className="w-full bg-white text-blue-500 border border-blue-500 font-bold py-5 rounded-2xl shadow-sm active:bg-gray-50 transition-colors">
-                2. Log in to Parent Companion App
+                2. Log in to the Dot Dash app
               </button>
             </div>
           </div>
@@ -1705,7 +1754,7 @@
       return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
           <h1 className="text-3xl font-bold mb-4">Create Your ID</h1>
-          <p className="text-gray-500 mb-8 max-w-sm leading-relaxed">This is the ID your child will see when you send them messages (e.g. MOM0101, DAD99).</p>
+          <p className="text-gray-500 mb-8 max-w-sm leading-relaxed">Your base call sign is what a Dot Dash shows when you message it (e.g. MOM0101, DAD99).</p>
 
           <div className="w-full max-w-sm bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
             <input type="text" placeholder="Dad, Mama or Your Name" required maxLength="10"
@@ -2261,7 +2310,7 @@
          const pId = pName + pPin;
 
          const isUnique = await checkUniqueness(pId);
-         if (!isUnique) { setLoading(false); return setError("This Parent ID is taken. Please add a number to the end (e.g. DAD99)."); }
+         if (!isUnique) { setLoading(false); return setError("That base call sign is taken. Try adding a number to the end (e.g. DAD99)."); }
 
          const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'parent');
          await setDoc(profileRef, { email: user.email || 'anonymous', virtualId: pId });
@@ -2386,10 +2435,10 @@
              {step === 'CHILD_ID' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
                    {autoCode && <div className="text-green-700 text-sm bg-green-50 p-3 rounded-xl font-bold">Your Dot Dash is online.</div>}
-                   <h2 className="text-xl font-bold mb-2">Create Device ID</h2>
-                   <p className="text-gray-500 mb-6">Choose a screen name and a birthday (MMDD) for your child. Together they make the ID their friends use.</p>
+                   <h2 className="text-xl font-bold mb-2">Create a Dot Dash call sign</h2>
+                   <p className="text-gray-500 mb-6">Choose a name and a birthday (MMDD) for this Dot Dash. Together they make the call sign for this Dot Dash.</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
-                   <input type="text" placeholder="Child's Name (e.g. ARTHUR)" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childName} onChange={e=>setChildName(e.target.value)} />
+                   <input type="text" placeholder="Name (e.g. ARTHUR)" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childName} onChange={e=>setChildName(e.target.value)} />
                    <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childPin} onChange={e=>setChildPin(e.target.value.replace(/\D/g, ''))} />
                    <button onClick={handleChildIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
                      {loading ? (autoCode ? 'Linking your Dot Dash...' : 'Checking...') : 'Next'}
@@ -2425,21 +2474,21 @@
 
              {step === 'PARENT_ID' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
-                   <h2 className="text-xl font-bold mb-2">Set Up Parent ID</h2>
-                   <p className="text-gray-500 mb-6">This is the ID your child will see when you message them (e.g., MOM0101).</p>
+                   <h2 className="text-xl font-bold mb-2">Set up your base call sign</h2>
+                   <p className="text-gray-500 mb-6">This is what a Dot Dash shows when you message it (e.g. MOM0101).</p>
                    {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
                    <input type="text" placeholder="Dad, Mama or Your Name" maxLength="10" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentName} onChange={e=>setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
                    <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentPin} onChange={e=>setParentPin(e.target.value.replace(/\D/g, ''))} />
                    <button onClick={handleParentIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
-                     {loading ? 'Checking...' : 'Save Parent ID'}
+                     {loading ? 'Checking...' : 'Save base call sign'}
                    </button>
                 </div>
              )}
 
              {step === 'ADD_FRIENDS' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
-                   <h2 className="text-xl font-bold mb-2">Add Friends</h2>
-                   <p className="text-gray-500 mb-6">Enter a friend's User ID to add them to your child's approved list.</p>
+                   <h2 className="text-xl font-bold mb-2">Add contacts</h2>
+                   <p className="text-gray-500 mb-6">Enter a call sign — another Dot Dash, a base, or a phone patch — to add it to this Dot Dash’s contacts.</p>
                    
                    <ul className="space-y-2 mb-4 text-left">
                      {displayFriends.map((f, i) => (
@@ -2450,7 +2499,7 @@
                    </ul>
 
                    <div className="flex space-x-2">
-                     <input type="text" placeholder="Friend ID" className="flex-1 bg-gray-50 px-4 py-3 rounded-xl outline-none font-bold uppercase border border-gray-200" value={friendId} onChange={e=>setFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                     <input type="text" placeholder="Call sign" className="flex-1 bg-gray-50 px-4 py-3 rounded-xl outline-none font-bold uppercase border border-gray-200" value={friendId} onChange={e=>setFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
                      <button onClick={handleAddFriend} className="bg-blue-500 text-white font-bold px-6 rounded-xl">Add</button>
                    </div>
                    
@@ -2492,6 +2541,13 @@
        const [wifiPreset, setWifiPreset] = useState(null);   // handed to the setup flow
        const [showNewPass, setShowNewPass] = useState(false);
        const [keyReset, setKeyReset] = useState({ busy: false, msg: '' });
+       // Phone contacts: every one this parent has, on any device, from the SMS
+       // bridge. null until first loaded (and while the bridge is unreachable).
+       const [smsContacts, setSmsContacts] = useState(null);
+       const [phoneForm, setPhoneForm] = useState(null);      // { name, phone, busy, error } while adding
+       const [smsNote, setSmsNote] = useState('');
+       const [inviteFor, setInviteFor] = useState(null);      // the contact just added, whose invite the note offers
+       const [inviteCopied, setInviteCopied] = useState(false);
 
        // ---------- ARCADE SWITCH ----------
        // Firestore holds what the PARENT chose (absent means on, which is every
@@ -2750,8 +2806,8 @@
        const handleDeleteAccount = async () => {
          if (!window.confirm(
            "Delete your account?\n\n" +
-           "This unpairs every Dot Dash device, erases your message history, and " +
-           "removes your parent ID. It cannot be undone."
+           "This releases every Dot Dash you have linked, erases your message history, and " +
+           "removes your base call sign. It cannot be undone."
          )) return;
          const typed = window.prompt('This is permanent.\n\nType DELETE to confirm:');
          if (typed !== 'DELETE') return;
@@ -2759,7 +2815,7 @@
          const base = `artifacts/${appId}/users/${user.uid}`;
          try {
            // 1. Release the hardware while we still know each device's hash.
-           setDeleting('Unpairing devices...');
+           setDeleting('Releasing your Dot Dashes...');
            // Each device's own broker key goes too, exactly as Unlink does it.
            // Left behind, the key stayed locked to the deleted account: the device
            // makes a new one after unpairing, and the server refused it
@@ -2781,10 +2837,22 @@
              try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'identities', d.hashedId)); } catch (e) {}
            }
 
+           // Phone contacts live on the SMS bridge, not here: ask it to delete
+           // each one (numbers included) while this account can still prove it
+           // owns them. The bridge's sweep would catch them within hours once
+           // the devices are gone, but "delete my account" should mean now.
+           setDeleting('Removing phone contacts...');
+           try {
+             const r = await smsApi(user, 'GET');
+             for (const c of (r.ok && r.body.contacts) || []) await smsApi(user, 'DELETE', `/${c.id}`);
+           } catch (e) {}
+
            setDeleting('Erasing your data...');
            await deleteAllIn(`${base}/devices`);
            await deleteAllIn(`${base}/messages`);
+           await deleteAllIn(`${base}/monitor`);
            await deleteAllIn(`${base}/pushTokens`);
+           await deleteAllIn(`${base}/state`);
            try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'parent')); } catch (e) {}
            if (parentProfile?.virtualId) {
              try {
@@ -3024,7 +3092,7 @@
            const online = await waitForOnline(hashedId, 90000);
            const friends = friendsInOrder(old, parentProfile?.virtualId);
            const phrases = old.phrases?.length ? old.phrases : defaultPhrases;
-           say('Sending friends and quick messages…');
+           say('Sending contacts and quick messages…');
            await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SYNC_FRIENDS,${friends.join('|')}`, { qos: 1, retain: true });
            await new Promise((r) => setTimeout(r, 2500));
            await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SYNC_PHRASES,${phrases.join('|')}`, { qos: 1, retain: true });
@@ -3043,8 +3111,8 @@
            setBrokenStatus({
              busy: false, error: false, done: true,
              msg: online
-               ? `Done. ${displayName(`${identity.name}${identity.pin}`)} is on the new Dot Dash with its friends, quick messages${points > 0 ? ` and ${points} points` : ''}.`
-               : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on: its quick messages are waiting for it. If its friends are missing once it's on, drag any friend in Approved Friends to send the list again.`,
+               ? `Done. ${displayName(`${identity.name}${identity.pin}`)} is on the new Dot Dash with its contacts, quick messages${points > 0 ? ` and ${points} points` : ''}.`
+               : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on: its quick messages are waiting for it. If its contacts are missing once it’s on, drag any contact in the Contacts list to send it again.`,
            });
          } catch (e) {
            setBrokenStatus({ busy: false, error: true, msg: `Could not replace it: ${e.message}` });
@@ -3067,7 +3135,7 @@
          const fId = newFriendId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
          const current = friendsInOrder(activeDevice, parentProfile.virtualId);
          if (!current.includes(fId)) {
-             if (current.length >= MAX_FRIENDS) return alert(`A device can hold ${MAX_FRIENDS} friends. Remove one to add another.`);
+             if (current.length >= MAX_FRIENDS) return alert(`A Dot Dash can hold ${MAX_FRIENDS} contacts. Remove one to add another.`);
              await saveFriends([fId, ...current]);        // newest at the top
          }
          setNewFriendId('');
@@ -3075,8 +3143,90 @@
 
        const handleRemoveFriend = async (fIdToRemove) => {
          if (fIdToRemove === parentProfile.virtualId) return; 
-         if (!window.confirm(`Remove ${fIdToRemove} from friends?`)) return;
+         // The list may not have loaded yet (it loads when this panel opens);
+         // fetch it rather than leave a removed contact's number on the bridge.
+         const list = smsContacts || await loadSmsContacts() || [];
+         const phone = list.find(c => c.deviceId === activeDevice.id && c.virtualId === fIdToRemove);
+         if (phone) {
+           if (!window.confirm(`Remove ${phone.contactName} (${phone.hint}) from this device? Their number is deleted, and messages from them stop reaching ${deviceName}.`)) return;
+           // The bridge first: once it forgets the number nothing more is sent
+           // either way, even if taking the friend off the device fails.
+           const r = await smsApi(user, 'DELETE', `/${phone.id}`);
+           if (!r.ok && r.status !== 404) return alert(smsError(r));
+           setSmsContacts(list => (list || []).filter(c => c.id !== phone.id));
+         } else if (!window.confirm(`Remove ${fIdToRemove} from contacts?`)) return;
          await saveFriends(friendsInOrder(activeDevice, parentProfile.virtualId).filter(f => f !== fIdToRemove));
+       };
+
+       // ---------- PHONE CONTACTS ----------
+       const loadSmsContacts = async () => {
+         const r = await smsApi(user, 'GET');
+         if (!r.ok) return null;
+         setSmsContacts(r.body.contacts || []);
+         return r.body.contacts || [];
+       };
+       const smsByFriend = Object.fromEntries((smsContacts || []).filter(c => c.deviceId === activeDevice?.id).map(c => [c.virtualId, c]));
+       const deviceName = activeDevice ? titleCaseName(activeDevice.identity?.name) : 'this device';
+
+       // Loaded when the friends list opens; while anyone has yet to send START,
+       // checked again every 20 seconds so "waiting" turns into
+       // "connected" without the parent having to do anything.
+       const anyPending = (smsContacts || []).some(c => c.status === 'pending');
+       useEffect(() => {
+         if (!openFriends) return;
+         loadSmsContacts();
+         if (!anyPending) return;
+         const t = setInterval(loadSmsContacts, 20000);
+         return () => clearInterval(t);
+       }, [openFriends, anyPending]);  // eslint-disable-line
+
+       const handleAddPhone = async () => {
+         const current = friendsInOrder(activeDevice, parentProfile.virtualId);
+         if (current.length >= MAX_FRIENDS) return setPhoneForm(f => ({ ...f, error: SMS_ERRORS['friends-full'] }));
+         setPhoneForm(f => ({ ...f, busy: true, error: '' }));
+         const r = await smsApi(user, 'POST', '', { deviceId: activeDevice.id, phone: phoneForm.phone, contactName: phoneForm.name });
+         if (!r.ok) return setPhoneForm(f => ({ ...f, busy: false, error: smsError(r) }));
+         const c = r.body.contact;
+         setSmsContacts(list => [...(list || []).filter(x => x.id !== c.id), c]);
+         // Onto the device like any friend. If this fails the contact still
+         // exists on the bridge; adding the same number again says so, and the
+         // friend list can be re-sent by dragging any friend.
+         await saveFriends([c.virtualId, ...current.filter(f => f !== c.virtualId)]);
+         setPhoneForm(null);
+         // Dot Dash never messages them first: the contact opts in by sending
+         // START themselves, so the parent passes the invite on from their own
+         // phone (handleShareInvite).
+         setInviteFor(c);
+         setInviteCopied(false);
+         setSmsNote(`Now send ${c.contactName} the invite from your phone. Once they send START to ${formatPhone(c.poolNumber)}, they and ${deviceName} can message each other.`);
+       };
+
+       // The invite goes from the PARENT's own phone -- their Messages, WhatsApp,
+       // whatever the share sheet offers -- never from Dot Dash's number. That
+       // keeps the contact's opt-in their own (they still send START themselves,
+       // which is what the Twilio verification describes), it arrives from
+       // someone they know, and a mistyped number in the app messages nobody.
+       // The link opens start.html, which opens the contact's Messages with
+       // START typed to the right number.
+       const inviteText = (c) =>
+         `Hi ${c.contactName}! I added you as a contact on ${c.displayName}. To start messaging, send START to ${formatPhone(c.poolNumber)}, or tap here: https://app.dotdashdevice.com/start.html?n=${String(c.poolNumber).replace(/\D/g, '')}`;
+
+       const handleShareInvite = async (c) => {
+         const text = inviteText(c);
+         if (navigator.share) {
+           try { await navigator.share({ text }); return; }
+           catch (e) { if (e?.name === 'AbortError') return; }   // cancelled: nothing more to do
+         }
+         // No share sheet: open Messages with the invite written, recipient left
+         // for the parent to pick. iOS separates the body with '&', others '?'.
+         const ua = navigator.userAgent;
+         const ios = !/Android/i.test(ua) && (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+         window.location.href = `sms:${ios ? '&' : '?'}body=${encodeURIComponent(text)}`;
+       };
+
+       const handleCopyInvite = async (c) => {
+         try { await navigator.clipboard.writeText(inviteText(c)); setInviteFor(c); setInviteCopied(true); }
+         catch (e) { window.prompt('Copy this invite:', inviteText(c)); }
        };
 
        const handleAddPhrase = async () => {
@@ -3122,7 +3272,7 @@
                 <p className="text-gray-600 mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
 
                 {card('replace', 'Replace with a new Dot Dash',
-                  `Keep ${childId}, with its friends, quick messages, points and settings, and move it to new hardware.`,
+                  `Keep ${childId}, with its contacts, quick messages, points and settings, and move it to new hardware.`,
                   'border-blue-100',
                   <>
                     <ol className="list-decimal list-inside text-sm text-gray-600 space-y-1 mb-3 leading-relaxed">
@@ -3164,7 +3314,7 @@
              <div className="p-6 h-full flex flex-col">
                 <button onClick={()=>setUnlinkMode(false)} className="flex items-center text-gray-500 font-bold mb-6"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
                 <h2 className="text-2xl font-bold mb-4">Unlink Device</h2>
-                <p className="text-gray-600 mb-6">Navigate to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> on your child's Dot Dash and enter the code below to confirm unlinking.</p>
+                <p className="text-gray-600 mb-6">Navigate to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> on the Dot Dash and enter the code below to confirm unlinking.</p>
                 <input type="text" placeholder="Pairing Code" className="w-full bg-white px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-xl tracking-widest border border-gray-200 focus:border-red-400 mb-6" value={unlinkCode} onChange={e=>setUnlinkCode(e.target.value)} />
                 <button onClick={handleUnlink} className="w-full py-4 text-white font-bold bg-red-500 rounded-xl shadow-sm active:bg-red-600">Confirm Unlink</button>
                 
@@ -3193,13 +3343,13 @@
             </div>
 
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
-              <label className="text-xs text-gray-500 font-bold uppercase">Your Virtual ID</label>
+              <label className="text-xs text-gray-500 font-bold uppercase">Your base call sign</label>
               <div className="text-xl font-bold text-blue-600">{parentProfile.virtualId}</div>
             </div>
 
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6">
               <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
-                 <label className="text-xs text-gray-500 font-bold uppercase">Active Device</label>
+                 <label className="text-xs text-gray-500 font-bold uppercase">Active Dot Dash</label>
                  <select className="bg-gray-50 rounded-lg px-3 py-1 font-bold outline-none border border-gray-200 text-sm" value={activeChildId || ''} onChange={e => setActiveChildId(e.target.value)}>
                    {devices.map(d => <option key={d.id} value={d.id}>{d.identity.name}{d.identity.pin}</option>)}
                  </select>
@@ -3226,8 +3376,8 @@
                  <div className="flex items-center space-x-3 min-w-0">
                     <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0"><Users className="w-5 h-5"/></div>
                     <div className="text-left min-w-0">
-                       <div className="font-bold text-gray-800 text-base">Approved Friends</div>
-                       <div className="text-xs text-gray-500">{displayFriends.length === 1 ? '1 friend on this device' : `${displayFriends.length} friends on this device`}</div>
+                       <div className="font-bold text-gray-800 text-base">Contacts</div>
+                       <div className="text-xs text-gray-500">{displayFriends.length === 1 ? '1 contact' : `${displayFriends.length} contacts`}</div>
                     </div>
                  </div>
                  <div className="flex items-center space-x-2 shrink-0 ml-2">
@@ -3238,14 +3388,60 @@
               {openFriends && (
                 <div className="border border-t-0 border-blue-100 rounded-b-2xl bg-white p-4 mb-3">
                   <div className="flex space-x-2 mb-4">
-                     <input type="text" placeholder="Friend ID" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newFriendId} onChange={e=>setNewFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} onKeyDown={e => { if (e.key === 'Enter') handleAddFriend(); }}/>
+                     <input type="text" placeholder="Call sign" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newFriendId} onChange={e=>setNewFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} onKeyDown={e => { if (e.key === 'Enter') handleAddFriend(); }}/>
                      <button onClick={handleAddFriend} className="shrink-0 bg-blue-500 text-white px-5 py-2 font-bold rounded-xl active:bg-blue-600">Add</button>
                   </div>
+                  {phoneForm ? (
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 space-y-2">
+                      <div className="font-bold text-gray-800 text-sm flex items-center"><Phone className="w-4 h-4 text-blue-500 mr-1.5"/>Add a phone number</div>
+                      <input type="text" placeholder="Their name, like Grandma" maxLength="30" autoComplete="off" className="w-full bg-white px-3 py-2 rounded-lg outline-none border border-gray-200" value={phoneForm.name} onChange={e => setPhoneForm(f => ({ ...f, name: e.target.value, error: '' }))}/>
+                      <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Mobile number" className="w-full bg-white px-3 py-2 rounded-lg outline-none border border-gray-200" value={phoneForm.phone} onChange={e => setPhoneForm(f => ({ ...f, phone: e.target.value, error: '' }))} onKeyDown={e => { if (e.key === 'Enter' && phoneForm.name.trim() && phoneForm.phone.trim()) handleAddPhone(); }}/>
+                      <p className="text-xs text-gray-500 leading-snug">{deviceName} will be able to message this number, and they can message back. Next you'll ask them to send START to our number; nothing goes through until they do. Their number is stored encrypted and deleted if you remove them.</p>
+                      {phoneForm.error && <p className="text-xs text-red-600 font-medium">{phoneForm.error}</p>}
+                      <div className="flex space-x-2 pt-1">
+                        <button onClick={() => setPhoneForm(null)} disabled={phoneForm.busy} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2 font-bold rounded-xl active:bg-gray-100">Cancel</button>
+                        <button onClick={handleAddPhone} disabled={phoneForm.busy || !phoneForm.name.trim() || !phoneForm.phone.trim()} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600 disabled:bg-blue-300">{phoneForm.busy ? 'Adding…' : 'Add'}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setSmsNote(''); setPhoneForm({ name: '', phone: '', busy: false, error: '' }); }} className="w-full flex items-center justify-center space-x-2 text-blue-600 font-bold text-sm py-2 mb-4 rounded-xl border border-dashed border-blue-200 active:bg-blue-50">
+                      <Phone className="w-4 h-4"/><span>Add a phone number</span>
+                    </button>
+                  )}
+                  {smsNote && (
+                    <div className="text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 mb-3">
+                      <div className="flex items-start">
+                        <span className="flex-1">{smsNote}</span>
+                        <button onClick={() => { setSmsNote(''); setInviteFor(null); }} className="ml-2 text-blue-400 font-bold" aria-label="Dismiss">×</button>
+                      </div>
+                      {inviteFor && (
+                        <div className="flex space-x-2 mt-2">
+                          <button onClick={() => handleShareInvite(inviteFor)} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600">Send {inviteFor.contactName} the invite</button>
+                          <button onClick={() => handleCopyInvite(inviteFor)} className="shrink-0 bg-white border border-blue-200 text-blue-600 px-4 py-2 font-bold rounded-xl active:bg-blue-50">{inviteCopied ? 'Copied' : 'Copy'}</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <ReorderList className="space-y-2" items={displayFriends} onReorder={saveFriends} renderItem={(f) => (
                     <>
-                      <span className="flex-1 font-bold text-gray-700 min-w-0 truncate">
-                         {f} {f === parentProfile.virtualId && <span className="text-xs text-blue-500 font-normal ml-2">(You)</span>}
-                      </span>
+                      {smsByFriend[f] ? (() => { const c = smsByFriend[f]; return (
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center font-bold text-gray-700 min-w-0">
+                            <Phone className="w-4 h-4 text-blue-500 mr-1.5 shrink-0"/>
+                            <span className="truncate">{c.contactName}</span>
+                            <span className="text-xs text-gray-400 font-normal ml-2 shrink-0">{c.hint}</span>
+                          </span>
+                          {c.status === 'pending' && (
+                            <span className="block text-xs text-amber-600">Waiting for them to send START to {formatPhone(c.poolNumber)} · <button onClick={() => handleShareInvite(c)} className="underline font-medium">Send invite</button></span>
+                          )}
+                          {c.status === 'active' && <span className="block text-xs text-green-600">Connected · messages from {formatPhone(c.poolNumber)}</span>}
+                          {c.status === 'stopped' && <span className="block text-xs text-gray-500">Messages turned off. They can send START to {formatPhone(c.poolNumber)}.</span>}
+                        </span>
+                      ); })() : (
+                        <span className="flex-1 font-bold text-gray-700 min-w-0 truncate">
+                           {f} {f === parentProfile.virtualId && <span className="text-xs text-blue-500 font-normal ml-2">(You)</span>}
+                        </span>
+                      )}
                       {f !== parentProfile.virtualId && (
                           <button onClick={() => handleRemoveFriend(f)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
                             <Trash2 className="w-5 h-5"/>
@@ -3610,7 +3806,7 @@
               </h3>
               <div className="flex items-center justify-between gap-4">
                 <p className="text-gray-500 text-sm leading-relaxed flex-1">
-                    Get alerted when your child messages you, someone new messages
+                    Get alerted when a Dot Dash messages you, someone new messages
                     them, a timer needs approving, or a battery runs low.
                 </p>
                 <button
@@ -3808,7 +4004,7 @@
             if (!current.includes(req.strangerId)) {
               if (current.length >= MAX_FRIENDS) {
                 // Left unanswered on purpose, so it can be approved after a removal.
-                alert(`${displayName(`${dev.identity.name}${dev.identity.pin}`)} already has ${MAX_FRIENDS} friends, the most a device holds. Remove one in Settings, then approve this request.`);
+                alert(`${displayName(`${dev.identity.name}${dev.identity.pin}`)} already has ${MAX_FRIENDS} contacts, the most a Dot Dash holds. Remove one in Settings, then approve this request.`);
                 return;
               }
               const updatedFriends = [req.strangerId, ...current];
@@ -3836,7 +4032,7 @@
 
       return (
         <div className="flex flex-col h-full overflow-hidden">
-          <h1 className="text-3xl font-bold mb-4 shrink-0 px-2">Monitor Mode</h1>
+          <h1 className="text-3xl font-bold mb-4 shrink-0 px-2">Log</h1>
 
           {lowBatteryDevices.length > 0 && (
             <div className="shrink-0 space-y-3 mb-4 px-2">
@@ -3865,20 +4061,20 @@
                 <div key={req.childMac + req.strangerId} className="bg-white rounded-2xl p-4 shadow-md border-2 border-sky-300">
                   <div className="flex items-center space-x-2 mb-2 text-sky-600 font-bold text-sm">
                     <UserPlus className="w-5 h-5" />
-                    <span>New friend request</span>
+                    <span>New contact request</span>
                   </div>
                   <p className="text-black mb-3 leading-snug">
                     <span className="font-bold text-gray-700">{displayName(req.strangerId)}</span> sent a message to{' '}
                     <span className="font-bold text-indigo-600">{displayName(req.childLabel)}</span>, but isn't on their
                     friends list.
-                    <br/>Add them as a friend?
+                    <br/>Add them as a contact?
                     <br/><span className="text-xs text-gray-400">Full ID: {req.strangerId}</span>
                   </p>
                   <div className="flex space-x-3">
                     <button onClick={() => respondFriendReq(req, true)}
                       className="flex-1 flex items-center justify-center space-x-2 bg-sky-500 active:bg-sky-600 text-white font-bold py-3 rounded-xl shadow-sm">
                       <CheckCircle2 className="w-5 h-5" />
-                      <span>Add friend</span>
+                      <span>Add contact</span>
                     </button>
                     <button onClick={() => respondFriendReq(req, false)}
                       className="flex-1 flex items-center justify-center space-x-2 bg-gray-100 active:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl border border-gray-200">
@@ -3941,7 +4137,7 @@
             {activeMonitorMsgs.length === 0 && (
                <div className="text-center mt-10">
                  <Shield className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                 <p className="text-gray-400">Monitoring is active.<br/>Intercepted messages will appear here.</p>
+                 <p className="text-gray-400">Nothing logged yet.<br/>Messages sent and received will appear here.</p>
                </div>
             )}
             
@@ -4038,7 +4234,7 @@
           icon: "env",
           steps: [
             { text: "From the clock screen, tap the front SELECT button to move through the menu, and the top ENTER button to choose an option." },
-            { text: "Open {{env}} SEND, then tap SELECT to scroll to the friend you want and ENTER to pick them." },
+            { text: "Open {{env}} SEND, then tap SELECT to scroll to the contact you want and ENTER to pick them." },
             { text: "Choose <QUICK> with ENTER (or <DOT DASH> to type your own in Morse code)." },
             { text: "Tap SELECT to browse the pre-written messages, then tap ENTER to send." }
           ]
@@ -4047,7 +4243,7 @@
           title: "Dot Dash Mode",
           icon: "morse",
           steps: [
-            { text: "Open SEND, pick a friend, then choose <DOT DASH> to start typing in Morse code." },
+            { text: "Open SEND, pick a contact, then choose <DOT DASH> to start typing in Morse code." },
             { title: "Dots & dashes", bullets: [ "Dot: {{dot}} short tap the front SELECT button.", "Dash: {{dash}} long-press the front SELECT button." ] },
             { title: "Building words", bullets: [ "Commit a letter: tap the top ENTER button.", "Add a space: tap ENTER on its own.", "Delete: tap ENTER twice quickly." ] },
             { title: "Send it", text: "When your message is ready, long-press ENTER to send." }
@@ -4057,12 +4253,12 @@
           title: "How Points Work",
           icon: "joystick",
           steps: [
-            { text: "Points are earned by messaging friends and spent to unlock arcade games. They're your child's private balance — not a score or competition." },
+            { text: "Points are earned by messaging contacts and spent to unlock arcade games. They stay on the Dot Dash — a private balance, not a score or competition." },
             { title: "Earning by sending", bullets: [ "Pre-written message: 1 point.", "Dot Dash message: 2 points when it uses at least 3 different characters, otherwise 1 point.", "Counts for up to 2 messages per friend each day.", "Up to 5 sent messages earn points per day." ] },
             { title: "Earning by replying", bullets: [ "Replying to an Inbox message earns 3 points — the most valuable way to earn.", "Only for messages received in the last 24 hours.", "Only once per message.", "No per-friend limit — a real back-and-forth conversation is fully rewarded.", "Up to 5 replies earn points per day." ] },
             { title: "Fair-play safeguards", bullets: [ "A short wait (about 30 seconds) between messages that earn points.", "Sending the exact same message twice in a row only earns once.", "Daily maximum: roughly 25 points." ] },
             { title: "Spending on the arcade", bullets: [ "Counter: 2 points", "Bird: 4 points", "Jumper: 6 points", "Dasher: 8 points", "Defender: 10 points", "Train and the Leaderboards are always free." ] },
-            { title: "How unlocking works", bullets: [ "Opening a locked game asks your child to confirm (Yes / No); Yes spends the points.", "Once unlocked, the game stays open for the rest of the day.", "Every day the games re-lock, so points are spent fresh each day.", "If your child doesn't have enough points, the device says so." ] }
+            { title: "How unlocking works", bullets: [ "Opening a locked game asks for a confirmation (Yes / No); Yes spends the points.", "Once unlocked, the game stays open for the rest of the day.", "Every day the games re-lock, so points are spent fresh each day.", "If there aren’t enough points, the Dot Dash says so." ] }
           ]
         },
         {
