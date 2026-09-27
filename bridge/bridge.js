@@ -571,7 +571,14 @@ async function recordMonitorFromTopic(topic, payload) {
   if (!dev) return;                                    // not a child of ours
   // The app derives its ids from the topic stamp; old firmware sends uptime
   // rather than a clock, which sorts before every real timestamp.
-  const id = Number(stamp) > 1600000000000 ? stamp : String(Date.now());
+  // The stamp is the SENDER's clock, and a device whose clock is wrong can put a
+  // message centuries away. Sorted newest-first and capped at the most recent
+  // 100, one such entry would sit at the top of the log for good and take a slot
+  // with it. Anything before the product existed, or more than a day ahead, is
+  // not a time: fall back to arrival.
+  const sent = Number(stamp);
+  const sane = sent > 1600000000000 && sent < Date.now() + 86400000;
+  const id = sane ? stamp : String(Date.now());
   if (outgoing) {
     await recordMonitor(dev.uid, dev.deviceId, id, {
       type: copy.type, text: copy.text, direction: 'out', otherParty: copy.target || copy.sender,
