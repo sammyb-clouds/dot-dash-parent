@@ -147,6 +147,18 @@ export function parseEvent(topic, payload) {
   const tag = fields[0] || '';
 
   if (kind === 'friendreq' && tag === 'FRIENDREQ' && fields.length >= 2) {
+    // A call sign is [A-Z0-9] at every point that can create one, and a
+    // well-formed request carries exactly one. Anything else means the device
+    // mis-split a payload rather than heard from a stranger: firmware in the
+    // field splits "ACTION,TEXT,SENDER" on the first two commas, so a comma in
+    // the message text shifts its own back half into the sender field. Seen
+    // 2026-09-27, where a parent's own sentence arrived as a stranger's name.
+    // Say nothing rather than push a notification about a contact that does not
+    // exist -- the app declines to add one of these too.
+    if (fields.length !== 2 || !/^[A-Z0-9]{2,32}$/.test(fields[1])) {
+      warn(`dropped malformed friendreq on ${topic}: ${JSON.stringify(payload).slice(0, 80)}`);
+      return null;
+    }
     return {
       kind: 'friendreq',
       title: 'New friend request',

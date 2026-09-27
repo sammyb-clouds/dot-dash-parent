@@ -595,6 +595,41 @@
     const MAX_FRIENDS = 10;
     const MAX_PHRASES = 20;
 
+    // Text the device can actually carry over the wire.
+    //
+    // Messages travel as "ACTION,TEXT,SENDER" and firmware in the field splits on
+    // the FIRST TWO commas, so a comma typed here lands in the sender field: the
+    // device reads the back half of the sentence as an unknown call sign and raises
+    // a friend request instead of showing the message. That happened to a real
+    // parent on 2026-09-27 ("...looking forward to, or nervous about") and the
+    // message itself was dropped. Firmware now parses the sender from the LAST
+    // comma, but devices in the field will not have that until they update, so the
+    // app must not produce the character at all.
+    //
+    // "|" goes too: friend and phrase lists are pipe-joined in SYNC_FRIENDS /
+    // SYNC_PHRASES, so a typed pipe splits one entry into two.
+    //
+    // Smart punctuation is folded to ASCII because the Morse table is ASCII --
+    // encodeMorse() returns nothing for a curly quote, so it plays as silence and
+    // prints as a garbage byte pair on the OLED. iOS substitutes these by default,
+    // which is how a plainly-typed apostrophe arrives curly.
+    const SMART_PUNCT = [
+      [/[\u2018\u2019\u201A\u201B\u2032]/g, "'"],
+      [/[\u201C\u201D\u201E\u201F\u2033]/g, '"'],
+      [/[\u2013\u2014\u2015]/g, '-'],
+      [/\u2026/g, '...'],
+      [/[\u00A0\u2007\u202F]/g, ' '],
+    ];
+    const wireSafe = (text) => {
+      let out = String(text ?? '');
+      for (const [re, to] of SMART_PUNCT) out = out.replace(re, to);
+      // A space, not nothing: "to, or" should read "to or", not "to or" run together.
+      return out.replace(/[,|]/g, ' ').replace(/ {2,}/g, ' ');
+    };
+    // A call sign as every entry point in the app writes one. Used to refuse a
+    // malformed friend request rather than write it into a device's contact list.
+    const isCallSign = (id) => /^[A-Z0-9]{2,32}$/.test(String(id || ''));
+
     // "MAYA" -> "Maya", for sentences the parent reads.
     const titleCaseName = (n) => String(n || '').toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
     // +18005550100 -> (800) 555-0100; anything not North American as given.
@@ -3277,7 +3312,7 @@
 
        const handleAddPhrase = async () => {
          if (!newPhrase.trim()) return;
-         const p = newPhrase.trim().toUpperCase();
+         const p = wireSafe(newPhrase).trim().toUpperCase();
          if (!currentPhrases.includes(p)) {
              if (currentPhrases.length >= MAX_PHRASES) return alert(`Maximum of ${MAX_PHRASES} phrases allowed.`);
              await savePhrases([p, ...currentPhrases]);    // newest at the top
@@ -3515,7 +3550,7 @@
               {openMessages && (
                 <div className="border border-t-0 border-indigo-100 rounded-b-2xl bg-white p-4 mb-3">
                   <div className="flex space-x-2 mb-4">
-                     <input type="text" placeholder="New message..." maxLength="20" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newPhrase} onChange={e=>setNewPhrase(e.target.value.toUpperCase())} onKeyDown={e => { if (e.key === 'Enter') handleAddPhrase(); }}/>
+                     <input type="text" placeholder="New message..." maxLength="20" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newPhrase} onChange={e=>setNewPhrase(wireSafe(e.target.value).toUpperCase())} onKeyDown={e => { if (e.key === 'Enter') handleAddPhrase(); }}/>
                      <button onClick={handleAddPhrase} disabled={currentPhrases.length >= MAX_PHRASES} className="shrink-0 bg-indigo-500 text-white px-5 py-2 font-bold rounded-xl active:bg-indigo-600 disabled:bg-indigo-300">Add</button>
                   </div>
                   <ReorderList className="space-y-2" items={currentPhrases} onReorder={savePhrases} renderItem={(p) => (
@@ -3956,7 +3991,7 @@
 
       const handleSend = async (type = 'MORSE') => {
         if (!mqttClient || !parentProfile?.virtualId || !activeDevice) return;
-        let payload = inputText.trim();
+        let payload = wireSafe(inputText).trim();
         if (!payload) return;
         
         const baseTopic = `doorbell/msg/${activeDevice.hashedId}`;
@@ -4021,7 +4056,7 @@
 
           <div className="shrink-0 bg-[#f2f2f7] pt-2 pb-2">
             <div className="flex items-center space-x-2 bg-white rounded-full px-4 py-2 shadow-sm border border-gray-200">
-              <input type="text" placeholder="Text Message..." value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend('MORSE')} className="flex-1 outline-none bg-transparent py-1 text-lg" />
+              <input type="text" placeholder="Text Message..." value={inputText} onChange={(e) => setInputText(wireSafe(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && handleSend('MORSE')} className="flex-1 outline-none bg-transparent py-1 text-lg" />
               <button onClick={() => handleSend('MORSE')} disabled={!inputText} className="bg-blue-500 text-white p-2 rounded-full disabled:bg-blue-300 flex-shrink-0 transition-opacity">
                 <Send className="w-5 h-5 ml-0.5" />
               </button>
@@ -4073,6 +4108,13 @@
       });
 
       const respondFriendReq = async (req, accept) => {
+        // A request whose "call sign" is not shaped like one came from a device
+        // that mis-split a payload, not from a real stranger. Clear it, never
+        // write it: a comma or pipe in a contact list corrupts the next sync.
+        if (accept && !isCallSign(req.strangerId)) {
+          alert("That contact request looks garbled, so it wasn't added. If someone is trying to reach this Dot Dash, add their call sign by hand in Contacts.");
+          accept = false;
+        }
         if (accept) {
           const dev = devices.find(d => d.id === req.childMac);
           if (dev) {
