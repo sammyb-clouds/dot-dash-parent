@@ -137,8 +137,16 @@
     const SHOW_BETA_FIRMWARE = true;
 
     // Phone contacts (the SMS bridge) are built but not finished, and they are a
-    // candidate for a paid tier, so they stay out of what testers see. Off means
-    // the app never calls /sms/contacts at all -- not a hidden button, no traffic.
+    // candidate for a paid tier, so they stay out of what anyone else sees. Off
+    // means the app never calls /sms/contacts at all -- not a hidden button with
+    // live traffic behind it. Vite folds this constant, so the form and its copy
+    // leave the bundle rather than merely going unrendered.
+    //
+    // ON for one target only: `npm run deploy:test`, which sets the variable and
+    // puts the feature on test.html, where the work continues. The plain `build`
+    // leaves it OFF, and that is what BOTH the iOS app (ios:sync) and production
+    // (deploy:prod) are built from -- so shipping it takes a deliberate act, not
+    // just a forgotten line.
     //
     // A flag rather than a branch on purpose. The code around this moves every
     // week (the comma fix, the wake recap, the taxonomy rename all landed after
@@ -146,7 +154,7 @@
     // merged constantly. It also becomes the paywall hook rather than being
     // replaced by one: when there is an entitlement to check, this stops being a
     // constant and becomes that check, in the one place everything already reads.
-    const SHOW_PHONE_CONTACTS = false;
+    const SHOW_PHONE_CONTACTS = import.meta.env.VITE_PHONE_CONTACTS === '1';
 
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const PUSH_MINT_KEY = 'dotdash_push_minted';
