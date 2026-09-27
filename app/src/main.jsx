@@ -136,6 +136,18 @@
     // remove the firmware side -- when the product leaves beta.
     const SHOW_BETA_FIRMWARE = true;
 
+    // Phone contacts (the SMS bridge) are built but not finished, and they are a
+    // candidate for a paid tier, so they stay out of what testers see. Off means
+    // the app never calls /sms/contacts at all -- not a hidden button, no traffic.
+    //
+    // A flag rather than a branch on purpose. The code around this moves every
+    // week (the comma fix, the wake recap, the taxonomy rename all landed after
+    // the bridge did), and a long-lived app branch would either rot or have to be
+    // merged constantly. It also becomes the paywall hook rather than being
+    // replaced by one: when there is an entitlement to check, this stops being a
+    // constant and becomes that check, in the one place everything already reads.
+    const SHOW_PHONE_CONTACTS = false;
+
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const PUSH_MINT_KEY = 'dotdash_push_minted';
     // The account this install's token is registered under, and the accounts whose
@@ -2534,7 +2546,7 @@
              {step === 'ADD_FRIENDS' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Add contacts</h2>
-                   <p className="text-gray-500 mb-6">Enter a call sign — another Dot Dash, a base, or a phone patch — to add it to this Dot Dash’s contacts.</p>
+                   <p className="text-gray-500 mb-6">Enter a call sign — another Dot Dash{SHOW_PHONE_CONTACTS ? ', a base, or a phone patch' : ' or a base'} — to add it to this Dot Dash’s contacts.</p>
                    
                    <ul className="space-y-2 mb-4 text-left">
                      {displayFriends.map((f, i) => (
@@ -3246,7 +3258,9 @@
          setSmsContacts(r.body.contacts || []);
          return r.body.contacts || [];
        };
-       const smsByFriend = Object.fromEntries((smsContacts || []).filter(c => c.deviceId === activeDevice?.id).map(c => [c.virtualId, c]));
+       const smsByFriend = SHOW_PHONE_CONTACTS
+         ? Object.fromEntries((smsContacts || []).filter(c => c.deviceId === activeDevice?.id).map(c => [c.virtualId, c]))
+         : {};
        const deviceName = activeDevice ? titleCaseName(activeDevice.identity?.name) : 'this device';
 
        // Loaded when the friends list opens; while anyone has yet to send START,
@@ -3254,6 +3268,7 @@
        // "connected" without the parent having to do anything.
        const anyPending = (smsContacts || []).some(c => c.status === 'pending');
        useEffect(() => {
+         if (!SHOW_PHONE_CONTACTS) return;
          if (!openFriends) return;
          loadSmsContacts();
          if (!anyPending) return;
@@ -3472,7 +3487,7 @@
                      <input type="text" placeholder="Call sign" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newFriendId} onChange={e=>setNewFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} onKeyDown={e => { if (e.key === 'Enter') handleAddFriend(); }}/>
                      <button onClick={handleAddFriend} className="shrink-0 bg-blue-500 text-white px-5 py-2 font-bold rounded-xl active:bg-blue-600">Add</button>
                   </div>
-                  {phoneForm ? (
+                  {SHOW_PHONE_CONTACTS && (phoneForm ? (
                     <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 space-y-2">
                       <div className="font-bold text-gray-800 text-sm flex items-center"><Phone className="w-4 h-4 text-blue-500 mr-1.5"/>Add a phone number</div>
                       <input type="text" placeholder="Their name, like Grandma" maxLength="30" autoComplete="off" className="w-full bg-white px-3 py-2 rounded-lg outline-none border border-gray-200" value={phoneForm.name} onChange={e => setPhoneForm(f => ({ ...f, name: e.target.value, error: '' }))}/>
@@ -3488,8 +3503,8 @@
                     <button onClick={() => { setSmsNote(''); setPhoneForm({ name: '', phone: '', busy: false, error: '' }); }} className="w-full flex items-center justify-center space-x-2 text-blue-600 font-bold text-sm py-2 mb-4 rounded-xl border border-dashed border-blue-200 active:bg-blue-50">
                       <Phone className="w-4 h-4"/><span>Add a phone number</span>
                     </button>
-                  )}
-                  {smsNote && (
+                  ))}
+                  {SHOW_PHONE_CONTACTS && smsNote && (
                     <div className="text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 mb-3">
                       <div className="flex items-start">
                         <span className="flex-1">{smsNote}</span>
