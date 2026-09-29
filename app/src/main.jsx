@@ -1224,7 +1224,11 @@
 
             // When it last checked in and when it is next due: SEEN,<at>,<next>.
             if (topicParts[3] === 'seen') {
-              const [tag, at, next] = payload.split(',');
+              // "SEEN,<at>|<next>" -- pipe-joined on purpose. Three comma-fields
+              // here would look like a message copy to an app older than Find My,
+              // which files those and clears the retained slot behind it.
+              const [tag, rest] = payload.split(',');
+              const [at, next] = String(rest || '').split('|');
               if (tag === 'SEEN') {
                 setDeviceSeen(prev => ({ ...prev, [sourceChildMac]: { at: Number(at), next: Number(next) } }));
               }
