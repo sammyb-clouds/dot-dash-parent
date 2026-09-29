@@ -1723,7 +1723,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} deviceArcadeRules={deviceArcadeRules} />
+               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} deviceArcadeRules={deviceArcadeRules} deviceSeen={deviceSeen} deviceFinding={deviceFinding} setDeviceFinding={setDeviceFinding} findAsked={findAsked} setFindAsked={setFindAsked} />
             </div>}
           </div>
 
@@ -2609,7 +2609,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {}, deviceArcadeRules = {} }) {
+    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {}, deviceArcadeRules = {}, deviceSeen = {}, deviceFinding = {}, setDeviceFinding = () => {}, findAsked = {}, setFindAsked = () => {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        // A device that cannot be switched on: replace it (same child ID, carried
        // over) or release it without the on-screen code Unlink asks for.
