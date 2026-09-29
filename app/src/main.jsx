@@ -856,6 +856,13 @@
       const [devicePoints, setDevicePoints] = useState({});
       // Per device: { free, late } -- the arcade limits its owner has lifted.
       const [deviceArcadeRules, setDeviceArcadeRules] = useState({});
+      // Find My. `deviceSeen` is {at, next} in epoch SECONDS as the device reports
+      // them: when it last checked in, and when it expects to next. Only the
+      // device can know the second one -- the poll schedule backs off from 1 to 15
+      // minutes and stops entirely overnight, and none of that is visible here.
+      const [deviceSeen, setDeviceSeen] = useState({});
+      const [deviceFinding, setDeviceFinding] = useState({});
+      const [findAsked, setFindAsked] = useState({});    // we published, device has yet to confirm
       // Same idea for the morse typewriter ("Dot Dash Mode" in Settings).
       const [deviceTypewriter, setDeviceTypewriter] = useState({});
       // What each device reports it is running: { version, line, build }.
@@ -1211,6 +1218,27 @@
                   updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', sourceChildMac),
                     { points: n, pointsAt: Date.now() }).catch(() => {});
                 }
+              }
+              return; // retained and device-owned; do not auto-clear
+            }
+
+            // When it last checked in and when it is next due: SEEN,<at>,<next>.
+            if (topicParts[3] === 'seen') {
+              const [tag, at, next] = payload.split(',');
+              if (tag === 'SEEN') {
+                setDeviceSeen(prev => ({ ...prev, [sourceChildMac]: { at: Number(at), next: Number(next) } }));
+              }
+              return; // retained and device-owned; do not auto-clear
+            }
+
+            // Ringing, or stopped: FIND,1 / FIND,0.
+            if (topicParts[3] === 'find') {
+              const [tag, on] = payload.split(',');
+              if (tag === 'FIND') {
+                const ringing = on === '1';
+                setDeviceFinding(prev => ({ ...prev, [sourceChildMac]: ringing }));
+                // It answered, so stop saying "waiting".
+                setFindAsked(prev => (prev[sourceChildMac] ? { ...prev, [sourceChildMac]: false } : prev));
               }
               return; // retained and device-owned; do not auto-clear
             }
@@ -2929,7 +2957,7 @@
              try {
                await publishConfirmed(`doorbell/cmd/${d.hashedId}`, 'CMD,UNPAIR', { qos: 1, retain: true });
                // Drop this device's retained alerts too, or they outlive the account.
-               ['battery', 'wifi'].forEach(k =>
+               ['battery', 'wifi', 'seen', 'find'].forEach(k =>
                  mqttClient?.publish(`doorbell/monitor/${d.hashedId}/${k}`, '', { retain: true }));
              } catch (e) {}
            }
@@ -3076,7 +3104,8 @@
          // once it is charging, but an unlinked one re-pairs under a new hash
          // and never returns to this topic -- so without this the flag would
          // sit on the broker for good.
-         try { mqttClient.publish(`doorbell/monitor/${dev.hashedId}/battery`, "", { retain: true }); } catch(e){}
+         try { ['battery', 'seen', 'find'].forEach(k =>
+           mqttClient.publish(`doorbell/monitor/${dev.hashedId}/${k}`, "", { retain: true })); } catch(e){}
          // Remove its broker key while the device record still proves this
          // account owns it. Briefly waited on, not required: if the server is
          // slow the orphan sweep removes the key within hours anyway.
@@ -3333,6 +3362,62 @@
          catch (e) { window.prompt('Copy this invite:', inviteText(c)); }
        };
 
+       // ---- Find My Dot Dash ----
+       // The device is asleep when it is lost, so this cannot be instant. What it
+       // CAN do is say how long the wait is, using the check-in the device reports
+       // for itself -- see deviceSeen.
+       const findSeen = activeDevice ? deviceSeen[activeDevice.id] : null;
+       const findRinging = activeDevice ? !!deviceFinding[activeDevice.id] : false;
+       const findWaiting = activeDevice ? !!findAsked[activeDevice.id] : false;
+
+       // A duration, no preposition, so the sentences below can each supply their
+       // own. "in in about nine minutes" is what happens when they cannot.
+       const sinceText = (secs) => {
+         const m = Math.max(0, Math.round((Date.now() / 1000 - secs) / 60));
+         if (m < 1) return 'less than a minute';
+         if (m === 1) return 'a minute';
+         if (m < 60) return `${m} minutes`;
+         const h = Math.round(m / 60);
+         return h === 1 ? 'an hour' : `${h} hours`;
+       };
+
+       const findHint = () => {
+         if (!activeDevice) return '';
+         if (findRinging) return 'Your Dot Dash is ringing. It stops when you press any button on it, or tap Stop.';
+         // Firmware older than Find My never reports a check-in.
+         if (!findSeen) return 'Update this Dot Dash to see when it last checked in.';
+         const nowS = Date.now() / 1000;
+         if (nowS > findSeen.next + 300) {
+           return `It hasn't checked in for ${sinceText(findSeen.at)}, so it may be out of Wi-Fi range or its battery may be flat. `
+                + (findWaiting ? 'The request is saved and rings it the moment it reappears.'
+                               : 'Finding it will still work the moment it reappears.');
+         }
+         const waitMin = Math.max(0, Math.ceil((findSeen.next - nowS) / 60));
+         const overnight = waitMin > 90;   // nothing in the daytime schedule is that far off
+         const when = waitMin <= 1 ? 'any moment now'
+           : overnight ? `in about ${Math.round(waitMin / 60)} hours`
+           : `in about ${waitMin} minutes`;
+         const tail = overnight ? ' — it stops checking in overnight' : '';
+         return findWaiting
+           ? `Saved. It rings the moment it checks in, expected ${when}${tail}.`
+           : `Last checked in ${sinceText(findSeen.at)} ago. It would hear this ${when}${tail}.`;
+       };
+
+       const handleFind = () => {
+         if (!mqttClient || !activeDevice) return;
+         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, 'CMD,FIND', { qos: 1, retain: true });
+         setFindAsked(prev => ({ ...prev, [activeDevice.id]: true }));
+       };
+
+       const handleFindStop = () => {
+         if (!mqttClient || !activeDevice) return;
+         // Replaces the retained FIND in the same slot, so a device that has not
+         // woken yet finds the cancellation instead of the request.
+         mqttClient.publish(`doorbell/cmd/${activeDevice.hashedId}`, 'CMD,FIND_STOP', { qos: 1, retain: true });
+         setFindAsked(prev => ({ ...prev, [activeDevice.id]: false }));
+         setDeviceFinding(prev => ({ ...prev, [activeDevice.id]: false }));
+       };
+
        const handleAddPhrase = async () => {
          if (!newPhrase.trim()) return;
          const p = wireSafe(newPhrase).trim().toUpperCase();
@@ -3472,6 +3557,29 @@
                   <span className="text-xs text-gray-400">
                     {devicePoints[activeDevice.id] !== undefined ? 'now' : 'last reported'}
                   </span>
+                </div>
+              )}
+
+              {/* Find My Dot Dash. A small device gets lost; a sleeping one cannot
+                  answer at once, so the wait is stated rather than hidden. */}
+              {activeDevice && (
+                <div className="mb-3">
+                  {findRinging ? (
+                    <button onClick={handleFindStop}
+                      className="w-full flex items-center justify-center space-x-2 bg-red-500 text-white font-bold py-3 rounded-2xl active:bg-red-600">
+                      <Volume2 className="w-5 h-5"/><span>Stop ringing</span>
+                    </button>
+                  ) : (
+                    <button onClick={handleFind} disabled={findWaiting}
+                      className="w-full flex items-center justify-center space-x-2 bg-white border border-gray-200 text-gray-800 font-bold py-3 rounded-2xl active:bg-gray-50 disabled:text-gray-400">
+                      <Volume2 className="w-5 h-5 text-blue-500"/>
+                      <span>{findWaiting ? 'Waiting for your Dot Dash…' : 'Find my Dot Dash'}</span>
+                    </button>
+                  )}
+                  <p className="text-xs text-gray-500 mt-2 px-1 leading-snug">{findHint()}</p>
+                  {findWaiting && !findRinging && (
+                    <button onClick={handleFindStop} className="w-full text-xs text-gray-400 mt-1 py-1 active:text-gray-600">Cancel</button>
+                  )}
                 </div>
               )}
 
