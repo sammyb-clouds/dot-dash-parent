@@ -161,8 +161,8 @@ export function parseEvent(topic, payload) {
     }
     return {
       kind: 'friendreq',
-      title: 'New friend request',
-      body: `${displayName(fields[1])} sent your child a message. Add them as a friend?`,
+      title: 'New contact request',
+      body: `${displayName(fields[1])} messaged your Dot Dash. Add them as a contact?`,
       level: 'active',
       route: 'child',
     };
@@ -172,7 +172,7 @@ export function parseEvent(topic, payload) {
     return {
       kind: 'timerreq',
       title: 'Timer completed',
-      body: `Your child finished a ${fields[1]}-minute timer. Approve ${fields[2]} points?`,
+      body: `Your Dot Dash finished a ${fields[1]}-minute timer. Approve ${fields[2]} points?`,
       level: 'active',
       route: 'child',
     };
@@ -183,7 +183,7 @@ export function parseEvent(topic, payload) {
       return {
         kind: 'battery',
         title: 'Low battery',
-        body: "Your child's Dot Dash needs charging.",
+        body: "Your Dot Dash needs charging.",
         level: 'passive',
         route: 'child',
       };

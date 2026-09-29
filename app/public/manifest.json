@@ -1,7 +1,7 @@
 {
-  "name": "Dot Dash Parent",
+  "name": "Dot Dash",
   "short_name": "Dot Dash",
-  "description": "Monitor and manage your child's Dot Dash device",
+  "description": "Set up and manage your Dot Dash",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start messaging on Dot Dash</title>
+<meta property="og:title" content="Start messaging on Dot Dash">
+<meta property="og:description" content="Send START to connect with a Dot Dash. Reply STOP anytime to stop.">
+<!--
+  Where a parent's invitation links to: https://app.dotdashdevice.com/start.html?n=<pool digits>
+  The invitation itself is sent by the PARENT from their own phone (the app's
+  share button), never by Dot Dash, so the contact's opt-in stays their own:
+  this page only opens their Messages app with START typed to our number, and
+  they still press send. See bridge/sms/README.md, "Consent".
+  Deployed by hand: scp to /var/www/dotdash/html/start.html.
+-->
+<style>
+  :root { color-scheme: light dark; --bg:#f4f6fb; --card:#fff; --ink:#1f2937; --muted:#6b7280; --blue:#3b82f6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f172a; --card:#1e293b; --ink:#f1f5f9; --muted:#94a3b8; } }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 16px;
+         background:var(--bg); color:var(--ink); font-family:-apple-system,"Helvetica Neue",Arial,sans-serif; }
+  .card { background:var(--card); border-radius:22px; padding:28px 24px; max-width:420px; width:100%; text-align:center;
+          box-shadow:0 2px 12px rgba(0,0,0,.08); }
+  h1 { font-size:24px; margin:0 0 10px; }
+  p { color:var(--muted); line-height:1.5; margin:0 0 20px; font-size:16px; }
+  .num { font-size:22px; font-weight:800; color:var(--ink); letter-spacing:.3px; }
+  a.btn { display:block; background:var(--blue); color:#fff; text-decoration:none; font-weight:700; font-size:18px;
+          padding:15px; border-radius:14px; margin:18px 0 14px; }
+  code { font-weight:800; color:var(--blue); }
+  .small { font-size:13px; margin:0; }
+  .bad { display:none; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div id="ok">
+    <h1>Start messaging on Dot Dash</h1>
+    <p>To connect with the Dot Dash that added you, send <code>START</code> to</p>
+    <div class="num" id="num"></div>
+    <a class="btn" id="go" href="#">Open Messages with START</a>
+    <p class="small">You'll get one confirmation message. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP anytime to stop.</p>
+  </div>
+  <div id="bad" class="bad">
+    <h1>This link is incomplete</h1>
+    <p class="small">Ask whoever sent it to share the invitation again.</p>
+  </div>
+</main>
+<script>
+  // Only a plain phone number is accepted: this page must never be a way to
+  // pre-fill a message to an arbitrary text or a short code.
+  var n = (new URLSearchParams(location.search).get('n') || '').replace(/\D/g, '');
+  if (!/^1?[2-9]\d{9}$/.test(n)) {
+    document.getElementById('ok').style.display = 'none';
+    document.getElementById('bad').style.display = 'block';
+  } else {
+    if (n.length === 10) n = '1' + n;
+    var d = n.slice(1);
+    document.getElementById('num').textContent = '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
+    // iOS separates the body with '&', everything else with '?'.
+    var ua = navigator.userAgent;
+    var ios = !/Android/i.test(ua) && (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+    document.getElementById('go').href = 'sms:+' + n + (ios ? '&' : '?') + 'body=START';
+  }
+</script>
+</body>
+</html>
