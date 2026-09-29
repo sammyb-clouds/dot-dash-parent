@@ -2008,7 +2008,7 @@
             if (res.status === 200) {
               const code = headerValue(res.headers, 'x-pairing-code').trim().toUpperCase();
               if (!isNew && code && expectedCode && code !== expectedCode) {
-                return fail('INTRO', `That looks like a different Dot Dash (code ${code}). Make sure you’re setting up ${childName || 'this child'}’s device.`);
+                return fail('INTRO', `That looks like a different Dot Dash (code ${code}). Make sure you’re setting up ${childName ? `${childName}’s` : 'the right'} Dot Dash.`);
               }
               codeRef.current = code;
               const seen = [...new Set(String(res.data || '').split('\n').map((n) => n.trim()).filter(Boolean))];
@@ -3989,7 +3989,7 @@
                 {deleting || 'Delete My Account'}
               </button>
               <p className="text-xs text-gray-400 mt-2 text-center leading-relaxed">
-                Unpairs every device, erases your messages and removes your parent ID.
+                Unpairs every Dot Dash, erases your messages and removes your base call sign.
                 This cannot be undone.
               </p>
             </div>
