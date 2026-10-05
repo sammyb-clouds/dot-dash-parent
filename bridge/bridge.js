@@ -198,6 +198,17 @@ export function parseEvent(topic, payload) {
 }
 
 /**
+ * Two-player game traffic between devices. It rides the same retained
+ * doorbell/msg/<hash>/<stamp> channel as messages (per-device MQTT ACLs only
+ * allow publishing there) as "GAME,<pipe-separated data>,<sender>". A device's
+ * friend list can include the parent's own ID, so one can land on a parent's
+ * inbox. It is machine data, never something a person should read: it must not
+ * be recorded, notified or counted. (The app releases the retained copy; this
+ * bridge never publishes, so nothing here needs to clear it.)
+ */
+export const isGameTraffic = (action) => action === 'GAME';
+
+/**
  * A message addressed to someone. Payload is "TYPE,TEXT,SENDER".
  *
  * The same wildcard also carries messages to CHILDREN's devices -- the hash in
@@ -777,6 +788,9 @@ async function main() {
 
   client.on('message', (topic, buf, packet) => {
     const payload = buf.toString('utf8');
+    // Game traffic on a msg topic: no record, no notification, no count. Not
+    // even the replay guard needs it -- the app clears the retained copy.
+    if (topic.startsWith('doorbell/msg/') && isGameTraffic(payload.slice(0, payload.indexOf(',')))) return;
     const ev = parseEvent(topic, payload);
 
     // Record EVERY topic, alert or not, so a cleared battery flag updates the
