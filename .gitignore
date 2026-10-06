@@ -53,3 +53,9 @@ dotdash-*-firebase*.json
 #
 # The service account JSON above is the opposite in every respect and must never
 # be committed.
+
+# The homepage's demo clips (site/media/clip-*.mp4, 9-14 MB each) are served
+# from /var/www/dotdashdevice/media on the droplet and kept out of git so the
+# repo doesn't carry them in its history forever. The posters (.jpg) are small
+# and committed; a missing clip hides itself on the page.
+site/media/*.mp4

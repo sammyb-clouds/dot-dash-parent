@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["4K33CJ9FWS.com.dotdashdevice.parent"],
+        "components": [
+          { "/": "/c/*", "comment": "A contact's chat link opens the app's contact mode when installed" }
+        ]
+      }
+    ]
+  }
+}

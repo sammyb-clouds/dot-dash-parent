@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dot Dash</title>
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="description" content="Dot Dash is a pocket Morse-code messaging device, with an app and a messaging service that connect it to the people you choose.">
+<!--
+  Public home page for https://dotdashdevice.com (hosted on the droplet since
+  2026-09-30, replacing the unconnected Wix site). Twilio's toll-free reviewers
+  read this page: keep the SMS section (with its consent statement), the
+  contact details and the policy links.
+
+  Videos are SELF-HOSTED in /media rather than embedded from Instagram: an
+  Instagram embed loads Meta's scripts and cookies, which the privacy policy
+  says we don't use. A clip whose file is missing hides itself (script at the
+  bottom); with none uploaded, the section shows just the Instagram link.
+
+  Deployed by hand: scp site/* and legal/* to /var/www/dotdashdevice/
+  (videos and posters to /var/www/dotdashdevice/media/).
+-->
+<style>
+  :root { color-scheme: light dark; --bg:#f4f6fb; --card:#fff; --ink:#1f2937; --muted:#6b7280; --blue:#3b82f6; --rule:#e5e7eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f172a; --card:#1e293b; --ink:#e5e7eb; --muted:#94a3b8; --rule:#334155; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.6 -apple-system,"Helvetica Neue",Arial,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:48px 16px 40px; }
+  .hero { text-align:center; padding:12px 0 24px; }
+  .logo { display:block; width:132px; height:132px; margin:0 auto; border-radius:30px; box-shadow:0 2px 12px rgba(0,0,0,.10); }
+  h1 { font-size:40px; line-height:1.15; margin:8px 0 12px; }
+  .lede { font-size:20px; color:var(--muted); max-width:620px; margin:0 auto; }
+  .cta { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:20px; }
+  .cta a { text-decoration:none; font-weight:700; padding:11px 18px; border-radius:12px; }
+  .cta .primary { background:var(--blue); color:#fff; }
+  .cta .secondary { border:1px solid var(--rule); color:var(--ink); background:var(--card); }
+  section { background:var(--card); border-radius:20px; padding:26px 26px 20px; margin:18px 0; box-shadow:0 2px 10px rgba(0,0,0,.05); }
+  h2 { font-size:23px; margin:0 0 10px; }
+  p, li { margin:0 0 10px; }
+  ul { padding-left:22px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:6px; }
+  .grid div { border:1px solid var(--rule); border-radius:14px; padding:14px 16px; }
+  .grid b { display:block; margin-bottom:4px; }
+  .videos { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,300px)); justify-content:center; gap:20px; margin:8px 0 14px; }
+  .videos figure { margin:0; }
+  .videos video { display:block; width:100%; aspect-ratio:9/16; object-fit:cover; background:#000; border-radius:14px; }
+  .videos figcaption { font-size:15px; color:var(--muted); margin-top:8px; line-height:1.45; }
+  .videos figcaption b { color:var(--ink); display:block; }
+  .stats { display:flex; gap:14px; flex-wrap:wrap; margin:6px 0 12px; }
+  .stats div { flex:1 1 200px; border:1px solid var(--rule); border-radius:14px; padding:12px 14px; }
+  .stats b { display:block; font-size:24px; }
+  .consent { border:2px solid var(--blue); border-radius:14px; padding:14px 16px; margin:14px 0; }
+  code { font-family:"SF Mono",Menlo,monospace; font-weight:800; color:var(--blue); }
+  .num { font-size:22px; font-weight:800; white-space:nowrap; }
+  a { color:var(--blue); }
+  footer { text-align:center; color:var(--muted); font-size:15px; padding:18px 16px 40px; }
+  footer a { margin:0 8px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <img class="logo" src="/icon.png" alt="Dot Dash logo" width="132" height="132">
+    <h1>Dot Dash</h1>
+    <p class="lede">A pocket Morse-code messaging device. Tap out messages in Morse or send quick phrases, only to the contacts you've approved.</p>
+    <div class="cta">
+      <a class="primary" href="#watch">Watch it work</a>
+      <a class="secondary" href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice on Instagram</a>
+    </div>
+  </div>
+
+  <section id="watch">
+    <h2>See it in action</h2>
+    <div class="videos">
+      <figure>
+        <video src="/media/clip-1.mp4" poster="/media/clip-1.jpg" controls playsinline preload="metadata"></video>
+        <figcaption><b>Dot Dash to Dot Dash</b>Tap out HELLO in Morse on one Dot Dash, and it arrives on another.</figcaption>
+      </figure>
+      <figure>
+        <video src="/media/clip-2.mp4" poster="/media/clip-2.jpg" controls playsinline preload="metadata"></video>
+        <figcaption><b>Dot Dash and the app</b>Send from the Dot Dash, read it in the Dot Dash app, and reply from your phone.</figcaption>
+      </figure>
+    </div>
+    <p style="margin:0">Watch Dot Dash in use on Instagram: <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice</a>.</p>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <div class="grid">
+      <div><b>Simple on purpose</b>A small screen, two buttons and a buzzer. No camera, no microphone, no web browser and no location tracking.</div>
+      <div><b>You're the base</b>You pair your Dot Dash in the Dot Dash app, choose who it can message, and can see those messages in the Log.</div>
+      <div><b>Learning while playing</b>Morse practice, games, timers and points turn messaging into a skill you build over time.</div>
+    </div>
+  </section>
+
+  <section id="about">
+    <h2>About Dot Dash</h2>
+    <p>Dot Dash designs and builds the device, the Dot Dash app, and the messaging service that connects them. Every message a Dot Dash sends or receives is delivered by Dot Dash's own servers, which also handle software updates, contact approvals and the Log.</p>
+    <div class="stats">
+      <div><b>About 30</b>Dot Dash devices in use today, in our pilot</div>
+      <div><b>None</b>No ads or trackers, and no messages or numbers sold or shared for marketing</div>
+    </div>
+    <p>SMS messaging is one feature of that service, described below.</p>
+  </section>
+
+  <section id="sms">
+    <h2>SMS messaging (optional)</h2>
+    <p>The Dot Dash service can deliver a Dot Dash's messages to a mobile phone by SMS, so someone without a Dot Dash, like a grandparent, can message it from their phone. This is optional. Nobody has to receive SMS messages to use Dot Dash. Because Dot Dash is often used by children, only the account holder can approve a phone contact.</p>
+    <div class="consent">
+      <p><b>How to join:</b> once the account holder has added your number in the Dot Dash app, send <code>START</code> to <span class="num">(866) 786-1245</span>.</p>
+      <p style="margin:0"><b>By sending START, you agree to receive SMS messages from Dot Dash:</b> a confirmation, then the messages sent to you from that Dot Dash. Message frequency varies. Msg &amp; data rates may apply. Reply <code>HELP</code> for help, <code>STOP</code> to cancel. See our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>.</p>
+    </div>
+    <ul>
+      <li>We never message a number that hasn't sent START. <a href="/sms-opt-in.png">See the full opt-in flow</a>.</li>
+      <li>Messages are labeled with the sender and Dot Dash, like <i>Maya via Dot Dash: SEE YOU SUNDAY</i>.</li>
+      <li>Reply <code>STOP</code> at any time to stop. Carriers are not liable for delayed or undelivered messages.</li>
+      <li>Mobile numbers are stored encrypted and are never shared or sold for marketing.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Contact</h2>
+    <p>Dot Dash is made by Samuel Posner, a sole proprietor, doing business as Dot Dash.</p>
+    <p>Email <a href="mailto:support@dotdashdevice.com">support@dotdashdevice.com</a><br>467 Van Buren St., Brooklyn, NY 11221</p>
+  </section>
+</main>
+<footer>
+  <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">Instagram</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a> · <a href="mailto:support@dotdashdevice.com">Support</a>
+  <div>© 2026 Dot Dash</div>
+</footer>
+<script>
+  // A clip whose file isn't uploaded yet hides itself. With none uploaded the
+  // section keeps its Instagram link, so the page never shows an empty player.
+  var figs = document.querySelectorAll('#watch figure');
+  var gone = 0;
+  figs.forEach(function (f) {
+    f.querySelector('video').addEventListener('error', function () {
+      f.style.display = 'none';
+      if (++gone === figs.length) document.querySelector('#watch .videos').style.display = 'none';
+    });
+  });
+</script>
+</body>
+</html>

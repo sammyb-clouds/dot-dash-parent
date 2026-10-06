@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Dot Dash</title>
+<link rel="manifest" href="/c/manifest.webmanifest">
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dot Dash">
+<!--
+  The chat page for web-link contacts: https://dotdashdevice.com/c/<token>.
+  Talks only to /chat/api/ (bridge/sms/service.mjs, chatApi). No account: each
+  link is a credential, and the first device to Connect claims it.
+
+  One page holds every chat this device has connected (an inbox when there is
+  more than one). On iPhone, a Home Screen web app has its own storage,
+  separate from Safari's, and links always open in Safari -- so a second link
+  reaches an existing Home Screen app by "Copy link" in Safari and "Add a chat"
+  in the app.
+  Deployed by hand to /var/www/dotdashdevice/c/ (nginx serves this file for
+  every /c/ path, with access logging off so tokens never reach a log).
+-->
+<style>
+  :root { color-scheme: light dark; --bg:#f4f6fb; --card:#fff; --ink:#1f2937; --muted:#6b7280; --blue:#3b82f6; --rule:#e5e7eb;
+          --them:#e5e7eb; --themInk:#111827; --warn:#b45309; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f172a; --card:#1e293b; --ink:#e5e7eb; --muted:#94a3b8; --rule:#334155; --them:#334155; --themInk:#f1f5f9; --warn:#fbbf24; } }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.5 -apple-system,"Helvetica Neue",Arial,sans-serif; }
+  .screen { max-width:560px; margin:0 auto; min-height:100%; display:flex; flex-direction:column; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  .center { flex:1; display:flex; flex-direction:column; justify-content:center; text-align:center; padding:32px 0; }
+  .logo { width:96px; height:96px; border-radius:22px; margin:0 auto 16px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
+  h1 { font-size:26px; line-height:1.2; margin:0 0 10px; }
+  p { margin:0 0 12px; color:var(--muted); }
+  .btn { display:block; width:100%; border:0; background:var(--blue); color:#fff; font:inherit; font-weight:700; padding:14px; border-radius:14px; cursor:pointer; }
+  .btn:disabled { opacity:.5; }
+  .btn.ghost { background:transparent; color:var(--blue); border:1px solid var(--rule); }
+  .small { font-size:14px; }
+  header { position:sticky; top:0; background:var(--bg); padding:12px 0 10px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--rule); z-index:1; }
+  header img { width:36px; height:36px; border-radius:9px; }
+  header .who { font-weight:800; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #log { flex:1; padding:14px 0; display:flex; flex-direction:column; gap:8px; }
+  .b { max-width:82%; padding:9px 13px; border-radius:18px; word-wrap:break-word; white-space:pre-wrap; }
+  .b.me { align-self:flex-end; background:var(--blue); color:#fff; border-bottom-right-radius:5px; }
+  .b.them { align-self:flex-start; background:var(--them); color:var(--themInk); border-bottom-left-radius:5px; }
+  .when { font-size:12px; color:var(--muted); align-self:center; margin-top:6px; }
+  .empty { text-align:center; color:var(--muted); margin:auto 0; }
+  .notice { background:var(--card); border:1px solid var(--rule); border-radius:14px; padding:12px 14px; margin:10px 0 0; font-size:15px; }
+  .notice b { color:var(--ink); }
+  footer.compose { position:sticky; bottom:0; background:var(--bg); padding:10px 0 12px; border-top:1px solid var(--rule); }
+  .row { display:flex; gap:8px; align-items:flex-end; }
+  textarea { flex:1; resize:none; font:inherit; padding:10px 12px; border-radius:16px; border:1px solid var(--rule); background:var(--card); color:var(--ink); max-height:120px; }
+  .send { width:auto; padding:10px 18px; }
+  .preview { font-size:13px; color:var(--muted); margin:6px 4px 0; min-height:18px; }
+  .preview .warn { color:var(--warn); }
+  .links { font-size:13px; color:var(--muted); text-align:center; margin:14px 0 4px; }
+  .links a, .links button { color:var(--muted); background:none; border:0; font:inherit; text-decoration:underline; cursor:pointer; padding:0 6px; }
+  .hbtn { background:none; border:0; color:var(--blue); font:inherit; font-weight:700; cursor:pointer; padding:4px 6px; }
+  .back { font-size:26px; line-height:1; padding:0 8px 0 0; }
+  .list { padding:6px 0; }
+  .chatrow { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--card); border:1px solid var(--rule); border-radius:16px; padding:12px; margin:8px 0; font:inherit; color:inherit; cursor:pointer; }
+  .chatrow img { width:44px; height:44px; border-radius:11px; flex-shrink:0; }
+  .chatrow .mid { flex:1; min-width:0; }
+  .chatrow .name { font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chatrow .last { color:var(--muted); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chatrow .time { color:var(--muted); font-size:12px; flex-shrink:0; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--blue); flex-shrink:0; }
+  input.field { width:100%; font:inherit; padding:12px; border-radius:12px; border:1px solid var(--rule); background:var(--card); color:var(--ink); margin:6px 0 10px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="screen" id="app"><div class="center"><p>Loading…</p></div></div>
+
+<script>
+(function () {
+  var API = '/chat/api/';
+  var STORE = 'dotdash_chats';
+  var MAX = 160;
+  var TOKEN_RE = /^[A-Za-z0-9_-]{32}$/;
+  var app = document.getElementById('app');
+
+  // ---------------------------------------------------------------- storage --
+  // Every chat this device has connected: { token, claim, id, displayName,
+  // contactName, lastAt, lastText, lastFrom, readAt, ended }.
+  var chats = (function () {
+    try { return (JSON.parse(localStorage.getItem(STORE) || '[]') || []).filter(function (c) { return c && TOKEN_RE.test(c.token || ''); }); }
+    catch (e) { return []; }
+  })();
+  function persist() { try { localStorage.setItem(STORE, JSON.stringify(chats)); } catch (e) {} }
+  function byToken(t) { for (var i = 0; i < chats.length; i++) if (chats[i].token === t) return chats[i]; return null; }
+  function byId(id) { for (var i = 0; i < chats.length; i++) if (chats[i].id === id) return chats[i]; return null; }
+  function upsert(c) {
+    var e = byToken(c.token);
+    if (e) { for (var k in c) e[k] = c[k]; } else { e = c; chats.push(e); }
+    persist();
+    return e;
+  }
+  function drop(token) {
+    chats = chats.filter(function (c) { return c.token !== token; });
+    persist();
+    delete msgs[token];
+    polls[token] = false;
+  }
+  function live() { return chats.filter(function (c) { return c.claim && !c.ended; }); }
+
+  var msgs = {};       // token -> messages loaded this session
+  var polls = {};      // token -> true while its long poll runs
+  var leaving = {};    // token -> true once Leave/Move was tapped
+  var current = null;  // token of the open chat
+  var view = 'boot';   // chat | inbox | other
+
+  function authOf(c) { return c.token + '.' + c.claim; }
+  function call(method, route, body, auth) {
+    var h = { 'Content-Type': 'application/json' };
+    if (auth) h.Authorization = 'Chat ' + auth;
+    return fetch(API + route, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { b._status = r.status; return b; }); });
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function show(html) { app.innerHTML = html; }
+  function logo() { return '<img class="logo" src="/icon.png" alt="Dot Dash">'; }
+  function legal() { return '<div class="links"><a href="/privacy.html">Privacy</a>·<a href="/terms.html">Terms</a></div>'; }
+  function linkUrl(token) { return location.origin + '/c/' + token; }
+
+  // A copy of lib.toDeviceText, so the page can show what the Dot Dash will
+  // actually display before anyone presses Send. The server's is the real one.
+  var FOLD = { '‘': "'", '’': "'", '“': '"', '”': '"', '–': '-', '—': '-', '…': '...',
+               ',': ' ', '\n': ' ', '\r': ' ', '\t': ' ', '|': '/', '<': '(', '>': ')', '[': '(', ']': ')', '{': '(', '}': ')', '%': ' PERCENT', '*': ' ' };
+  var OK = /[A-Z0-9 .:?'\-/()"=+@!;_$&]/;
+  function deviceText(s) {
+    var out = '', chars = Array.from(String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, ''));
+    for (var i = 0; i < chars.length; i++) {
+      var ch = chars[i], up = ch.toUpperCase();
+      if (FOLD[ch] !== undefined) out += FOLD[ch]; else if (up.length === 1 && OK.test(up)) out += up;
+    }
+    out = out.replace(/\s+/g, ' ').trim();
+    if (!out && String(s || '').trim()) out = '(EMOJI)';
+    return out;
+  }
+
+  function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+  function standalone() { return navigator.standalone === true || matchMedia('(display-mode: standalone)').matches; }
+  // On iPhone a Home Screen web app is, to the server, a different device from
+  // Safari -- and the only place notifications work.
+  function iosSafari() { return isIOS() && !standalone(); }
+
+  // ------------------------------------------------------------------- boot --
+  var parts = location.pathname.replace(/^\/c\/?/, '').split('.');
+  var pToken = TOKEN_RE.test(parts[0] || '') ? parts[0] : null;
+  var pClaim = TOKEN_RE.test(parts[1] || '') ? parts[1] : null;
+  var hashChat = (location.hash.match(/chat=([A-Za-z0-9]{1,40})/) || [])[1];
+
+  listenForNotificationTaps();
+  // A #chat=<id> address while the page is already open (no reload happens).
+  window.addEventListener('hashchange', function () {
+    var id = (location.hash.match(/chat=([A-Za-z0-9]{1,40})/) || [])[1], c = id && byId(id);
+    if (c && c.claim) openChat(c.token);
+  });
+  if (pToken) {
+    var e = byToken(pToken);
+    // An address carrying a claim (a Home Screen app saved before this page
+    // kept chats in storage) is adopted; a wrong one is caught by staleClaim.
+    if (pClaim && (!e || e.claim !== pClaim)) e = upsert({ token: pToken, claim: pClaim });
+    if (e && e.claim) openChat(pToken); else openLink(pToken);
+  } else if (hashChat && byId(hashChat)) {
+    openChat(byId(hashChat).token);
+  } else {
+    home();
+  }
+  live().forEach(function (c) { startPoll(c.token); });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) live().forEach(function (c) { startPoll(c.token); });
+  });
+
+  function home() {
+    var l = chats.filter(function (c) { return c.claim; });
+    if (!l.length) return screenNoLink();
+    if (l.length === 1 && !l[0].ended) return openChat(l[0].token);
+    inbox();
+  }
+
+  // ------------------------------------------------------- joining a chat --
+  function openLink(token) {
+    view = 'other'; current = null;
+    call('POST', 'open', { token: token }).then(function (r) {
+      if (r._status === 410) return screenGone(false);
+      if (r._status !== 200) return screenError();
+      if (r.state === 'claimed') return screenClaimed();
+      screenLanding(r, token);
+    }).catch(screenError);
+  }
+
+  function claim(token, info) {
+    return call('POST', 'claim', { token: token }).then(function (r) {
+      if (r._status === 200) {
+        upsert({ token: token, claim: r.claim, id: r.id, displayName: r.displayName, contactName: r.contactName, ended: false });
+        startPoll(token);
+        openChat(token);
+        setupPush(false);
+      } else if (r._status === 409) screenClaimed();
+      else if (r._status === 410) screenGone(false);
+      else screenError();
+    }).catch(screenError);
+  }
+
+  function screenLanding(info, token) {
+    history.replaceState(null, '', '/c/' + token);
+    var intro = '<h1>Hi ' + esc(info.contactName) + '!</h1>' +
+      '<p>You\'re invited to message <b>' + esc(info.displayName) + '</b>, a Morse-code messaging device. Messages you send here show up on its screen, and its replies show up here.</p>';
+    if (iosSafari()) {
+      show('<div class="center">' + logo() + intro +
+        '<div class="notice" style="text-align:left"><b>Already have Dot Dash on your Home Screen?</b> Copy this link, open Dot Dash from your Home Screen, and tap <b>Add a chat</b>.' +
+        '<button class="btn" style="margin-top:10px" id="copy">Copy link</button></div>' +
+        '<div class="notice" style="text-align:left"><b>New to Dot Dash?</b> Add this page to your Home Screen first: tap the Share button, then <b>Add to Home Screen</b>. Then open Dot Dash from your Home Screen and tap Connect there, so you get a notification when ' + esc(info.displayName) + ' replies.</div>' +
+        '<button class="btn ghost" id="go" style="margin-top:14px">Connect here instead (no notifications)</button>' +
+        '<p class="small" style="margin-top:12px">This link works on one device only. You can leave the chat at any time.</p></div>' + legal());
+      document.getElementById('copy').onclick = function () {
+        var b = this;
+        copyText(linkUrl(token)).then(function () { b.textContent = 'Copied. Now open Dot Dash from your Home Screen'; });
+      };
+    } else {
+      show('<div class="center">' + logo() + intro +
+        '<p class="small">This link works on one device only. Connect on the phone or computer you want to use.</p>' +
+        '<button class="btn" id="go">Connect</button>' +
+        '<p class="small" style="margin-top:12px">You can leave the chat at any time.</p></div>' + legal());
+    }
+    document.getElementById('go').onclick = function () { this.disabled = true; claim(token, info); };
+  }
+
+  function copyText(t) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).catch(function () { prompt('Copy this link:', t); });
+    prompt('Copy this link:', t);
+    return Promise.resolve();
+  }
+
+  // Paste a link you were sent into this app -- how a second chat reaches an
+  // existing iPhone Home Screen app, since links themselves open in Safari.
+  function screenAddChat() {
+    view = 'other'; current = null;
+    var canPaste = !!(navigator.clipboard && navigator.clipboard.readText);
+    show('<header>' + (live().length ? '<button class="hbtn back" id="back" aria-label="Back">‹</button>' : '') + '<div class="who">Add a chat</div></header>' +
+      '<div class="center" style="justify-content:flex-start;text-align:left">' +
+      '<p>Paste the Dot Dash link you were sent.</p>' +
+      '<input class="field" id="link" placeholder="https://dotdashdevice.com/c/…" autocomplete="off" autocapitalize="off" spellcheck="false">' +
+      (canPaste ? '<button class="btn ghost" id="paste" style="margin-bottom:10px">Paste</button>' : '') +
+      '<button class="btn" id="add">Connect</button><p class="small" id="msg" style="margin-top:10px"></p></div>');
+    var field = document.getElementById('link'), note = document.getElementById('msg');
+    if (document.getElementById('back')) document.getElementById('back').onclick = home;
+    if (canPaste) document.getElementById('paste').onclick = function () {
+      navigator.clipboard.readText().then(function (t) { field.value = t.trim(); }).catch(function () { note.textContent = 'Couldn\'t paste. Press and hold in the box, then tap Paste.'; });
+    };
+    document.getElementById('add').onclick = function () {
+      var m = /(?:\/c\/)?([A-Za-z0-9_-]{32})(?:[.#?/]|$)/.exec(field.value.trim());
+      if (!m) { note.textContent = 'That doesn\'t look like a Dot Dash link.'; return; }
+      var token = m[1];
+      if (byToken(token) && byToken(token).claim) return openChat(token);
+      this.disabled = true;
+      var btn = this;
+      call('POST', 'open', { token: token }).then(function (r) {
+        btn.disabled = false;
+        if (r._status === 410) note.textContent = 'That link has expired. Ask for a new one.';
+        else if (r.state === 'claimed') note.textContent = 'That link is already connected on another device. If that was Safari, open it there and tap "Move this chat to my Home Screen", or ask for a new link.';
+        else if (r._status === 200) claim(token, r);
+        else note.textContent = 'Couldn\'t connect. Check your connection and try again.';
+      }).catch(function () { btn.disabled = false; note.textContent = 'Couldn\'t connect. Check your connection and try again.'; });
+    };
+  }
+
+  // ---------------------------------------------------------- other screens --
+  function screenClaimed() {
+    view = 'other';
+    show('<div class="center">' + logo() + '<h1>Already connected on another device</h1>' +
+      '<p>Each link works on one device. To use this one instead, ask whoever sent you the link for a new one.</p>' + backToChats() + '</div>' + legal());
+    wireBackToChats();
+  }
+  function screenGone(left) {
+    view = 'other';
+    show('<div class="center">' + logo() + '<h1>' + (left ? 'You\'ve left the chat' : 'This link has expired') + '</h1>' +
+      '<p>' + (left ? 'Nothing more will reach this device. To message again, ask for a new link.'
+                    : 'It may have been replaced with a new one, or the chat was ended. Ask whoever sent it for a new link.') + '</p>' + backToChats() + '</div>' + legal());
+    wireBackToChats();
+  }
+  function screenNoLink() {
+    view = 'other';
+    show('<div class="center">' + logo() + '<h1>Open your Dot Dash link</h1><p>Use the link you were sent to start chatting.</p>' +
+      '<button class="btn ghost" id="addc">Paste a link</button></div>' + legal());
+    document.getElementById('addc').onclick = screenAddChat;
+  }
+  function screenError() {
+    view = 'other';
+    show('<div class="center">' + logo() + '<h1>Can\'t connect right now</h1><p>Check your connection and try again.</p>' +
+      '<button class="btn ghost" onclick="location.reload()">Try again</button></div>');
+  }
+  function backToChats() { return live().length ? '<button class="btn ghost" id="toChats" style="margin-top:14px">Back to your chats</button>' : ''; }
+  function wireBackToChats() { var b = document.getElementById('toChats'); if (b) b.onclick = home; }
+
+  // ------------------------------------------------------------------ inbox --
+  function inbox() {
+    view = 'inbox'; current = null;
+    history.replaceState(null, '', '/c/');
+    document.title = 'Dot Dash';
+    var rows = chats.filter(function (c) { return c.claim; }).sort(function (a, b) { return (b.lastAt || 0) - (a.lastAt || 0); });
+    show('<header><img src="/icon.png" alt=""><div class="who">Dot Dash</div><button class="hbtn" id="addc">+ Add a chat</button></header>' +
+      '<div class="list">' + rows.map(function (c) {
+        var last = c.ended ? 'This chat has ended' : c.lastText ? (c.lastFrom === 'contact' ? 'You: ' : '') + c.lastText : 'No messages yet';
+        return '<button class="chatrow" data-t="' + esc(c.token) + '"><img src="/icon.png" alt="">' +
+          '<span class="mid"><span class="name" style="display:block">' + esc(c.displayName || 'Dot Dash') + '</span><span class="last" style="display:block">' + esc(last) + '</span></span>' +
+          (c.lastAt ? '<span class="time">' + esc(when(c.lastAt)) + '</span>' : '') + (unread(c) ? '<span class="dot" aria-label="New"></span>' : '') + '</button>';
+      }).join('') + '</div><div id="pushArea"></div>' + legal());
+    document.getElementById('addc').onclick = screenAddChat;
+    Array.prototype.forEach.call(document.querySelectorAll('.chatrow'), function (b) {
+      b.onclick = function () {
+        var c = byToken(b.getAttribute('data-t'));
+        if (c && c.ended) { drop(c.token); current = c.token; return screenGone(false); }
+        openChat(b.getAttribute('data-t'));
+      };
+    });
+    setupPush(false);
+  }
+  function unread(c) { return !c.ended && c.lastFrom === 'dotdash' && (c.lastAt || 0) > (c.readAt || 0); }
+  function when(at) {
+    var d = new Date(at), now = new Date();
+    return d.toDateString() === now.toDateString() ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  // ------------------------------------------------------------------- chat --
+  var lastShown = 0, shownKeys = {};
+
+  function openChat(token) {
+    var c = byToken(token);
+    if (!c || !c.claim) return openLink(token);
+    view = 'chat'; current = token;
+    history.replaceState(null, '', '/c/' + authOf(c));
+    renderChat(c);
+    if (msgs[token]) { msgs[token].forEach(addBubble); scrollDown(); markRead(c); }
+    loadHistory(token).then(function (ok) {
+      if (!ok || current !== token) return;
+      var cc = byToken(token);
+      document.querySelector('header .who').textContent = cc.displayName;
+      (msgs[token] || []).forEach(addBubble);
+      scrollDown(); markRead(cc);
+    });
+    setupPush(false);
+  }
+
+  // Resolves true once msgs[token] holds the chat's history.
+  function loadHistory(token) {
+    var c = byToken(token);
+    return call('GET', 'history', null, authOf(c)).then(function (r) {
+      if (r._status === 403) { staleClaim(token); return false; }
+      if (r._status === 410 || r._status === 401) { ended(token); return false; }
+      if (r._status !== 200) return false;
+      msgs[token] = r.messages || [];
+      upsert({ token: token, id: r.id, displayName: r.displayName, contactName: r.contactName });
+      noteLast(token);
+      return true;
+    }).catch(function () { return false; });
+  }
+
+  function noteLast(token) {
+    var list = msgs[token] || [], m = list[list.length - 1];
+    if (m) upsert({ token: token, lastAt: m.at, lastText: m.text, lastFrom: m.from });
+  }
+  function markRead(c) { if (c && c.lastAt && c.readAt !== c.lastAt) upsert({ token: c.token, readAt: c.lastAt }); }
+
+  function renderChat(c) {
+    lastShown = 0; shownKeys = {};
+    document.title = (c.displayName || 'Dot Dash') + ' · Dot Dash';
+    var many = chats.filter(function (x) { return x.claim; }).length > 1;
+    show('<header>' + (many ? '<button class="hbtn back" id="back" aria-label="All chats">‹</button>' : '') +
+      '<img src="/icon.png" alt=""><div class="who">' + esc(c.displayName || '') + '</div><button class="hbtn" id="addc">+ Add</button></header>' +
+      '<div id="log"><div class="empty" id="empty">Say hello! Your messages appear on ' + esc(c.displayName || 'the Dot Dash') + '\'s screen.</div></div>' +
+      '<div id="pushArea"></div>' +
+      '<footer class="compose"><div class="row"><textarea id="msg" rows="1" maxlength="400" placeholder="Message"></textarea>' +
+      '<button class="btn send" id="send">Send</button></div><div class="preview" id="preview"></div>' +
+      '<div class="links"><a href="/privacy.html">Privacy</a>·<button id="leave">Leave this chat</button></div></footer>');
+    if (many) document.getElementById('back').onclick = inbox;
+    document.getElementById('addc').onclick = screenAddChat;
+    var box = document.getElementById('msg');
+    box.oninput = function () {
+      box.style.height = 'auto'; box.style.height = Math.min(box.scrollHeight, 120) + 'px';
+      var raw = box.value, d = deviceText(raw), pv = document.getElementById('preview');
+      if (!raw.trim()) { pv.textContent = ''; return; }
+      var note = d.length > MAX ? ' <span class="warn">(too long: it will be cut to ' + MAX + ' letters)</span>' : '';
+      pv.innerHTML = (d === raw.trim() ? '' : 'Shows on the Dot Dash as: <b>' + esc(d.slice(0, MAX)) + '</b>') + note;
+    };
+    box.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); sendMsg(); } };
+    document.getElementById('send').onclick = sendMsg;
+    document.getElementById('leave').onclick = function () {
+      if (!confirm('Leave this chat? ' + c.displayName + ' won\'t be able to message you, and this link will stop working.')) return;
+      var t = c.token;
+      leaving[t] = true;
+      call('POST', 'leave', null, authOf(c)).then(function () {
+        drop(t);
+        if (!live().length) unsubscribePush();
+        screenGone(true);
+      });
+    };
+  }
+
+  function key(m) { return m.at + '|' + m.from + '|' + m.text; }
+  function addBubble(m) {
+    if (shownKeys[key(m)]) return;
+    shownKeys[key(m)] = 1;
+    var log = document.getElementById('log'); if (!log) return;
+    var e = document.getElementById('empty'); if (e) e.remove();
+    if (m.at - lastShown > 30 * 60e3) {
+      var w = document.createElement('div'); w.className = 'when';
+      w.textContent = new Date(m.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+      log.appendChild(w);
+    }
+    var b = document.createElement('div');
+    b.className = 'b ' + (m.from === 'contact' ? 'me' : 'them');
+    b.textContent = m.text;
+    log.appendChild(b);
+    lastShown = Math.max(lastShown, m.at);
+  }
+  function scrollDown() { window.scrollTo(0, document.body.scrollHeight); }
+
+  function received(token, list) {
+    if (!list.length) return;
+    var have = msgs[token] || (msgs[token] = []), seen = {};
+    have.forEach(function (m) { seen[key(m)] = 1; });
+    list.forEach(function (m) { if (!seen[key(m)]) have.push(m); });
+    have.sort(function (a, b) { return a.at - b.at; });
+    noteLast(token);
+    if (view === 'chat' && current === token) { list.forEach(addBubble); scrollDown(); if (!document.hidden) markRead(byToken(token)); }
+    else if (view === 'inbox') inbox();
+  }
+
+  function sendMsg() {
+    var c = byToken(current); if (!c) return;
+    var box = document.getElementById('msg'), btn = document.getElementById('send');
+    var raw = box.value; if (!raw.trim()) return;
+    btn.disabled = true;
+    call('POST', 'send', { text: raw }, authOf(c)).then(function (r) {
+      btn.disabled = false;
+      if (r._status === 200) { box.value = ''; box.oninput(); received(c.token, [r.message]); }
+      else if (r._status === 429) alert('That\'s a lot of messages at once. Wait a minute and try again.');
+      else if (r._status === 410) ended(c.token);
+      else if (r._status === 403) staleClaim(c.token);
+      else if (r.status !== 'empty') alert('Couldn\'t send. Check your connection and try again.');
+    }).catch(function () { btn.disabled = false; alert('Couldn\'t send. Check your connection and try again.'); });
+  }
+
+  // One long poll per connected chat: the server answers when something new
+  // arrives, or after ~25s. Background chats keep the inbox's unread dots true.
+  function startPoll(token) {
+    if (polls[token]) return;
+    polls[token] = true;
+    var first = msgs[token] ? Promise.resolve(true) : loadHistory(token);
+    first.then(function (ok) {
+      if (!ok) { polls[token] = false; return; }
+      if (view === 'inbox') inbox();
+      (function loop() {
+        var c = byToken(token);
+        if (!c || !polls[token] || leaving[token]) { polls[token] = false; return; }
+        var after = (msgs[token] || []).reduce(function (a, m) { return Math.max(a, m.at); }, 0);
+        call('GET', 'wait?after=' + after, null, authOf(c)).then(function (r) {
+          if (leaving[token]) { polls[token] = false; return; }
+          if (r._status === 410) { polls[token] = false; return ended(token); }
+          if (r._status === 403) { polls[token] = false; return staleClaim(token); }
+          received(token, r.messages || []);
+          setTimeout(loop, r._status === 200 ? 0 : 5000);
+        }).catch(function () { setTimeout(loop, 5000); });
+      })();
+    });
+  }
+
+  // The chat was ended: replaced with a new link, removed, or left elsewhere.
+  function ended(token) {
+    if (leaving[token]) return;
+    if (current === token) { drop(token); return screenGone(false); }
+    var c = byToken(token);
+    if (c) { upsert({ token: token, ended: true }); polls[token] = false; }
+    if (view === 'inbox') inbox();
+  }
+
+  // Our claim no longer matches: another device took the link, or this claim
+  // is out of date because the link was released (moved to the Home Screen).
+  // If it is free again, offer Connect rather than a dead end.
+  function staleClaim(token) {
+    if (leaving[token]) return;
+    var c = byToken(token);
+    if (c) { c.claim = null; persist(); }
+    polls[token] = false;
+    if (current === token) openLink(token);
+    else if (view === 'inbox') inbox();
+  }
+
+  // iPhone Safari, already connected: hand this chat to the Home Screen app.
+  function moveToHomeScreen() {
+    var c = byToken(current); if (!c) return;
+    var t = c.token;
+    leaving[t] = true;
+    call('POST', 'release', null, authOf(c)).then(function (r) {
+      if (r._status !== 200) { leaving[t] = false; return alert('Couldn\'t move the chat. Check your connection and try again.'); }
+      drop(t);
+      view = 'other'; current = null;
+      history.replaceState(null, '', '/c/' + t);
+      show('<div class="center">' + logo() + '<h1>Now open it from your Home Screen</h1>' +
+        '<div class="notice" style="text-align:left"><b>Don\'t have Dot Dash on your Home Screen yet?</b> Tap the <b>Share</b> button, then <b>Add to Home Screen</b>, then open it and tap <b>Connect</b>.<br><br>' +
+        '<b>Already have it?</b> Copy the link, open Dot Dash from your Home Screen, and tap <b>Add a chat</b>.' +
+        '<button class="btn" style="margin-top:10px" id="copy">Copy link</button></div>' +
+        '<p class="small" style="margin-top:12px">Your messages come with you.</p></div>');
+      document.getElementById('copy').onclick = function () { var b = this; copyText(linkUrl(t)).then(function () { b.textContent = 'Copied'; }); };
+    }).catch(function () { leaving[t] = false; alert('Couldn\'t move the chat. Check your connection and try again.'); });
+  }
+
+  // ------------------------------------------------------------------- push --
+  function pushCapable() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+  function pushArea(html) { var a = document.getElementById('pushArea'); if (a) a.innerHTML = html; return a; }
+
+  function setupPush(ask) {
+    if (iosSafari()) {
+      if (view === 'chat') {
+        pushArea('<div class="notice"><b>Want a notification when ' + esc((byToken(current) || {}).displayName) + ' replies?</b> On iPhone that needs the Home Screen. Your messages come with you. <button class="btn" style="margin-top:8px" id="moveHome">Move this chat to my Home Screen</button></div>');
+        document.getElementById('moveHome').onclick = moveToHomeScreen;
+      } else {
+        pushArea('<div class="notice">To get notifications on iPhone, open your chats from Dot Dash on your Home Screen.</div>');
+      }
+      return;
+    }
+    if (!pushCapable() || !live().length) return pushArea('');
+    if (Notification.permission === 'denied') return pushArea('<div class="notice small">Notifications are blocked for this site. You can turn them on in your browser settings.</div>');
+    navigator.serviceWorker.register('/c/sw.js', { scope: '/c/' }).then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (sub) {
+        if (sub) return sendSubAll(sub).then(function () { pushArea(''); });
+        if (Notification.permission === 'granted' || ask) return subscribe(reg);
+        pushArea('<div class="notice"><b>Get a notification when a Dot Dash replies.</b> <button class="btn" style="margin-top:8px" id="pushOn">Turn on notifications</button></div>');
+        document.getElementById('pushOn').onclick = function () { setupPush(true); };
+      });
+    }).catch(function () { pushArea(''); });
+  }
+
+  function subscribe(reg) {
+    return call('GET', 'config').then(function (cfg) {
+      if (!cfg.vapidPublicKey) return pushArea('');
+      return Notification.requestPermission().then(function (perm) {
+        if (perm !== 'granted') return setupPush(false);
+        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(cfg.vapidPublicKey) })
+          .then(sendSubAll).then(function () { pushArea(''); });
+      });
+    });
+  }
+  // One browser subscription serves every chat on this device: each chat's
+  // pairing is told the same address, and each notification says which chat.
+  function sendSubAll(sub) {
+    var json = sub.toJSON();
+    return Promise.all(live().map(function (c) { return call('POST', 'push', { subscription: json }, authOf(c)); }));
+  }
+  function unsubscribePush() {
+    if (!pushCapable()) return;
+    navigator.serviceWorker.getRegistration('/c/').then(function (reg) {
+      if (reg) reg.pushManager.getSubscription().then(function (s) { if (s) s.unsubscribe(); });
+    });
+  }
+  function b64(s) {
+    var p = '='.repeat((4 - s.length % 4) % 4), raw = atob((s + p).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, function (c) { return c.charCodeAt(0); });
+  }
+
+  // A tapped notification, with this page already open: the service worker
+  // says which chat; open it.
+  function listenForNotificationTaps() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      var id = e.data && e.data.openChat, c = id && byId(id);
+      if (c && c.claim) openChat(c.token);
+    });
+  }
+})();
+</script>
+</body>
+</html>

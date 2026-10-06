@@ -1,0 +1,11 @@
+{
+  "name": "Dot Dash",
+  "short_name": "Dot Dash",
+  "display": "standalone",
+  "background_color": "#f4f6fb",
+  "theme_color": "#f4f6fb",
+  "icons": [
+    { "src": "/icon.png", "sizes": "360x360", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
