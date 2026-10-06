@@ -8,6 +8,8 @@
     import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, updateDoc, query, orderBy, limit, writeBatch } from 'firebase/firestore';
     import { getMessaging, getToken, deleteToken, isSupported as messagingSupported } from 'firebase/messaging';
     import { registerPlugin, CapacitorHttp } from '@capacitor/core';
+    import { Share as NativeShare } from '@capacitor/share';
+    import ContactApp, { savedContactChats } from './ContactApp.jsx';
 
     // =========================================================================
     // ✅ YOUR FIREBASE CONFIGURATION ✅
@@ -155,6 +157,11 @@
     // replaced by one: when there is an entitlement to check, this stops being a
     // constant and becomes that check, in the one place everything already reads.
     const SHOW_PHONE_CONTACTS = import.meta.env.VITE_PHONE_CONTACTS === '1';
+    // Contacts reached by a private link to a chat page instead of SMS
+    // (dotdashdevice.com/c/...). No carrier approval involved, so this can reach
+    // the pilot while SMS waits on Twilio. Same bridge, same contact IDs.
+    const SHOW_LINK_CONTACTS = import.meta.env.VITE_LINK_CONTACTS === '1';
+    const SHOW_BRIDGE_CONTACTS = SHOW_PHONE_CONTACTS || SHOW_LINK_CONTACTS;
 
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const PUSH_MINT_KEY = 'dotdash_push_minted';
@@ -463,6 +470,7 @@
     const GripVertical = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>;
     const Trash2 = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
     const Phone = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
+    const LinkIcon = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
     const ArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
     const ArrowLeft = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>;
     const Cpu = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>;
@@ -475,6 +483,14 @@
     const Users = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 
     // --- Safe Hashing Utility ---
+    // Two-player game traffic between devices. It rides the same retained
+    // doorbell/msg/<hash>/<stamp> channel as messages (per-device MQTT ACLs only
+    // allow publishing there) as "GAME,<pipe-separated data>,<sender>". A device's
+    // friend list can include this parent's own ID, so one can land on the
+    // parent's inbox (or a child's). It is machine data, never something a person
+    // should read: never stored, shown or counted -- only released from the broker.
+    const isGameTraffic = (action) => action === 'GAME';
+
     async function hashId(message) {
       if (window.crypto && window.crypto.subtle) {
         const msgBuffer = new TextEncoder().encode(message.toLowerCase().trim()); 
@@ -776,7 +792,7 @@
     // --- Default Phrases ---
     const defaultPhrases = ["HELLO!", "HOW ARE YOU?", "COME OVER?", "MEET AT PARK?", "GREAT!", "OK", "MAYBE LATER", "BUSY", ":)", ":(", "ASKING FIRST", "CALL MY BASE", "BYE!"];
 
-    function App() {
+    function App({ onContactMode = null, ownerEntry = false } = {}) {
       const [user, setUser] = useState(null);
       const [parentProfile, setParentProfile] = useState(null);
       const [devices, setDevices] = useState([]);
@@ -1143,6 +1159,12 @@
             // the same payload the same way, so both copies of a message agree.
             const firstComma = payload.indexOf(',');
             const lastComma = payload.lastIndexOf(',');
+            if (isGameTraffic(payload.slice(0, firstComma))) {
+              // Nothing to save, so releasing it cannot lose anything; left on
+              // the broker it would be redelivered on every reconnect forever.
+              if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
+              return;
+            }
             let stored = false;
             if (firstComma > 0 && lastComma > firstComma) {
               const parts = [
@@ -1174,6 +1196,7 @@
           if (inboxTopics[baseTopic]) {
             const targetChildMac = inboxTopics[baseTopic];
             const parts = payload.split(',');
+            if (isGameTraffic(parts[0])) return;   // device-owned slot, not shown
             if (parts.length >= 3 && parts[2] !== parentId) {
                 const newMonMsg = {
                   id: msgId, type: parts[0], text: parts[1], direction: 'in', childMac: targetChildMac, otherParty: parts[2],
@@ -1313,6 +1336,10 @@
             }
 
             const parts = payload.split(',');
+            if (isGameTraffic(parts[0])) {
+              if (!isCanvasBlocked) client.publish(topic, "", { retain: true });
+              return;
+            }
             if (parts.length >= 3) {
               let targetFriend = "A contact";
               if (parts.length > 3) {
@@ -1612,7 +1639,7 @@
       const unreadByChild = React.useMemo(() => {
         const out = {};
         for (const m of messages) {
-          if (m.isMe || !m.sender) continue;
+          if (m.isMe || !m.sender || isGameTraffic(m.type)) continue;
           const seen = readState[m.sender] || 0;
           if (m.id > seen) out[m.sender] = (out[m.sender] || 0) + 1;
         }
@@ -1696,7 +1723,7 @@
 
       if (loading || (user && !devicesLoaded)) return <div className="flex h-screen items-center justify-center"><Activity className="w-12 h-12 text-blue-500 animate-pulse" /></div>;
 
-      if (!user) return <AuthScreen />;
+      if (!user) return <AuthScreen onContactMode={onContactMode} ownerEntry={ownerEntry} />;
 
       if (isWizardActive) {
          return <OnboardingWizard 
@@ -1727,7 +1754,7 @@
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} deviceArcadeRules={deviceArcadeRules} deviceSeen={deviceSeen} deviceFinding={deviceFinding} setDeviceFinding={setDeviceFinding} findAsked={findAsked} setFindAsked={setFindAsked} />
+               <SettingsView onContactMode={onContactMode} user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} deviceArcadeRules={deviceArcadeRules} deviceSeen={deviceSeen} deviceFinding={deviceFinding} setDeviceFinding={setDeviceFinding} findAsked={findAsked} setFindAsked={setFindAsked} />
             </div>}
           </div>
 
@@ -1747,8 +1774,13 @@
     // ==============================================
     //                AUTHENTICATION
     // ==============================================
-    function AuthScreen() {
-      const [view, setView] = useState('LANDING'); 
+    // WELCOME comes first and asks which kind of person this is, because the
+    // app serves two: someone with a Dot Dash (set up / sign in), and someone
+    // who was only sent a link to chat with one -- who must not wander into
+    // creating an account while they wait for it. ownerEntry skips WELCOME
+    // when contact mode's "I have a Dot Dash" already answered the question.
+    function AuthScreen({ onContactMode = null, ownerEntry = false }) {
+      const [view, setView] = useState(ownerEntry ? 'LANDING' : 'WELCOME');
       const [email, setEmail] = useState('');
       const [password, setPassword] = useState('');
       const [error, setError] = useState('');
@@ -1775,9 +1807,40 @@
         }
       };
 
+      if (view === 'WELCOME') {
+        const chatChoice = (
+          <>
+            <span className="block text-lg">Someone invited me to chat</span>
+            <span className="block text-sm font-normal text-gray-500 mt-1">I was sent a link, or I'm waiting for one. No account needed.</span>
+          </>
+        );
+        const chatClass = "block w-full bg-white text-gray-900 border border-gray-200 font-bold py-5 px-5 rounded-2xl shadow-sm active:bg-gray-50 transition-colors text-left";
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center space-y-8 pb-12">
+            <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-28 h-28 rounded-3xl shadow-lg mt-8 object-cover" />
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Welcome to Dot Dash</h1>
+              <p className="text-gray-500 mt-2">How will you use the app?</p>
+            </div>
+            <div className="w-full max-w-sm space-y-4">
+              <button onClick={() => setView('LANDING')} className="w-full bg-blue-500 text-white font-bold py-5 px-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors text-left">
+                <span className="block text-lg">I have a Dot Dash</span>
+                <span className="block text-sm font-normal text-blue-100 mt-1">Set it up, or sign in to manage it.</span>
+              </button>
+              {/* In the iOS app this is contact mode; on the web, the chat page. */}
+              {onContactMode
+                ? <button onClick={onContactMode} className={chatClass}>{chatChoice}</button>
+                : <a href="https://dotdashdevice.com/c/" className={chatClass}>{chatChoice}</a>}
+            </div>
+          </div>
+        );
+      }
+
       if (view === 'LANDING') {
         return (
           <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center space-y-8 pb-12">
+            {/* Came over from Connect ("I have a Dot Dash"): Back goes back there. */}
+            <button onClick={() => (ownerEntry && onContactMode ? onContactMode() : setView('WELCOME'))} className="absolute top-12 left-4 p-2 text-gray-500 font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
             <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-28 h-28 rounded-3xl shadow-lg mt-8 object-cover" />
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dot Dash</h1>
             
@@ -2613,7 +2676,7 @@
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {}, deviceArcadeRules = {}, deviceSeen = {}, deviceFinding = {}, setDeviceFinding = () => {}, findAsked = {}, setFindAsked = () => {} }) {
+    function SettingsView({ onContactMode = null, user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {}, deviceArcadeRules = {}, deviceSeen = {}, deviceFinding = {}, setDeviceFinding = () => {}, findAsked = {}, setFindAsked = () => {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        // A device that cannot be switched on: replace it (same child ID, carried
        // over) or release it without the on-screen code Unlink asks for.
@@ -2646,6 +2709,7 @@
        const [smsNote, setSmsNote] = useState('');
        const [inviteFor, setInviteFor] = useState(null);      // the contact just added, whose invite the note offers
        const [inviteCopied, setInviteCopied] = useState(false);
+       const [linkForm, setLinkForm] = useState(null);        // { name, busy, error } while adding someone by link
 
        // ---------- ARCADE SWITCH ----------
        // Firestore holds what the PARENT chose (absent means on, which is every
@@ -3282,7 +3346,10 @@
          const list = smsContacts || await loadSmsContacts() || [];
          const phone = list.find(c => c.deviceId === activeDevice.id && c.virtualId === fIdToRemove);
          if (phone) {
-           if (!window.confirm(`Remove ${phone.contactName} (${phone.hint}) from this device? Their number is deleted, and messages from them stop reaching ${deviceName}.`)) return;
+           const question = phone.channel === 'web'
+             ? `Remove ${phone.contactName} from this Dot Dash? Their link stops working and the chat is deleted.`
+             : `Remove ${phone.contactName} (${phone.hint}) from this device? Their number is deleted, and messages from them stop reaching ${deviceName}.`;
+           if (!window.confirm(question)) return;
            // The bridge first: once it forgets the number nothing more is sent
            // either way, even if taking the friend off the device fails.
            const r = await smsApi(user, 'DELETE', `/${phone.id}`);
@@ -3299,8 +3366,10 @@
          setSmsContacts(r.body.contacts || []);
          return r.body.contacts || [];
        };
-       const smsByFriend = SHOW_PHONE_CONTACTS
-         ? Object.fromEntries((smsContacts || []).filter(c => c.deviceId === activeDevice?.id).map(c => [c.virtualId, c]))
+       const smsByFriend = SHOW_BRIDGE_CONTACTS
+         ? Object.fromEntries((smsContacts || [])
+             .filter(c => c.deviceId === activeDevice?.id && (c.channel === 'web' ? SHOW_LINK_CONTACTS : SHOW_PHONE_CONTACTS))
+             .map(c => [c.virtualId, c]))
          : {};
        const deviceName = activeDevice ? titleCaseName(activeDevice.identity?.name) : 'this device';
 
@@ -3309,7 +3378,7 @@
        // "connected" without the parent having to do anything.
        const anyPending = (smsContacts || []).some(c => c.status === 'pending');
        useEffect(() => {
-         if (!SHOW_PHONE_CONTACTS) return;
+         if (!SHOW_BRIDGE_CONTACTS) return;
          if (!openFriends) return;
          loadSmsContacts();
          if (!anyPending) return;
@@ -3345,11 +3414,57 @@
        // someone they know, and a mistyped number in the app messages nobody.
        // The link opens start.html, which opens the contact's Messages with
        // START typed to the right number.
-       const inviteText = (c) =>
-         `Hi ${c.contactName}! I added you as a contact on ${c.displayName}. To start messaging, send START to ${formatPhone(c.poolNumber)}, or tap here: https://app.dotdashdevice.com/start.html?n=${String(c.poolNumber).replace(/\D/g, '')}`;
+       // Wording for the TestFlight test period. Revert the web-link invite to an
+       // App Store link at launch.
+       const TESTFLIGHT_JOIN_URL = 'https://testflight.apple.com/join/NxFDSV39';
+       const inviteText = (c) => c.channel === 'web'
+         ? (() => {
+             // The Dot Dash user the contact will message: the active device's
+             // call sign without its PIN (contacts listed are the active device's).
+             const user = activeDevice?.identity ? displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`) : c.displayName;
+             return `Hi ${c.contactName}! ${user} wants to message with you using Dot Dash! Here's how to do it:\n1. Go to the App Store and install "TestFlight"\n2. Next, install the Dot Dash app here: ${TESTFLIGHT_JOIN_URL}\n3. Then tap your custom link to message with ${user}: ${c.link}\n4. If you don't have an iPhone, tap the link in step 3 to message on the web`;
+           })()
+         : `Hi ${c.contactName}! I added you as a contact on ${c.displayName}. To start messaging, send START to ${formatPhone(c.poolNumber)}, or tap here: https://app.dotdashdevice.com/start.html?n=${String(c.poolNumber).replace(/\D/g, '')}`;
+
+       // ---------- LINK CONTACTS ----------
+       // The link is shown once: the bridge keeps only its hash, so a lost or
+       // unopened link is replaced with a new one (the old one dies), never re-sent.
+       const linkNote = (c) => `Now send ${c.contactName} their link from your phone. It opens a chat with ${deviceName}, and works on one device only.`;
+
+       const handleAddLink = async () => {
+         const current = friendsInOrder(activeDevice, parentProfile.virtualId);
+         if (current.length >= MAX_FRIENDS) return setLinkForm(f => ({ ...f, error: SMS_ERRORS['friends-full'] }));
+         setLinkForm(f => ({ ...f, busy: true, error: '' }));
+         const r = await smsApi(user, 'POST', '', { deviceId: activeDevice.id, contactName: linkForm.name, channel: 'web' });
+         if (!r.ok) return setLinkForm(f => ({ ...f, busy: false, error: smsError(r) }));
+         const c = { ...r.body.contact, link: r.body.link };
+         setSmsContacts(list => [...(list || []).filter(x => x.id !== c.id), c]);
+         await saveFriends([c.virtualId, ...current.filter(f => f !== c.virtualId)]);
+         setLinkForm(null);
+         setInviteFor(c);
+         setInviteCopied(false);
+         setSmsNote(linkNote(c));
+       };
+
+       const handleNewLink = async (c) => {
+         if (c.status === 'active' && !window.confirm(`Send ${c.contactName} a new link? The device they're using now is disconnected, and their chat history is cleared.`)) return;
+         const r = await smsApi(user, 'POST', `/${c.id}/link`);
+         if (!r.ok) return alert(smsError(r));
+         const c2 = { ...r.body.contact, link: r.body.link };
+         setSmsContacts(list => (list || []).map(x => (x.id === c2.id ? c2 : x)));
+         setInviteFor(c2);
+         setInviteCopied(false);
+         setSmsNote(linkNote(c2));
+       };
 
        const handleShareInvite = async (c) => {
          const text = inviteText(c);
+         // In the iOS app the web view's share support can't be relied on, so
+         // the native share sheet goes through Capacitor.
+         if (isNativeApp()) {
+           try { await NativeShare.share({ text, dialogTitle: `Send ${c.contactName} the link` }); return; }
+           catch (e) { if (/cancel/i.test(e?.message || '')) return; }
+         }
          if (navigator.share) {
            try { await navigator.share({ text }); return; }
            catch (e) { if (e?.name === 'AbortError') return; }   // cancelled: nothing more to do
@@ -3535,6 +3650,22 @@
                </button>
             </div>
 
+            {/* This phone is also a contact on someone else's Dot Dash (Dot Dash
+                Connect). The way over, since links and notifications are
+                otherwise the only doors in once someone is signed in. */}
+            {onContactMode && savedContactChats().some((c) => c.claim) && (
+              <button onClick={onContactMode} className="w-full flex items-center justify-between p-4 mb-3 bg-white border border-gray-100 rounded-2xl active:bg-gray-50 text-left">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-gray-800 text-base">Dot Dash Connect</div>
+                    <div className="text-xs text-gray-500">Your chats with other people's Dot Dashes</div>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 ml-2"/>
+              </button>
+            )}
+
             <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
               <label className="text-xs text-gray-500 font-bold uppercase">Your base call sign</label>
               <div className="text-xl font-bold text-blue-600">{parentProfile.virtualId}</div>
@@ -3624,7 +3755,23 @@
                       <Phone className="w-4 h-4"/><span>Add a phone number</span>
                     </button>
                   ))}
-                  {SHOW_PHONE_CONTACTS && smsNote && (
+                  {SHOW_LINK_CONTACTS && (linkForm ? (
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 space-y-2">
+                      <div className="font-bold text-gray-800 text-sm flex items-center"><LinkIcon className="w-4 h-4 text-blue-500 mr-1.5"/>Add someone by link</div>
+                      <input type="text" placeholder="Their name, like Grandma" maxLength="30" autoComplete="off" className="w-full bg-white px-3 py-2 rounded-lg outline-none border border-gray-200" value={linkForm.name} onChange={e => setLinkForm(f => ({ ...f, name: e.target.value.toUpperCase(), error: '' }))} onKeyDown={e => { if (e.key === 'Enter' && linkForm.name.trim()) handleAddLink(); }}/>
+                      <p className="text-xs text-gray-500 leading-snug">You'll get a private link to send them. It opens a chat with {deviceName} in their browser, with no app or account needed, and works on one device only. You can remove them at any time.</p>
+                      {linkForm.error && <p className="text-xs text-red-600 font-medium">{linkForm.error}</p>}
+                      <div className="flex space-x-2 pt-1">
+                        <button onClick={() => setLinkForm(null)} disabled={linkForm.busy} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2 font-bold rounded-xl active:bg-gray-100">Cancel</button>
+                        <button onClick={handleAddLink} disabled={linkForm.busy || !linkForm.name.trim()} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600 disabled:bg-blue-300">{linkForm.busy ? 'Adding…' : 'Add'}</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setSmsNote(''); setPhoneForm(null); setLinkForm({ name: '', busy: false, error: '' }); }} className="w-full flex items-center justify-center space-x-2 text-blue-600 font-bold text-sm py-2 mb-4 rounded-xl border border-dashed border-blue-200 active:bg-blue-50">
+                      <LinkIcon className="w-4 h-4"/><span>Add someone by link</span>
+                    </button>
+                  ))}
+                  {SHOW_BRIDGE_CONTACTS && smsNote && (
                     <div className="text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 mb-3">
                       <div className="flex items-start">
                         <span className="flex-1">{smsNote}</span>
@@ -3632,7 +3779,7 @@
                       </div>
                       {inviteFor && (
                         <div className="flex space-x-2 mt-2">
-                          <button onClick={() => handleShareInvite(inviteFor)} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600">Send {inviteFor.contactName} the invite</button>
+                          <button onClick={() => handleShareInvite(inviteFor)} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600">Send {inviteFor.contactName} {inviteFor.channel === 'web' ? 'their link' : 'the invite'}</button>
                           <button onClick={() => handleCopyInvite(inviteFor)} className="shrink-0 bg-white border border-blue-200 text-blue-600 px-4 py-2 font-bold rounded-xl active:bg-blue-50">{inviteCopied ? 'Copied' : 'Copy'}</button>
                         </div>
                       )}
@@ -3640,7 +3787,23 @@
                   )}
                   <ReorderList className="space-y-2" items={displayFriends} onReorder={saveFriends} renderItem={(f) => (
                     <>
-                      {smsByFriend[f] ? (() => { const c = smsByFriend[f]; return (
+                      {smsByFriend[f]?.channel === 'web' ? (() => { const c = smsByFriend[f]; return (
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center font-bold text-gray-700 min-w-0">
+                            <LinkIcon className="w-4 h-4 text-blue-500 mr-1.5 shrink-0"/>
+                            <span className="truncate">{c.contactName}</span>
+                          </span>
+                          {c.status === 'pending' && (
+                            <span className="block text-xs text-amber-600">Link not opened yet · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>
+                          )}
+                          {c.status === 'active' && (
+                            <span className="block text-xs text-green-600">Connected by link · <button onClick={() => handleNewLink(c)} className="underline font-medium text-gray-500">New link</button></span>
+                          )}
+                          {c.status === 'stopped' && (
+                            <span className="block text-xs text-gray-500">Left the chat · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>
+                          )}
+                        </span>
+                      ); })() : smsByFriend[f] ? (() => { const c = smsByFriend[f]; return (
                         <span className="flex-1 min-w-0">
                           <span className="flex items-center font-bold text-gray-700 min-w-0">
                             <Phone className="w-4 h-4 text-blue-500 mr-1.5 shrink-0"/>
@@ -4118,8 +4281,8 @@
 
       const activeDevice = devices.find(d => d.id === activeChildId);
 
-      const activeMessages = messages.filter(m => 
-        (m.isMe && m.target === activeChildLabel) || (!m.isMe && m.sender === activeChildLabel)
+      const activeMessages = messages.filter(m => !isGameTraffic(m.type) && (
+        (m.isMe && m.target === activeChildLabel) || (!m.isMe && m.sender === activeChildLabel))
       ).sort((a, b) => a.id - b.id);
 
       useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeMessages]);
@@ -4202,7 +4365,7 @@
     }
 
     function MonitorView({ monitorMessages, devices, activeChildId, setActiveChildId, activeChildLabel, pendingApprovals = [], setPendingApprovals, mqttClient, lowBattery = {}, pendingFriendReqs = [], setPendingFriendReqs, user, parentProfile }) {
-      const activeMonitorMsgs = monitorMessages.filter(m => m.childMac === activeChildId).sort((a, b) => b.id - a.id);
+      const activeMonitorMsgs = monitorMessages.filter(m => m.childMac === activeChildId && !isGameTraffic(m.type)).sort((a, b) => b.id - a.id);
 
       // Entries from the database carry the recipient's HASH -- that is what
       // travels on the wire, so a recipient stays pseudonymous there. Turned back
@@ -4600,6 +4763,81 @@
       );
     }
 
+    // ==============================================
+    //        ROOT: account holder, or contact mode
+    // ==============================================
+    // The iOS app is two things. Signed in, it is the account holder's app.
+    // Opened from a chat link (dotdashdevice.com/c/..., a Universal Link), or by
+    // someone whose only use for it is chatting, it is contact mode
+    // (ContactApp.jsx): no account, just the chats those links connect.
+    // Contact mode is native only -- on the web the chat page does that job.
+    // VITE_CONTACT_PREVIEW=1 (local preview builds only, never shipped) lets a
+    // desktop browser enter contact mode with ?contact, and open a link with
+    // ?contact&link=<token>, to check it without an iPhone.
+    const CONTACT_PREVIEW = import.meta.env.VITE_CONTACT_PREVIEW === '1' && new URLSearchParams(location.search).has('contact');
+
+    function Root() {
+      const native = isNativeApp() || CONTACT_PREVIEW;
+      const [mode, setMode] = useState(null);           // 'owner' | 'contact'
+      const [incoming, setIncoming] = useState(null);   // { token | chat, n } from a link or notification tap
+      const [ownerSignedIn, setOwnerSignedIn] = useState(false);
+      const [ownerEntry, setOwnerEntry] = useState(false);   // came from contact mode's "I have a Dot Dash"
+
+      // First answer from Firebase decides the opening screen, unless a link or
+      // notification already chose contact mode.
+      useEffect(() => onAuthStateChanged(auth, (u) => {
+        setOwnerSignedIn(!!u);
+        setMode((m) => m ?? (!u && native && savedContactChats().some((c) => c.claim) ? 'contact' : 'owner'));
+      }), []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+      useEffect(() => {
+        if (CONTACT_PREVIEW) {
+          const token = new URLSearchParams(location.search).get('link');
+          setMode('contact');
+          if (token) setIncoming({ token, n: Date.now() });
+          return;
+        }
+        if (!native) return;
+        const handles = [];
+        let gone = false;
+        (async () => {
+          try {
+            const { App: CapApp } = await import('@capacitor/app');
+            const onUrl = (url) => {
+              const token = /\/c\/([A-Za-z0-9_-]{32})/.exec(url || '')?.[1];
+              if (token) { setMode('contact'); setIncoming({ token, n: Date.now() }); }
+            };
+            const launch = await CapApp.getLaunchUrl();   // a cold start from a link
+            if (launch?.url) onUrl(launch.url);
+            const h = await CapApp.addListener('appUrlOpen', (e) => onUrl(e.url));
+            if (gone) h.remove(); else handles.push(h);
+          } catch (e) {}
+          try {
+            // Contact notifications carry kind 'contact' and the chat's id; the
+            // account holder's own notifications are handled inside App.
+            const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+            const h = await FirebaseMessaging.addListener('notificationActionPerformed', (event) => {
+              const d = event?.notification?.data || {};
+              if (d.kind === 'contact' && d.chat) { setMode('contact'); setIncoming({ chat: d.chat, n: Date.now() }); }
+            });
+            if (gone) h.remove(); else handles.push(h);
+          } catch (e) {}
+        })();
+        return () => { gone = true; handles.forEach((h) => { try { h.remove(); } catch (e) {} }); };
+      }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+      if (!mode) return null;
+      // Switching by hand forgets the last link/notification, so contact mode
+      // opens on the inbox rather than replaying it.
+      // Connect borrows the account-holder app's own tab bar and icons, so the
+      // two sides of the app look like one.
+      if (mode === 'contact') return <ContactApp incoming={incoming} ownerSignedIn={ownerSignedIn}
+        ui={{ TabButton, MessageCircle, SettingsIcon, Send, Trash2, Plus, Bell, ArrowLeft }}
+        onExit={() => { setIncoming(null); setOwnerEntry(true); setMode('owner'); }}
+        onWelcome={() => { setIncoming(null); setOwnerEntry(false); setMode('owner'); }} />;
+      return <App ownerEntry={ownerEntry} onContactMode={native ? () => { setIncoming(null); setMode('contact'); } : null} />;
+    }
+
     const root = createRoot(document.getElementById('root'));
-    root.render(<App />);
+    root.render(<Root />);
   

@@ -8,11 +8,13 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy:test": "npm run build:phones && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
-    "ios:sync": "npm run build && npx cap sync ios",
+    "deploy:test": "npm run build:links && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
+    "ios:sync": "npm run build:links && npx cap sync ios",
     "ios:open": "npx cap open ios",
-    "deploy:prod": "npm run build && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/index.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
-    "build:phones": "VITE_PHONE_CONTACTS=1 vite build"
+    "deploy:prod": "npm run build:links && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/index.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
+    "build:phones": "VITE_PHONE_CONTACTS=1 VITE_LINK_CONTACTS=1 vite build",
+    "build:links": "VITE_LINK_CONTACTS=1 vite build",
+    "deploy:test:phones": "npm run build:phones && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
@@ -25,9 +27,11 @@
   },
   "dependencies": {
     "@capacitor-firebase/messaging": "^7.3.0",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2",
     "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/share": "^8.0.3",
     "@capawesome/capacitor-badge": "^8.0.3",
     "firebase": "^11.10.0",
     "js-sha256": "^1.0.0",
