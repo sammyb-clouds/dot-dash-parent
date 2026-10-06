@@ -1,0 +1,21 @@
+[Unit]
+Description=Dot Dash SMS bridge (MQTT <-> Twilio)
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/dotdash_bridge
+# Twilio credentials, SMS_DATA_KEY, MQTT_PASS. 0600, root only, never in git.
+EnvironmentFile=/root/dotdash_sms/sms.env
+ExecStart=/usr/bin/node /root/dotdash_bridge/sms.mjs
+Restart=always
+RestartSec=5
+# Below the broker (-900) and the push bridge (-600): if memory runs out, texts
+# pausing is better than alerts or messaging stopping.
+OOMScoreAdjust=-200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

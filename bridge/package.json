@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Forwards Dot Dash device alerts from MQTT to parents' phones via FCM/APNs",
   "main": "bridge.js",
+  "scripts": {
+    "test": "node --test sms/lib.test.mjs sms/service.test.mjs"
+  },
   "dependencies": {
     "mqtt": "^5.15.2"
   }
