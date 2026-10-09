@@ -85,249 +85,159 @@ async function setup() {
   return { db, client, twilio, webPush, fcm, svc, port, logs, addDevice, addPool, api, sms, chat, toDevice, pairingDocs, close: () => { svc.server.closeAllConnections?.(); svc.server.close(); } };
 }
 
-test('full lifecycle: add, contact opts in, both directions, stop, delete, re-add', async () => {
+test('phone (SMS relay) contacts are retired', async () => {
   const t = await setup();
   try {
     await t.addPool(POOL1);
-    const maya = await t.addDevice('u1', 'MAC1', MAYA);
-
-    // --- parent adds Grandma
-    const add = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', phone: '(415) 555-2671', contactName: 'Grandma' } });
-    assert.equal(add.status, 201, JSON.stringify(add.body));
-    const c = add.body.contact;
-    assert.match(c.virtualId, /^GRANDMA\d{4}$/);
-    assert.equal(c.status, 'pending');
-    assert.equal(c.poolNumber, POOL1);
-    assert.equal(c.hint, '•••• 2671');
-    assert.equal(c.displayName, "Maya's Dot Dash");
-    assert.equal(add.body.keyword, 'START');
-    // Nothing is ever sent first: the contact opts in themselves.
-    assert.equal(t.twilio.sent.length, 0);
-
-    // No phone number in the database except as ciphertext, anywhere.
-    const everything = JSON.stringify([...t.db.data]);
-    assert.ok(!everything.includes('4155552671'), 'plaintext number stored');
-    // The virtual ID is claimed so no child can be given it.
-    const vh = L.hashId(c.virtualId);
-    assert.equal(t.db.data.get(`artifacts/dd/public/data/identities/${vh}`).type, 'sms');
-
-    await tick();
-    assert.ok(t.client.subs.has(`doorbell/msg/${vh}/#`));
-    const pres = () => t.client.published.filter((m) => m.topic === `doorbell/presence/${vh}`).at(-1)?.payload;
-    assert.equal(pres(), 'OFFLINE');
-
-    // --- bad signature is refused before anything is looked up
-    assert.equal((await t.sms(GRANDMA, POOL1, 'hi', { badSig: '1' })).status, 403);
-
-    // --- before START: nudged, nothing reaches the child
-    let r = await t.sms(GRANDMA, POOL1, 'hello?');
-    assert.match(r.text, /to connect with Maya&apos;s Dot Dash\, reply START/);
-    assert.equal(t.toDevice(maya).length, 0);
-
-    // --- START: active, confirmation (program, frequency, rates, HELP, STOP), presence stays OFFLINE
-    r = await t.sms(GRANDMA, POOL1, 'Start');
-    assert.match(r.text, /Dot Dash: you&apos;re connected to Maya&apos;s Dot Dash\..*save it\. Message frequency varies\. Msg &amp; data rates may apply\. Reply HELP for help, STOP to opt out\./);
-    await tick();
-    assert.equal(pres(), 'OFFLINE');   // virtual contacts never read as online
-
-    // --- phone -> child
-    r = await t.sms(GRANDMA, POOL1, 'Hi, Maya! ❤️ see you Sunday');
-    assert.equal(r.text, '<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-    const got = t.toDevice(maya);
-    assert.equal(got.length, 1);
-    assert.equal(got[0].payload, `MORSE,HI MAYA! SEE YOU SUNDAY,${c.virtualId}`);
-    assert.equal(got[0].retain, true);
-    assert.match(got[0].topic, /\/\d{14,19}$/);   // numeric id the firmware's replay guard keys on
-
-    // Twilio retrying the same webhook does not deliver twice.
-    await fetch(`http://127.0.0.1:${t.svc.server.address().port}/sms/inbound`, {
-      method: 'POST', body: new URLSearchParams(r.params).toString(),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Twilio-Signature': L.twilioSignature(AUTH, `${BASE}/sms/inbound`, r.params) },
-    });
-    assert.equal(t.toDevice(maya).length, 1);
-
-    // --- child -> phone
-    const topic = `doorbell/msg/${vh}/17000000000001`;
-    t.client.deliver(topic, `MORSE,LOVE YOU,${MAYA}`);
-    await tick();
-    assert.equal(t.twilio.sent.length, 1);
-    assert.deepEqual(t.twilio.sent[0], { from: POOL1, to: GRANDMA, body: 'Maya via Dot Dash: LOVE YOU' });
-    assert.ok(t.client.published.some((m) => m.topic === topic && m.payload === '' && m.retain), 'retained copy cleared');
-
-    // Game traffic from the device is cleared but never relayed.
-    const gameTopic = `doorbell/msg/${vh}/17000000000009`;
-    t.client.deliver(gameTopic, `GAME,T|4821|3|MOV|4,${MAYA}`);
-    await tick();
-    assert.equal(t.twilio.sent.length, 1, 'GAME not sent to the phone');
-    assert.ok(t.client.published.some((m) => m.topic === gameTopic && m.payload === '' && m.retain), 'GAME retained copy cleared');
-
-    // redelivered after a reconnect: not sent again
-    t.client.deliver(topic, `MORSE,LOVE YOU,${MAYA}`);
-    await tick();
-    assert.equal(t.twilio.sent.length, 1);
-
-    // another device claiming to be someone else is refused
-    t.client.deliver(`doorbell/msg/${vh}/17000000000002`, `TEXT,HI,${LEO}`);
-    await tick();
-    assert.equal(t.twilio.sent.length, 1);
-
-    // --- STOP
-    await t.sms(GRANDMA, POOL1, 'STOP');
-    await tick();
-    assert.equal(pres(), 'OFFLINE');
-    t.client.deliver(`doorbell/msg/${vh}/17000000000003`, `TEXT,HELLO,${MAYA}`);
-    await tick();
-    assert.equal(t.twilio.sent.length, 1, 'sent to an opted-out contact');
-    await t.sms(GRANDMA, POOL1, 'are you there');
-    assert.equal(t.toDevice(maya).length, 1, 'stopped contact reached the child');
-
-    // START brings it back
-    await t.sms(GRANDMA, POOL1, 'START');
-    await tick();
-    assert.equal(pres(), 'OFFLINE');   // virtual contacts never read as online
-
-    // --- list: only your own
-    assert.equal((await t.api('GET', '/sms/contacts')).body.contacts.length, 1);
-    assert.equal((await t.api('GET', '/sms/contacts', { tok: 'tok-u2' })).body.contacts.length, 0);
-    assert.equal((await t.api('DELETE', `/sms/contacts/${c.id}`, { tok: 'tok-u2' })).status, 404);
-    assert.equal((await t.api('GET', '/sms/contacts', { tok: 'bogus' })).status, 401);
-
-    // --- delete: pairing and its number gone, route kept as a tombstone
-    const del = await t.api('DELETE', `/sms/contacts/${c.id}`);
-    assert.equal(del.status, 200);
-    assert.equal(del.body.virtualId, c.virtualId);
+    await t.addDevice('u1', 'MAC1', MAYA);
+    // Twilio does not allow relaying what people write over toll-free SMS.
+    const r = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', phone: GRANDMA, contactName: 'Grandma' } });
+    assert.deepEqual([r.status, r.body.status], [410, 'retired']);
     assert.equal(t.pairingDocs().length, 0);
-    const routes = [...t.db.data].filter(([p]) => p.includes('/smsRoutes/'));
-    assert.equal(routes.length, 1);
-    assert.equal(routes[0][1].pairingId, null);
-    assert.equal(t.db.data.get(`artifacts/dd/smsPool/${L.poolKey(POOL1)}`).used, 0);
+    // A stranger texting the pool number reaches no Dot Dash and gets no reply.
+    const s = await t.sms(STRANGER, POOL1, 'hey kid');
+    assert.doesNotMatch(s.text, /Message/);
+    assert.equal(t.client.published.filter((m) => m.topic.startsWith('doorbell/msg/') && m.payload).length, 0);
+    assert.equal((await t.sms(STRANGER, POOL1, 'hi', { badSig: '1' })).status, 403);
+  } finally { t.close(); }
+});
+
+test('SMS notifications: consent on the chat page, setup message, one per unread stretch, no content, STOP/START, off', async () => {
+  const t = await setup();
+  try {
+    await t.addPool(POOL1);
+    await t.addDevice('u1', 'MAC1', MAYA);
+    const add = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', contactName: 'Grandma', channel: 'web' } });
+    const c = add.body.contact, token = add.body.link.split('/c/')[1], vh = L.hashId(c.virtualId);
+    const auth = `${token}.${(await t.chat('POST', 'claim', { body: { token } })).body.claim}`;
+    const doc = () => t.db.data.get(`artifacts/dd/smsPairings/${c.id}`);
     await tick();
-    assert.ok(!t.client.subs.has(`doorbell/msg/${vh}/#`));
-    assert.equal(pres(), '');
-    assert.ok(t.client.published.filter((m) => m.topic === `doorbell/presence/${vh}`).every((m) => m.payload !== 'ONLINE'), 'ONLINE was ever published');
 
-    r = await t.sms(GRANDMA, POOL1, 'hello?');
-    assert.match(r.text, /no longer connected/);
-    assert.equal(t.toDevice(maya).length, 1);
+    // Not asked yet: the page shows the opt-in screen.
+    let r = await t.chat('GET', 'history', { auth });
+    assert.deepEqual(r.body.notify, { asked: false, status: null, hint: null });
+    // `open` (no claim needed) says nothing about notifications.
+    assert.equal((await t.chat('POST', 'open', { body: { token } })).body.notify, undefined);
 
-    // --- re-adding Grandma to Maya reuses the number and the ID
-    const again = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', phone: GRANDMA, contactName: 'Grandma' } });
-    assert.equal(again.status, 201, JSON.stringify(again.body));
-    assert.equal(again.body.contact.poolNumber, POOL1);
-    assert.equal(again.body.contact.virtualId, c.virtualId);
-    // and adding her twice is refused
-    assert.equal((await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', phone: GRANDMA, contactName: 'Grandma' } })).body.status, 'already-added');
-  } finally { t.close(); }
-});
-
-test('pool rules: one device per (contact, number); never reassigned', async () => {
-  const t = await setup();
-  try {
-    await t.addPool(POOL1);
-    await t.addDevice('u1', 'MAC1', MAYA);
-    await t.addDevice('u1', 'MAC2', LEO);
-
-    assert.equal((await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', phone: GRANDMA, contactName: 'Grandma' } })).status, 201);
-    // Grandma to a second grandchild needs a second number; there is none.
-    const full = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC2', phone: GRANDMA, contactName: 'Grandma' } });
-    assert.deepEqual([full.status, full.body.status], [503, 'pool-exhausted']);
-    assert.ok(t.logs.some((l) => l.includes('OPS: no pool number free')));
-
-    await t.addPool(POOL2);
-    const leo = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC2', phone: GRANDMA, contactName: 'Grandma' } });
-    assert.equal(leo.status, 201);
-    assert.equal(leo.body.contact.poolNumber, POOL2);
-
-    // Each thread reaches its own child.
-    await t.sms(GRANDMA, POOL1, 'YES');
-    await t.sms(GRANDMA, POOL2, 'YES');
-    await t.sms(GRANDMA, POOL1, 'for maya');
-    await t.sms(GRANDMA, POOL2, 'for leo');
-    assert.deepEqual(t.toDevice(L.hashId(MAYA)).map((m) => m.payload.split(',')[1]), ['FOR MAYA']);
-    assert.deepEqual(t.toDevice(L.hashId(LEO)).map((m) => m.payload.split(',')[1]), ['FOR LEO']);
-
-    // Remove Grandma from Maya: POOL1 must NOT be offered for Grandma -> Leo's
-    // sibling later, because her phone has POOL1 saved as Maya.
-    const list = (await t.api('GET', '/sms/contacts')).body.contacts;
-    await t.api('DELETE', `/sms/contacts/${list.find((x) => x.poolNumber === POOL1).id}`);
-    await t.addDevice('u1', 'MAC3', 'ZOE0303');
-    const zoe = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC3', phone: GRANDMA, contactName: 'Grandma' } });
-    assert.equal(zoe.body.status, 'pool-exhausted');
-
-    // A stranger to a pool number: told once a day, nothing delivered.
-    let r = await t.sms(STRANGER, POOL1, 'hey kid');
-    assert.match(r.text, /isn&apos;t connected/);
-    r = await t.sms(STRANGER, POOL1, 'hey kid');
-    assert.doesNotMatch(r.text, /Message/);
-    assert.equal(t.toDevice(L.hashId(MAYA)).length, 1);
-  } finally { t.close(); }
-});
-
-test('parent API refusals, opted-out and bad numbers, sweep', async () => {
-  const t = await setup();
-  try {
-    await t.addPool(POOL1);
-    await t.addDevice('u1', 'MAC1', MAYA);
-    await t.addDevice('u2', 'MACX', 'KAI0707', Array.from({ length: 10 }, (_, i) => `F${i}0000`));
-
-    const post = (body, tok) => t.api('POST', '/sms/contacts', { body, tok });
-    assert.equal((await post({ deviceId: 'MAC1', phone: '555-1234', contactName: 'Nana' })).body.status, 'invalid-number');
-    assert.equal((await post({ deviceId: 'MAC1', phone: POOL1, contactName: 'Nana' })).body.status, 'invalid-number');
-    assert.equal((await post({ deviceId: 'MAC1', phone: GRANDMA, contactName: '!!' })).body.status, 'invalid-name');
-    assert.equal((await post({ deviceId: 'NOPE', phone: GRANDMA, contactName: 'Nana' })).body.status, 'no-device');
-    assert.equal((await post({ deviceId: 'MACX', phone: GRANDMA, contactName: 'Nana' }, 'tok-u2')).body.status, 'friends-full');
-
-    // A device record the parent wrote, for a child ID someone ELSE holds.
-    await t.db.doc('artifacts/dd/users/u2/devices/STEAL').set({ hashedId: L.hashId(MAYA), identity: { name: 'MAYA', pin: '0515' }, friends: [] });
-    assert.equal((await post({ deviceId: 'STEAL', phone: GRANDMA, contactName: 'Nana' }, 'tok-u2')).body.status, 'not-owner');
-
-    // Adding sends nothing, whatever happens next.
-    const pop = await post({ deviceId: 'MAC1', phone: '+14155550001', contactName: 'Pop' });
-    assert.equal(pop.status, 201);
+    // Consent is required, and must be the contact's own explicit tick.
+    assert.equal((await t.chat('POST', 'notify', { auth, body: { phone: GRANDMA } })).body.status, 'consent-required');
+    assert.equal((await t.chat('POST', 'notify', { auth, body: { phone: '555-1234', consent: true } })).body.status, 'invalid-number');
+    assert.equal((await t.chat('POST', 'notify', { auth, body: { phone: POOL1, consent: true } })).body.status, 'invalid-number');
     assert.equal(t.twilio.sent.length, 0);
-    await t.sms('+14155550001', POOL1, 'START');
-    await tick();
 
-    // Twilio says the contact has since opted out (21610): marked stopped.
-    const popVh = L.hashId(pop.body.contact.virtualId);
-    t.twilio.failNext = new TwilioError(400, { code: 21610, message: 'unsubscribed' });
-    t.client.deliver(`doorbell/msg/${popVh}/17000000000009`, `TEXT,HI POP,${MAYA}`);
+    // On: one setup message, the first thing this number ever gets from us.
+    r = await t.chat('POST', 'notify', { auth, body: { phone: '(415) 555-2671', consent: true } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.notify, { asked: true, status: 'active', hint: '•••• 2671' });
+    assert.equal(t.twilio.sent.length, 1);
+    assert.deepEqual([t.twilio.sent[0].from, t.twilio.sent[0].to], [POOL1, GRANDMA]);
+    assert.match(t.twilio.sent[0].body, /^Dot Dash: SMS notifications are on\. .*Maya's Dot Dash: https:\/\/dd\.example\.test\/c\/ Msg frequency varies\. Msg & data rates may apply\. Reply HELP for help, STOP to cancel\.$/);
+    assert.ok(!JSON.stringify([...t.db.data]).includes('4155552671'), 'plaintext number stored');
+
+    // A message from the Dot Dash: one notification, with NO message content.
+    t.client.deliver(`doorbell/msg/${vh}/17000000000001`, `MORSE,SEE YOU SUNDAY,${MAYA}`);
     await tick(); await tick();
-    assert.equal(t.db.data.get(`artifacts/dd/smsPairings/${pop.body.contact.id}`).status, 'stopped');
+    assert.equal(t.twilio.sent.length, 2);
+    assert.equal(t.twilio.sent[1].body, `Dot Dash: you have a new message from Maya's Dot Dash. Open it here: https://dd.example.test/c/#chat=${c.id} Reply STOP to cancel.`);
+    assert.doesNotMatch(t.twilio.sent[1].body, /SUNDAY/);
 
-    // A transient Twilio failure is retried.
-    await t.sms('+14155550001', POOL1, 'START');
+    // More messages before they come back: no more notifications.
+    t.client.deliver(`doorbell/msg/${vh}/17000000000002`, `MORSE,AND MONDAY,${MAYA}`);
+    await tick(); await tick();
+    assert.equal(t.twilio.sent.length, 2);
+
+    // They come back (history re-arms it), but within the 10-minute gap: still none.
+    await t.chat('GET', 'history', { auth });
+    t.client.deliver(`doorbell/msg/${vh}/17000000000003`, `MORSE,HELLO,${MAYA}`);
+    await tick(); await tick();
+    assert.equal(t.twilio.sent.length, 2);
+    // ...and after the gap: the next message notifies again.
+    doc().notifySentAt = Date.now() - 11 * 60e3;
+    await t.chat('GET', 'history', { auth });
+    t.client.deliver(`doorbell/msg/${vh}/17000000000004`, `MORSE,HELLO AGAIN,${MAYA}`);
+    await tick(); await tick();
+    assert.equal(t.twilio.sent.length, 3);
+
+    // Replying by SMS reaches no Dot Dash; they're told once a day where to go.
+    const before = t.client.published.length;
+    r = await t.sms(GRANDMA, POOL1, 'Love you!');
+    assert.match(r.text, /only sends notifications.*https:\/\/dd\.example\.test\/c\//);
+    assert.doesNotMatch((await t.sms(GRANDMA, POOL1, 'hello?')).text, /Message/);
+    assert.equal(t.client.published.slice(before).filter((m) => m.topic.startsWith('doorbell/msg/') && m.payload).length, 0);
+
+    // STOP: no more notifications. START: back on (only because they opted in before).
+    await t.sms(GRANDMA, POOL1, 'STOP');
+    assert.equal(doc().notifyStatus, 'stopped');
+    doc().notifySentAt = 0;
+    t.client.deliver(`doorbell/msg/${vh}/17000000000005`, `MORSE,ARE YOU THERE,${MAYA}`);
+    await tick(); await tick();
+    assert.equal(t.twilio.sent.length, 3);
+    assert.equal((await t.chat('GET', 'history', { auth })).body.notify.status, 'stopped');
+    await t.sms(GRANDMA, POOL1, 'START');
+    assert.equal(doc().notifyStatus, 'active');
+    // START from a number that never opted in signs it up to nothing.
+    await t.sms(STRANGER, POOL1, 'START');
+    assert.equal([...t.db.data.values()].filter((v) => v && v.notifyStatus === 'active').length, 1);
+
+    // Setup is capped per chat, so a link can't be used to message strangers.
+    for (let i = 0; i < 2; i++) await t.chat('POST', 'notify', { auth, body: { phone: GRANDMA, consent: true } });
+    assert.equal((await t.chat('POST', 'notify', { auth, body: { phone: GRANDMA, consent: true } })).status, 429);
+
+    // The chat open in front of them (a page waiting): no SMS for it.
+    doc().notifySentAt = 0;
+    const open = t.chat('GET', 'wait', { auth, query: `?after=${Date.now()}` });
     await tick();
-    t.twilio.failNext = new TwilioError(503, { message: 'busy' });
-    t.client.deliver(`doorbell/msg/${popVh}/17000000000010`, `TEXT,HI AGAIN,${MAYA}`);
-    await new Promise((r) => setTimeout(r, 30));
-    assert.deepEqual(t.twilio.sent.at(-1), { from: POOL1, to: '+14155550001', body: 'Maya via Dot Dash: HI AGAIN' });
+    const n = t.twilio.sent.length;
+    t.client.deliver(`doorbell/msg/${vh}/17000000000010`, `MORSE,WATCHING,${MAYA}`);
+    await open; await tick();
+    assert.equal(t.twilio.sent.length, n);
 
-    const bea = await post({ deviceId: 'MAC1', phone: '+14155550002', contactName: 'Aunt Bea' });
-    assert.equal(bea.body.contact.virtualId.slice(0, -4), 'AUNTBEA');
+    // Off: the number is deleted.
+    r = await t.chat('DELETE', 'notify', { auth });
+    assert.deepEqual(r.body.notify, { asked: true, status: null, hint: null });
+    assert.equal(doc().notifyEnc, null);
+    const sentNow = t.twilio.sent.length;
+    t.client.deliver(`doorbell/msg/${vh}/17000000000006`, `MORSE,BYE,${MAYA}`);
+    await tick(); await tick();
+    assert.equal(t.twilio.sent.length, sentNow);
+  } finally { t.close(); }
+});
 
-    // Parent-typed names cannot smuggle a link into someone else's messages.
-    const linky = await post({ deviceId: 'MAC1', phone: '+14155550003', contactName: 'Nana http://evil.example/x', displayName: "Zoë's <b>bit.ly/x</b>" });
-    assert.equal(linky.body.contact.contactName, 'Nana httpevilexamplex');
-    assert.equal(linky.body.contact.displayName, "Zoë's bbitlyxb");
-    const welcome = await t.sms('+14155550003', POOL1, 'START');
-    assert.ok(!/https?:|evil\.example|bit\.ly|&lt;/.test(welcome.text));
+test('SMS notifications: "not now", a number that STOPped us before, a bad number, and leaving', async () => {
+  const t = await setup();
+  try {
+    await t.addPool(POOL1);
+    await t.addDevice('u1', 'MAC1', MAYA);
+    const join = async (name) => {
+      const add = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', contactName: name, channel: 'web' } });
+      const token = add.body.link.split('/c/')[1];
+      return { c: add.body.contact, auth: `${token}.${(await t.chat('POST', 'claim', { body: { token } })).body.claim}` };
+    };
 
-    // Sweep: a contact taken off the device's friend list behind the bridge's
-    // back is deleted -- but not one created in the last hour, whose friend ID
-    // the app may still be about to add.
-    await t.addDevice('u1', 'MAC9', 'ROSA0909');
-    const rosa = await post({ deviceId: 'MAC9', phone: '+14155550009', contactName: 'Tia' });
-    assert.equal((await t.svc.sweep()).removed, 0);
-    t.db.data.get(`artifacts/dd/smsPairings/${rosa.body.contact.id}`).createdAt = { toMillis: () => Date.now() - 2 * 3600e3 };
-    assert.equal((await t.svc.sweep()).removed, 1);
+    // "Not now" is remembered, so the opt-in screen isn't shown again.
+    const a = await join('Pop');
+    assert.deepEqual((await t.chat('POST', 'notify', { auth: a.auth, body: { skip: true } })).body.notify, { asked: true, status: null, hint: null });
+    assert.equal((await t.chat('GET', 'history', { auth: a.auth })).body.notify.asked, true);
+    assert.equal(t.twilio.sent.length, 0);
 
-    // Sweep: unpairing Maya's device deletes her contacts.
-    assert.equal(t.pairingDocs().length, 3);
-    await t.db.doc('artifacts/dd/users/u1/devices/MAC1').delete();
-    const s = await t.svc.sweep();
-    assert.deepEqual(s, { checked: 3, removed: 3 });
-    assert.equal(t.pairingDocs().length, 0);
+    // This phone sent STOP to us before: kept, but stopped until it sends START.
+    t.twilio.failNext = new TwilioError(400, { code: 21610, message: 'unsubscribed' });
+    let r = await t.chat('POST', 'notify', { auth: a.auth, body: { phone: '+14155550001', consent: true } });
+    assert.equal(r.body.notify.status, 'stopped');
+    assert.equal(r.body.from, POOL1);
+
+    // Twilio says the number can't receive SMS: nothing kept.
+    const b = await join('Nana');
+    t.twilio.failNext = new TwilioError(400, { code: 21211, message: 'invalid To' });
+    r = await t.chat('POST', 'notify', { auth: b.auth, body: { phone: '+14155550002', consent: true } });
+    assert.equal(r.body.status, 'invalid-number');
+    assert.equal(t.db.data.get(`artifacts/dd/smsPairings/${b.c.id}`).notifyEnc, null);
+
+    // Leaving the chat deletes the notification number too.
+    await t.chat('POST', 'notify', { auth: b.auth, body: { phone: '+14155550003', consent: true } });
+    assert.ok(t.db.data.get(`artifacts/dd/smsPairings/${b.c.id}`).notifyEnc);
+    await t.chat('POST', 'leave', { auth: b.auth });
+    assert.equal(t.db.data.get(`artifacts/dd/smsPairings/${b.c.id}`).notifyEnc, null);
   } finally { t.close(); }
 });
 

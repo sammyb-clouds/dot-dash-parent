@@ -13,7 +13,8 @@ import { OPTED_OUT, BAD_NUMBER } from './twilio.mjs';
 
 const HOUR = 3600e3, DAY = 24 * HOUR;
 const MAX_FRIENDS = 10;                     // the firmware's friendList[10]; main.jsx MAX_FRIENDS
-const PENDING_TTL_MS = 14 * DAY;            // a contact who never sends START is deleted, number and all
+const PENDING_TTL_MS = 14 * DAY;            // a link nobody ever opens is deleted
+const NOTIFY_GAP_MS = 10 * 60e3;            // never two SMS notifications for one chat closer than this
 const short = (s) => String(s).slice(0, 8);
 
 // webPush.send(subscription, payloadString) delivers a browser push to a web
@@ -29,17 +30,19 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   const store = makeStore(db, APP_ID, keys, { FieldValue });
 
   // ------------------------------------------------------------------- texts --
-  // The bridge never messages anyone first. A contact opts in by sending START
-  // (or YES) to the pool number themselves -- first-party consent, which is
-  // what carrier review asks for, and a mistyped number simply never hears
-  // from us. The confirmation is the first thing we ever send them, so it
-  // carries what carriers require of it: the program name, frequency, rates,
-  // HELP and STOP.
+  // SMS is NOTIFICATION ONLY (2026-10-09, after Twilio support): it tells a web
+  // contact that a message is waiting and links to the chat page. It never
+  // carries what anyone wrote -- that would be person-to-person traffic, which
+  // toll-free does not allow -- and nothing is ever sent to a number before its
+  // owner typed it into the chat page's opt-in form and ticked the consent box
+  // (chatApi, route 'notify'). The setup confirmation is the first thing a
+  // number ever receives from us, so it carries what carriers require: the
+  // program name, frequency, rates, HELP and STOP.
+  const chatHome = () => `${CHAT_BASE}/c/`;
   const T = {
-    welcome: (p) => `Dot Dash: you're connected to ${p.displayName}. Messages from them will come from this number, so save it. Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.`,
-    nudge: (p) => `Dot Dash: to connect with ${p.displayName}, reply START. Reply STOP to opt out.`,
-    unknown: "This number isn't connected to a Dot Dash device, so your message was not delivered. If someone is adding you, send START again once they have.",
-    retired: 'This number is no longer connected to a Dot Dash device, so your message was not delivered.',
+    setup: (p) => `Dot Dash: SMS notifications are on. We'll send one here when you have a new message from ${p.displayName}: ${chatHome()} Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to cancel.`,
+    notify: (p) => `Dot Dash: you have a new message from ${p.displayName}. Open it here: ${chatHome()}#chat=${p.id} Reply STOP to cancel.`,
+    replyInfo: `Dot Dash: this number only sends notifications, so replies here aren't delivered. Open your chats at ${chatHome()} Reply STOP to cancel.`,
   };
 
   // ------------------------------------------------------------- rate limits --
@@ -48,8 +51,13 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   const limits = {
     out: new L.Limiter([{ ms: 60e3, max: 6 }, { ms: HOUR, max: 40 }, { ms: DAY, max: 150 }]),     // per pairing, child -> phone
     in: new L.Limiter([{ ms: 60e3, max: 5 }, { ms: HOUR, max: 30 }, { ms: DAY, max: 200 }]),      // per pairing, phone -> child
-    unknown: new L.Limiter([{ ms: DAY, max: 1 }]),                                               // auto-reply to a stranger
-    nudge: new L.Limiter([{ ms: HOUR, max: 1 }]),                                                // "reply YES" reminders
+    replyInfo: new L.Limiter([{ ms: DAY, max: 1 }]),                                             // "replies aren't delivered", per number
+    // SMS notifications. Setup sends one message to a number someone typed in,
+    // so it is capped per chat and per number: a link holder cannot use it to
+    // message a stranger more than a couple of times.
+    notifySetup: new L.Limiter([{ ms: DAY, max: 3 }]),                                           // per chat
+    notifyNumber: new L.Limiter([{ ms: DAY, max: 3 }, { ms: 30 * DAY, max: 10 }]),               // per number
+    notifyOut: new L.Limiter([{ ms: DAY, max: 24 }]),                                            // per chat, on top of NOTIFY_GAP_MS
     addByParent: new L.Limiter([{ ms: DAY, max: 10 }]),
     // Opening and claiming links, per address: a token cannot be guessed, but
     // nothing should be able to try many quickly either.
@@ -151,9 +159,9 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     if (!limits.out.take(pairing.id)) return log('WARN', `${tag}: outbound rate limit -- dropped`);
 
     if (pairing.channel === 'web') return deliverToWeb(pairing, msg);
-    const body = L.toSmsBody(msg);
-    if (!body) return;
-    await sendSms(pairing, body, 'message');
+    // An SMS-relay contact (retired 2026-10-09): relaying what people write over
+    // SMS is person-to-person traffic, which toll-free does not allow.
+    log('INFO', `${tag}: SMS relay is retired -- message not sent`);
   }
 
   // ------------------------------------------------------------ web contacts --
@@ -173,9 +181,40 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     if (!text) return;
     const entry = { at: Date.now(), from: 'dotdash', text };
     await store.addChat(pairing.id, entry);
+    // A page waiting right now means the chat is open in front of them: no SMS.
+    const watching = waiters.has(pairing.id);
     wake(pairing.id);
     log('INFO', `pairing ${short(pairing.id)}: message to web contact (${text.length} chars)`);
     await pushTo(pairing, text);
+    if (!watching) await maybeNotify(pairing.id);
+  }
+
+  // One SMS per unread stretch: sent when a message arrives and the contact has
+  // been back to the chat since the last notification (or there was none), and
+  // never closer than NOTIFY_GAP_MS. Says THAT a message is waiting, never what
+  // it says.
+  async function maybeNotify(id) {
+    const p = await store.getPairing(id);
+    if (!p || p.notifyStatus !== 'active' || !p.notifyEnc) return;
+    const now = Date.now();
+    const sent = p.notifySentAt || 0;
+    if (sent && (p.notifySeenAt || 0) < sent) return;          // they haven't been back since the last one
+    if (now - sent < NOTIFY_GAP_MS) return;
+    if (!limits.notifyOut.take(id)) return log('WARN', `pairing ${short(id)}: SMS notification cap reached`);
+    await store.updatePairing(id, { notifySentAt: now });
+    await sendSms({ id, to: notifyNumber(p), from: p.notifyFrom, body: T.notify(p), what: 'notification',
+      onOptOut: () => store.updatePairing(id, { notifyStatus: 'stopped' }) });
+  }
+
+  const notifyNumber = (p) => L.decrypt(keys, p.notifyEnc, p.notifyKey);
+
+  // The number SMS notifications come from: NOTIFY_FROM if set, else the
+  // oldest active pool number.
+  async function notifyFrom() {
+    if (config.NOTIFY_FROM) return config.NOTIFY_FROM;
+    const pools = (await store.listPools()).filter((x) => x.active);
+    pools.sort((a, b) => (a.addedAt?.toMillis?.() || 0) - (b.addedAt?.toMillis?.() || 0));
+    return pools[0]?.number || null;
   }
 
   async function pushTo(pairing, text) {
@@ -211,18 +250,17 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     }
   }
 
-  async function sendSms(pairing, body, what) {
-    const tag = `pairing ${short(pairing.id)}`;
-    const to = store.number(pairing);
+  async function sendSms({ id, to, from, body, what, onOptOut }) {
+    const tag = `pairing ${short(id)}`;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const r = await twilio.send({ from: pairing.poolNumber, to, body });
+        const r = await twilio.send({ from, to, body });
         log('INFO', `${tag}: ${what} sent to ${L.maskNumber(to)} (${body.length} chars, ${r.sid})`);
         return { ok: true };
       } catch (e) {
         if (e.code === OPTED_OUT) {
           log('INFO', `${tag}: recipient has opted out -- marking stopped`);
-          await store.setStatus(pairing.id, 'stopped').catch(() => {});
+          await Promise.resolve(onOptOut?.()).catch(() => {});
           return { ok: false, reason: 'opted-out' };
         }
         if (BAD_NUMBER.has(e.code)) {
@@ -274,48 +312,30 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
       recentSids.set(params.MessageSid, now);
     }
 
+    // Everyone who texts us is (or was) a notification subscriber: one number
+    // may hold several chats. Keywords apply to all of that number's chats on
+    // this pool number. Nothing anyone texts reaches a Dot Dash.
     const kw = L.keywordOf(params.Body, params.OptOutType);
-    const { contactKey, pairing, retired } = await store.findByRoute(from, to);
+    const ck = L.contactKey(keys, from);
+    const subs = (await store.pairings.where('notifyKey', '==', ck).get()).docs
+      .map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.notifyFrom === to);
 
-    // Nobody paired on this (number, pool number). Nothing reaches any device.
-    // There is no parent to alert: a pool number is shared by every family, so
-    // an unknown sender cannot be attributed to one.
-    if (!pairing) {
-      log('INFO', `inbound from unpaired ${L.maskNumber(from)} to ${L.maskNumber(to)}${retired ? ' (retired route)' : ''}${kw ? ` [${kw}]` : ''} -- not delivered`);
-      if (kw) return L.twiml();   // Twilio answers keywords itself
-      return limits.unknown.take(`${contactKey}:${to}`) ? L.twiml(retired ? T.retired : T.unknown) : L.twiml();
-    }
-
-    const tag = `pairing ${short(pairing.id)}`;
     if (kw === 'stop') {
-      log('INFO', `${tag}: contact opted out (STOP)`);
-      await store.setStatus(pairing.id, 'stopped');
-      return L.twiml();
+      for (const p of subs) if (p.notifyStatus === 'active') await store.updatePairing(p.id, { notifyStatus: 'stopped' });
+      log('INFO', `inbound STOP from ${L.maskNumber(from)}: ${subs.length} chat(s) stopped`);
+      return L.twiml();   // Twilio confirms the opt-out itself
     }
     if (kw === 'start') {
-      const wasPending = pairing.status === 'pending';
-      if (pairing.status !== 'active') {
-        log('INFO', `${tag}: contact opted in (${wasPending ? 'first START' : 'START again'})`);
-        await store.setStatus(pairing.id, 'active');
-      }
-      return L.twiml(wasPending ? T.welcome(pairing) : null);
-    }
-    if (kw === 'help') return L.twiml();
-
-    if (pairing.status === 'pending') {
-      return limits.nudge.take(pairing.id) ? L.twiml(T.nudge(pairing)) : L.twiml();
-    }
-    if (pairing.status !== 'active') return L.twiml();   // stopped: they cannot be replied to either
-
-    if (!limits.in.take(pairing.id)) {
-      log('WARN', `${tag}: inbound rate limit -- dropped`);
+      // Only numbers that opted in on a chat page before. START cannot sign a
+      // number up to anything new.
+      for (const p of subs) if (p.notifyStatus === 'stopped') await store.updatePairing(p.id, { notifyStatus: 'active' });
+      log('INFO', `inbound START from ${L.maskNumber(from)}: ${subs.length} chat(s) resumed`);
       return L.twiml();
     }
-    const { text, cut } = L.toDeviceText(params.Body, { numMedia: parseInt(params.NumMedia || '0', 10) });
-    if (!text) return L.twiml();
-    deliverToDevice(pairing, text);
-    log('INFO', `${tag}: delivered to device (${text.length} chars${cut ? ', shortened' : ''})`);
-    return L.twiml();
+    if (kw === 'help') return L.twiml();   // Twilio's HELP reply (set per Messaging Service)
+
+    log('INFO', `inbound message from ${L.maskNumber(from)} -- notifications only, not delivered`);
+    return subs.length && limits.replyInfo.take(ck) ? L.twiml(T.replyInfo) : L.twiml();
   }
 
   // ------------------------------------------------------------ parent API --
@@ -333,7 +353,11 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   const titleCase = (s) => String(s || '').toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
   async function addContact(uid, body) {
-    const channel = body.channel === 'web' ? 'web' : 'sms';
+    // Phone (SMS relay) contacts are retired: Twilio's toll-free rules do not
+    // allow relaying what people write. Phones are reached by web link, with
+    // optional SMS notifications that the contact turns on themselves.
+    if (body.channel !== 'web') throw HTTP(410, { status: 'retired' });
+    const channel = 'web';
     const deviceId = String(body.deviceId || '');
     const e164 = channel === 'sms' ? L.toE164(body.phone) : null;
     const contactName = cleanLabel(body.contactName, 30);
@@ -413,13 +437,19 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
 
   // `id` names the chat to the page (inbox, notification routing). It is the
   // pairing's document id: not a credential, and useless without the link.
-  const chatInfo = (p) => ({ id: p.id, contactName: p.contactName, displayName: p.displayName });
+  const chatInfo = (p) => ({
+    id: p.id, contactName: p.contactName, displayName: p.displayName,
+    // SMS notifications: whether to show the opt-in screen, and their state.
+    notify: { asked: !!p.notifyAsked, status: p.notifyStatus || null, hint: p.notifyHint || null },
+  });
 
   async function chatApi(req, res, url, ip) {
     const route = url.pathname.slice('/chat/api/'.length);
     const json = async () => { try { return JSON.parse(await readBody(req, 4096)); } catch (e) { if (e.http) throw e; return {}; } };
 
-    if (route === 'config' && req.method === 'GET') return [200, { vapidPublicKey: config.VAPID_PUBLIC_KEY || null }];
+    // sms: whether the chat page should offer SMS notifications. Off while the
+    // bridge is in DRY_RUN, so nobody is promised a message that never comes.
+    if (route === 'config' && req.method === 'GET') return [200, { vapidPublicKey: config.VAPID_PUBLIC_KEY || null, sms: !!config.SMS_LIVE }];
 
     if ((route === 'open' || route === 'claim') && req.method === 'POST') {
       if (!limits.linkOpen.take(ip)) throw HTTP(429, { status: 'slow-down' });
@@ -427,7 +457,9 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
       if (!L.SECRET_RE.test(token || '')) throw HTTP(410, { status: 'gone' });
       const p = await store.findByToken(token);
       if (!p || p.channel !== 'web') throw HTTP(410, { status: 'gone' });
-      if (route === 'open') return [200, { ...chatInfo(p), state: p.claimHash ? 'claimed' : 'open' }];
+      // `open` needs no claim, so it says nothing about notifications (the
+      // number's last digits are for the claimed device only).
+      if (route === 'open') return [200, { id: p.id, contactName: p.contactName, displayName: p.displayName, state: p.claimHash ? 'claimed' : 'open' }];
       try {
         const claim = await store.claimLink(p.id);
         log('INFO', `pairing ${short(p.id)}: link claimed by its first device`);
@@ -439,7 +471,54 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     }
 
     const p = await chatAuth(req);
+
+    // Being back in the chat re-arms the next SMS notification (maybeNotify).
+    // Written only when a notification is outstanding, not on every poll.
+    if (['history', 'wait', 'send'].includes(route) && p.notifySentAt && (p.notifySeenAt || 0) < p.notifySentAt) {
+      await store.updatePairing(p.id, { notifySeenAt: Date.now() });
+    }
+
     if (route === 'history' && req.method === 'GET') return [200, { ...chatInfo(p), messages: await store.listChat(p.id) }];
+
+    // SMS notifications, set up by the contact on the chat page. The number is
+    // typed by its owner, with an explicit, unticked-by-default consent box;
+    // the server refuses without it. {skip: true} records "not now" so the
+    // opt-in screen is not shown again.
+    if (route === 'notify' && req.method === 'POST') {
+      const body = await json();
+      if (body.skip) {
+        await store.updatePairing(p.id, { notifyAsked: true });
+        return [200, { notify: { asked: true, status: p.notifyStatus || null, hint: p.notifyHint || null } }];
+      }
+      if (body.consent !== true) throw HTTP(400, { status: 'consent-required' });
+      const e164 = L.toE164(body.phone);
+      if (!e164) throw HTTP(400, { status: 'invalid-number' });
+      const from = await notifyFrom();
+      if (!from || e164 === from) throw HTTP(e164 === from ? 400 : 503, { status: e164 === from ? 'invalid-number' : 'unavailable' });
+      const ck = L.contactKey(keys, e164);
+      if (!limits.notifySetup.allows(p.id) || !limits.notifyNumber.allows(ck)) throw HTTP(429, { status: 'slow-down' });
+      limits.notifySetup.take(p.id); limits.notifyNumber.take(ck);
+      await store.updatePairing(p.id, {
+        notifyAsked: true, notifyStatus: 'active', notifyKey: ck, notifyEnc: L.encrypt(keys, e164, ck),
+        notifyHint: L.numberHint(e164), notifyFrom: from, notifySentAt: null, notifySeenAt: null,
+        notifyConsentAt: FieldValue.serverTimestamp(),
+      });
+      log('INFO', `pairing ${short(p.id)}: SMS notifications turned on by the contact for ${L.maskNumber(e164)}`);
+      const r = await sendSms({ id: p.id, to: e164, from, body: T.setup(p), what: 'notification setup',
+        onOptOut: () => store.updatePairing(p.id, { notifyStatus: 'stopped' }) });
+      if (r.reason === 'bad-number') {
+        await store.updatePairing(p.id, { notifyStatus: null, notifyKey: null, notifyEnc: null, notifyHint: null, notifyFrom: null });
+        throw HTTP(400, { status: 'invalid-number' });
+      }
+      // 'stopped' here means this phone sent STOP to us before: it has to send
+      // START (the page says so) before Twilio will deliver anything to it.
+      return [200, { notify: { asked: true, status: r.reason === 'opted-out' ? 'stopped' : 'active', hint: L.numberHint(e164) }, from, sent: r.ok }];
+    }
+    if (route === 'notify' && req.method === 'DELETE') {
+      await store.updatePairing(p.id, { notifyAsked: true, notifyStatus: null, notifyKey: null, notifyEnc: null, notifyHint: null, notifyFrom: null, notifySentAt: null, notifySeenAt: null });
+      log('INFO', `pairing ${short(p.id)}: SMS notifications turned off by the contact (number deleted)`);
+      return [200, { notify: { asked: true, status: null, hint: null } }];
+    }
 
     // Long poll: answers at once if anything newer than ?after= exists, else
     // waits up to 25 seconds for a message to arrive. Simpler to run through
@@ -508,7 +587,8 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     // claim and push subscription and the history are erased, and the account
     // holder sees that they left (and can send a new link).
     if (route === 'leave' && req.method === 'POST') {
-      await store.updatePairing(p.id, { status: 'stopped', tokenHash: null, claimHash: null, pushSub: null, pushFcm: null, stoppedAt: FieldValue.serverTimestamp() });
+      await store.updatePairing(p.id, { status: 'stopped', tokenHash: null, claimHash: null, pushSub: null, pushFcm: null, stoppedAt: FieldValue.serverTimestamp(),
+        notifyStatus: null, notifyKey: null, notifyEnc: null, notifyHint: null, notifyFrom: null });
       await store.clearChat(p.id);
       wake(p.id);
       log('INFO', `pairing ${short(p.id)}: web contact left`);
@@ -529,8 +609,8 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   }
 
   // ------------------------------------------------------------------ sweep --
-  // Pairings whose child is no longer paired to that parent, and contacts who
-  // never sent START, are deleted -- the phone number goes with them.
+  // Pairings whose Dot Dash is no longer paired to that account, and links
+  // nobody ever opened, are deleted -- any notification number goes with them.
   async function sweep() {
     const snap = await store.pairings.get();
     const devCache = new Map();

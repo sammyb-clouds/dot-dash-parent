@@ -263,6 +263,38 @@ This is a child-directed product, so it is almost certainly in COPPA scope.
   about 200 MB free (2026-09-23). Its `OOMScoreAdjust` puts it ahead of the
   broker and the push bridge in the OOM killer's order.
 
+## SMS is notifications only (2026-10-09)
+
+Twilio support, after the third toll-free rejection: no SMS before the
+recipient's own prior consent, and no person-to-person content on toll-free.
+So:
+
+- **The SMS relay is retired.** `POST /sms/contacts` without `channel: 'web'`
+  returns `410 retired`. A message from a Dot Dash to an old relay contact is
+  dropped, and nothing anyone texts to a pool number reaches a Dot Dash.
+- **Web-link contacts can opt in to SMS notifications on the chat page.** The
+  first screen of a new link (or, once, of an already-connected chat) asks for
+  *their own* number with an unticked consent box. Then: `POST /chat/api/notify
+  {phone, consent: true}`, the setup SMS, then the chat. `{skip: true}` records
+  "not now". `DELETE` turns it off and deletes the number. Leaving the chat
+  deletes it too.
+- **Notifications carry no content:** "you have a new message from <name>.
+  Open it here: <CHAT_BASE>/c/#chat=<id>". At most one per unread stretch
+  (the next is armed when the page calls history, wait or send), never two
+  within 10 minutes, and none while a page is long-polling that chat (they're
+  looking at it). They come from `NOTIFY_FROM`, or the oldest active pool number.
+- **Keywords:** STOP stops every chat on that number for that pool number.
+  START resumes only chats that opted in before. Other texts get one reply a day
+  pointing at /c/.
+- **The page offers it only when SMS is live:** `/chat/api/config` returns
+  `sms: false` under DRY_RUN, so nobody is promised a message that never comes.
+  `?sms=1` on a /c/ link shows the opt-in anyway, for testing.
+- The app's Connect mode (opened by the same link via Universal Links) never
+  asks. It uses app notifications.
+- The proof image (`opt-in/build.py`, step 2 = `optin-screen.png`, a real
+  screenshot of the page) and the homepage, privacy policy (section 5A) and
+  terms (section 4) all describe this model.
+
 ## Web link contacts (no SMS, no carrier approval)
 
 Added 2026-10-02, after Twilio rejected the toll-free verification as "personal

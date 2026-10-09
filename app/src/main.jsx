@@ -3414,15 +3414,15 @@
        // someone they know, and a mistyped number in the app messages nobody.
        // The link opens start.html, which opens the contact's Messages with
        // START typed to the right number.
-       // Wording for the TestFlight test period. Revert the web-link invite to an
-       // App Store link at launch.
-       const TESTFLIGHT_JOIN_URL = 'https://testflight.apple.com/join/NxFDSV39';
+       // A web-link invite is just the link: it opens the chat page (which offers
+       // SMS notifications first), or the Dot Dash app's Connect mode if the
+       // person already has the app.
        const inviteText = (c) => c.channel === 'web'
          ? (() => {
              // The Dot Dash user the contact will message: the active device's
              // call sign without its PIN (contacts listed are the active device's).
              const user = activeDevice?.identity ? displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`) : c.displayName;
-             return `Hi ${c.contactName}! ${user} wants to message with you using Dot Dash! Here's how to do it:\n1. Go to the App Store and install "TestFlight"\n2. Next, install the Dot Dash app here: ${TESTFLIGHT_JOIN_URL}\n3. Then tap your custom link to message with ${user}: ${c.link}\n4. If you don't have an iPhone, tap the link in step 3 to message on the web`;
+             return `Hi ${c.contactName}! ${user} added you as a contact on Dot Dash. Tap this link to start messaging: ${c.link}`;
            })()
          : `Hi ${c.contactName}! I added you as a contact on ${c.displayName}. To start messaging, send START to ${formatPhone(c.poolNumber)}, or tap here: https://app.dotdashdevice.com/start.html?n=${String(c.poolNumber).replace(/\D/g, '')}`;
 

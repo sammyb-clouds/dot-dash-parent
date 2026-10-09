@@ -113,6 +113,8 @@ const { server, sweep } = createService({
     // Where web contacts' links point, and the key their browsers subscribe with.
     CHAT_BASE: env.CHAT_BASE || 'https://dotdashdevice.com',
     VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY || null,
+    // The chat page offers SMS notifications only when texts really go out.
+    SMS_LIVE: !DRY_RUN,
   },
   log,
 });
