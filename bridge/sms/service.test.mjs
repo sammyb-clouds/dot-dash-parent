@@ -157,13 +157,13 @@ test('SMS notifications: consent on the chat page, setup message, one per unread
     await tick(); await tick();
     assert.equal(t.twilio.sent.length, 2);
 
-    // They come back (history re-arms it), but within the 10-minute gap: still none.
+    // They come back (history re-arms it), but within the 1-minute gap: still none.
     await t.chat('GET', 'history', { auth });
     t.client.deliver(`doorbell/msg/${vh}/17000000000003`, `MORSE,HELLO,${MAYA}`);
     await tick(); await tick();
     assert.equal(t.twilio.sent.length, 2);
     // ...and after the gap: the next message notifies again.
-    doc().notifySentAt = Date.now() - 11 * 60e3;
+    doc().notifySentAt = Date.now() - 2 * 60e3;
     await t.chat('GET', 'history', { auth });
     t.client.deliver(`doorbell/msg/${vh}/17000000000004`, `MORSE,HELLO AGAIN,${MAYA}`);
     await tick(); await tick();

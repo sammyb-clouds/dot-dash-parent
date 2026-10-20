@@ -280,8 +280,9 @@ So:
   deletes it too.
 - **Notifications carry no content:** "you have a new message from <name>.
   Open it here: <CHAT_BASE>/c/#chat=<id>". At most one per unread stretch
-  (the next is armed when the page calls history, wait or send), never two
-  within 10 minutes, and none while a page is long-polling that chat (they're
+  (the next is armed when the page is on screen: history, send, or a wait
+  with v=1), never two within a minute, and none while a page that is on
+  screen is long-polling that chat (they're
   looking at it). They come from `NOTIFY_FROM`, or the oldest active pool number.
 - **Keywords:** STOP stops every chat on that number for that pool number.
   START resumes only chats that opted in before. Other texts get one reply a day

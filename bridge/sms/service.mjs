@@ -15,7 +15,9 @@ import { OPTED_OUT, BAD_NUMBER } from './twilio.mjs';
 const HOUR = 3600e3, DAY = 24 * HOUR;
 const MAX_FRIENDS = 10;                     // the firmware's friendList[10]; main.jsx MAX_FRIENDS
 const PENDING_TTL_MS = 14 * DAY;            // a link nobody ever opens is deleted
-const NOTIFY_GAP_MS = 10 * 60e3;            // never two SMS notifications for one chat closer than this
+// Never two SMS notifications for one chat closer than this. One per unread
+// stretch is the real limit; this only absorbs a burst of quick sends.
+const NOTIFY_GAP_MS = 60e3;
 const short = (s) => String(s).slice(0, 8);
 
 // webPush.send(subscription, payloadString) delivers a browser push to a web
@@ -205,7 +207,7 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     const sent = p.notifySentAt || 0;
     const tag = `pairing ${short(id)}`;
     if (sent && (p.notifySeenAt || 0) < sent) return log('INFO', `${tag}: no SMS notification -- the last one hasn't been looked at yet`);
-    if (now - sent < NOTIFY_GAP_MS) return log('INFO', `${tag}: no SMS notification -- one went out under 10 minutes ago`);
+    if (now - sent < NOTIFY_GAP_MS) return log('INFO', `${tag}: no SMS notification -- one went out under a minute ago`);
     if (!limits.notifyOut.take(id)) return log('WARN', `pairing ${short(id)}: SMS notification cap reached`);
     await store.updatePairing(id, { notifySentAt: now });
     await sendSms({ id, to: notifyNumber(p), from: p.notifyFrom, body: T.notify(p), what: 'notification',
