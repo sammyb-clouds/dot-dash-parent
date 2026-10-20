@@ -122,16 +122,17 @@
   function live() { return chats.filter(function (c) { return c.claim && !c.ended; }); }
 
   var msgs = {};       // token -> messages loaded this session
+  var aborts = {};     // token -> AbortController of its running wait
   var polls = {};      // token -> true while its long poll runs
   var leaving = {};    // token -> true once Leave/Move was tapped
   var current = null;  // token of the open chat
   var view = 'boot';   // chat | inbox | other
 
   function authOf(c) { return c.token + '.' + c.claim; }
-  function call(method, route, body, auth) {
+  function call(method, route, body, auth, signal) {
     var h = { 'Content-Type': 'application/json' };
     if (auth) h.Authorization = 'Chat ' + auth;
-    return fetch(API + route, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined })
+    return fetch(API + route, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined, signal: signal })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { b._status = r.status; return b; }); });
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -209,6 +210,8 @@
   live().forEach(function (c) { startPoll(c.token); });
   }
   document.addEventListener('visibilitychange', function () {
+    // Re-ask with the new on-screen state straight away (the abort restarts the loop).
+    for (var t in aborts) if (aborts[t]) { try { aborts[t].abort(); } catch (e) {} }
     if (!document.hidden) live().forEach(function (c) { startPoll(c.token); });
   });
 
@@ -582,13 +585,18 @@
         var c = byToken(token);
         if (!c || !polls[token] || leaving[token]) { polls[token] = false; return; }
         var after = (msgs[token] || []).reduce(function (a, m) { return Math.max(a, m.at); }, 0);
-        call('GET', 'wait?after=' + after, null, authOf(c)).then(function (r) {
+        // v=1 tells the bridge the page is on screen, so it holds back the SMS
+        // notification. Hidden, the wait is dropped at once and resumed as v=0
+        // (see onVisibility), so leaving the chat lets the next one through.
+        var ac = window.AbortController ? new AbortController() : null;
+        aborts[token] = ac;
+        call('GET', 'wait?after=' + after + '&v=' + (document.hidden ? 0 : 1), null, authOf(c), ac && ac.signal).then(function (r) {
           if (leaving[token]) { polls[token] = false; return; }
           if (r._status === 410) { polls[token] = false; return ended(token); }
           if (r._status === 403) { polls[token] = false; return staleClaim(token); }
           received(token, r.messages || []);
           setTimeout(loop, r._status === 200 ? 0 : 5000);
-        }).catch(function () { setTimeout(loop, 5000); });
+        }).catch(function (e) { setTimeout(loop, e && e.name === 'AbortError' ? 0 : 5000); });
       })();
     });
   }

@@ -184,12 +184,14 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     if (!text) return;
     const entry = { at: Date.now(), from: 'dotdash', text };
     await store.addChat(pairing.id, entry);
-    // A page waiting right now means the chat is open in front of them: no SMS.
-    const watching = (waiters.get(pairing.id)?.size || 0) > 0;
+    // A page waiting right now AND on screen means they're looking at the chat:
+    // no SMS. A background tab (still polling) doesn't count.
+    const watching = [...(waiters.get(pairing.id) || [])].some((fn) => fn.visible);
     wake(pairing.id);
     log('INFO', `pairing ${short(pairing.id)}: message to web contact (${text.length} chars)`);
     await pushTo(pairing, text);
-    if (!watching) await maybeNotify(pairing.id);
+    if (watching) log('INFO', `pairing ${short(pairing.id)}: chat is open on screen -- no SMS notification`);
+    else await maybeNotify(pairing.id);
   }
 
   // One SMS per unread stretch: sent when a message arrives and the contact has
@@ -201,8 +203,9 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     if (!p || p.notifyStatus !== 'active' || !p.notifyEnc) return;
     const now = Date.now();
     const sent = p.notifySentAt || 0;
-    if (sent && (p.notifySeenAt || 0) < sent) return;          // they haven't been back since the last one
-    if (now - sent < NOTIFY_GAP_MS) return;
+    const tag = `pairing ${short(id)}`;
+    if (sent && (p.notifySeenAt || 0) < sent) return log('INFO', `${tag}: no SMS notification -- the last one hasn't been looked at yet`);
+    if (now - sent < NOTIFY_GAP_MS) return log('INFO', `${tag}: no SMS notification -- one went out under 10 minutes ago`);
     if (!limits.notifyOut.take(id)) return log('WARN', `pairing ${short(id)}: SMS notification cap reached`);
     await store.updatePairing(id, { notifySentAt: now });
     await sendSms({ id, to: notifyNumber(p), from: p.notifyFrom, body: T.notify(p), what: 'notification',
@@ -479,8 +482,10 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     const p = await chatAuth(req);
 
     // Being back in the chat re-arms the next SMS notification (maybeNotify).
+    // A wait counts only from a page on screen (v=1), not a background tab.
     // Written only when a notification is outstanding, not on every poll.
-    if (['history', 'wait', 'send'].includes(route) && p.notifySentAt && (p.notifySeenAt || 0) < p.notifySentAt) {
+    const lookedAt = route === 'history' || route === 'send' || (route === 'wait' && url.searchParams.get('v') === '1');
+    if (lookedAt && p.notifySentAt && (p.notifySeenAt || 0) < p.notifySentAt) {
       await store.updatePairing(p.id, { notifySeenAt: Date.now() });
     }
 
@@ -542,6 +547,7 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
             if (set) { set.delete(done); if (!set.size) waiters.delete(p.id); }
             resolve();
           };
+          done.visible = url.searchParams.get('v') === '1';   // the page is on screen
           const t = setTimeout(done, config.WAIT_MS ?? 25000);
           if (!waiters.has(p.id)) waiters.set(p.id, new Set());
           waiters.get(p.id).add(done);

@@ -196,7 +196,7 @@ test('SMS notifications: consent on the chat page, setup message, one per unread
 
     // The chat open in front of them (a page waiting): no SMS for it.
     doc().notifySentAt = 0;
-    const open = t.chat('GET', 'wait', { auth, query: `?after=${Date.now()}` });
+    const open = t.chat('GET', 'wait', { auth, query: `?after=${Date.now()}&v=1` });
     await tick();
     const n = t.twilio.sent.length;
     t.client.deliver(`doorbell/msg/${vh}/17000000000010`, `MORSE,WATCHING,${MAYA}`);
@@ -252,7 +252,7 @@ test('SMS notifications: "not now", a number that STOPped us before, a bad numbe
     const vhD = L.hashId(d.c.virtualId);
     await tick();
     const before = t.twilio.sent.length;
-    const open = t.chat('GET', 'wait', { auth: d.auth, query: `?after=${Date.now()}` });
+    const open = t.chat('GET', 'wait', { auth: d.auth, query: `?after=${Date.now()}&v=1` });
     await tick();
     t.client.deliver(`doorbell/msg/${vhD}/17000000000020`, `MORSE,WATCHING,${MAYA}`);
     await open; await tick();
@@ -262,6 +262,19 @@ test('SMS notifications: "not now", a number that STOPped us before, a bad numbe
     t.client.deliver(`doorbell/msg/${vhD}/17000000000021`, `MORSE,NOBODY LOOKING,${MAYA}`);
     await tick(); await tick();
     assert.equal(t.twilio.sent.length, before + 1, 'a closed page left the chat looking watched');
+
+    // A background tab (still polling, but not on screen: v=0) doesn't count as
+    // looking at the chat, and doesn't re-arm the next notification either.
+    const bg = t.chat('GET', 'wait', { auth: d.auth, query: `?after=${Date.now() + 60e3}&v=0` });
+    await tick();
+    t.db.data.get(`artifacts/dd/smsPairings/${d.c.id}`).notifySentAt = 0;
+    t.client.deliver(`doorbell/msg/${vhD}/17000000000022`, `MORSE,IN THE BACKGROUND,${MAYA}`);
+    await tick(); await tick();
+    assert.equal(t.twilio.sent.length, before + 2, 'a background tab held back the notification');
+    await bg;
+    const sentAt = t.db.data.get(`artifacts/dd/smsPairings/${d.c.id}`).notifySentAt;
+    await t.chat('GET', 'wait', { auth: d.auth, query: `?after=${Date.now() + 60e3}&v=0` });
+    assert.ok(!(t.db.data.get(`artifacts/dd/smsPairings/${d.c.id}`).notifySeenAt >= sentAt), 'a background tab re-armed notifications');
 
     // Leaving the chat deletes the notification number too.
     await t.chat('POST', 'notify', { auth: b.auth, body: { phone: '+14155550003', consent: true } });
