@@ -42,6 +42,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { makeKeys } from './sms/lib.mjs';
 import { makeTwilio } from './sms/twilio.mjs';
+import { makeSandbox } from './sms/sandbox.mjs';
 import { makeVerifier } from './sms/idtoken.mjs';
 import { createService } from './sms/service.mjs';
 
@@ -52,6 +53,10 @@ const MQTT_PORT = parseInt(env.MQTT_PORT || '8883', 10);
 const MQTT_USER = env.MQTT_USER || 'dotdash-sms';
 const SERVICE_ACCOUNT = env.SERVICE_ACCOUNT || '/root/dotdash_bridge/service-account.json';
 const DRY_RUN = env.DRY_RUN === '1';
+// Before the toll-free verification is approved: capture every SMS instead of
+// sending it, and let the sandbox phone page (dotdashdevice.com/sms-sandbox.html)
+// read and reply. Wins over DRY_RUN; needs SMS_SANDBOX_KEY. See sms/README.md.
+const SANDBOX = env.SMS_SANDBOX === '1';
 const SWEEP_EVERY_MS = 6 * 3600e3;
 
 const log = (level, ...a) => console.log(new Date().toISOString(), level.padEnd(5), ...a);
@@ -59,6 +64,13 @@ const log = (level, ...a) => console.log(new Date().toISOString(), level.padEnd(
 for (const name of ['SMS_DATA_KEY', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'MQTT_PASS']) {
   if (!env[name]) { log('ERROR', `${name} missing -- refusing to start`); process.exit(1); }
 }
+
+if (SANDBOX && (env.SMS_SANDBOX_KEY || '').length < 24) { log('ERROR', 'SMS_SANDBOX=1 needs SMS_SANDBOX_KEY (24+ characters) -- refusing to start'); process.exit(1); }
+const sandbox = SANDBOX ? makeSandbox({
+  file: env.SMS_SANDBOX_PATH || '/root/dotdash_bridge/sms-sandbox.json',
+  helpText: env.SMS_HELP_TEXT || undefined,
+  log,
+}) : null;
 
 const serviceAccount = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT, 'utf8'));
 initializeApp({ credential: cert(serviceAccount) });
@@ -95,7 +107,8 @@ const { server, sweep } = createService({
       apns: { payload: { aps: { sound: 'default' } } },
     }),
   },
-  twilio: makeTwilio({
+  sandbox,
+  twilio: sandbox ? sandbox.twilio : makeTwilio({
     accountSid: env.TWILIO_ACCOUNT_SID, authToken: env.TWILIO_AUTH_TOKEN,
     apiKey: env.TWILIO_API_KEY, apiSecret: env.TWILIO_API_SECRET,
     dryRun: DRY_RUN, log: (m) => log('INFO', m),
@@ -114,7 +127,10 @@ const { server, sweep } = createService({
     CHAT_BASE: env.CHAT_BASE || 'https://dotdashdevice.com',
     VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY || null,
     // The chat page offers SMS notifications only when texts really go out.
-    SMS_LIVE: !DRY_RUN,
+    SMS_LIVE: !DRY_RUN && !SANDBOX,
+    SANDBOX_KEY: SANDBOX ? env.SMS_SANDBOX_KEY : null,
+    // The number SMS notifications come from. Unset: the oldest active pool number.
+    NOTIFY_FROM: env.NOTIFY_FROM || null,
   },
   log,
 });
@@ -123,4 +139,4 @@ setTimeout(() => sweep().catch((e) => log('WARN', 'sweep failed:', e.message)), 
 setInterval(() => sweep().catch((e) => log('WARN', 'sweep failed:', e.message)), SWEEP_EVERY_MS);
 
 server.listen(LISTEN_PORT, '127.0.0.1', () =>
-  log('INFO', `sms bridge listening on 127.0.0.1:${LISTEN_PORT}${DRY_RUN ? ' (DRY_RUN: no texts are sent)' : ''}`));
+  log('INFO', `sms bridge listening on 127.0.0.1:${LISTEN_PORT}${SANDBOX ? ' (SANDBOX: texts are captured, not sent)' : DRY_RUN ? ' (DRY_RUN: no texts are sent)' : ''}`));

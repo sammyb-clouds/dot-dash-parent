@@ -295,6 +295,37 @@ So:
   screenshot of the page) and the homepage, privacy policy (section 5A) and
   terms (section 4) all describe this model.
 
+## SMS sandbox, until the toll-free number is approved (2026-10-20)
+
+`SMS_SANDBOX=1` (with `SMS_SANDBOX_KEY`, 24+ characters) swaps Twilio for
+`sandbox.mjs`. Every SMS is captured in `/root/dotdash_bridge/sms-sandbox.json`
+instead of being sent (newest 500, 14 days). It acts like Twilio where it
+matters: once a number has sent STOP, sends fail with 21610, and STOP, START
+and HELP get Twilio's automatic replies (HELP's text is `SMS_HELP_TEXT`, or the
+one drafted for the Messaging Service).
+
+- **Sandbox phone:** `https://dotdashdevice.com/sms-sandbox.html`, unlocked by
+  the key. It shows each number's thread, replies as that phone (through the
+  real inbound handler), and has STOP, START and HELP buttons, plus Reset to
+  test a first sign-up again. API: `/chat/api/sandbox/{numbers,thread,reply,reset}`
+  with an `X-Sandbox-Key` header. Without SMS_SANDBOX these return 404.
+- **Testers:** open any chat link with `?sms=1`. It sticks on that device
+  until `?sms=0`, and shows the sign-up screen and a "Test mode" banner.
+  Everyone else sees no SMS sign-up, because `config.sms` stays false.
+- **The number shown:** `NOTIFY_FROM=+18667861245` in sms.env.
+- **The app:** each connected link contact shows how they're notified
+  (`notifyBy`: SMS, app, browser, or none), never the number.
+
+**Going live after approval:**
+1. Put the Twilio credentials in sms.env.
+2. Run `node smspool.mjs add +18667861245 --kind tollfree`, which also sets the
+   webhook.
+3. Run `smspool.mjs disable +18005550100` (the stand-in).
+4. Delete `SMS_SANDBOX`, `SMS_SANDBOX_KEY` and `DRY_RUN` from sms.env.
+5. Restart dotdash-sms.
+
+`config.sms` then turns true, and every chat page offers the sign-up.
+
 ## Web link contacts (no SMS, no carrier approval)
 
 Added 2026-10-02, after Twilio rejected the toll-free verification as "personal

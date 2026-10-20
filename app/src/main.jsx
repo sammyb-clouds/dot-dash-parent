@@ -3797,7 +3797,9 @@
                             <span className="block text-xs text-amber-600">Link not opened yet · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>
                           )}
                           {c.status === 'active' && (
-                            <span className="block text-xs text-green-600">Connected by link · <button onClick={() => handleNewLink(c)} className="underline font-medium text-gray-500">New link</button></span>
+                            <span className="block text-xs text-green-600">
+                              Connected by link · {{ sms: 'SMS notifications', app: 'app notifications', browser: 'browser notifications' }[c.notifyBy] || 'no notifications'} · <button onClick={() => handleNewLink(c)} className="underline font-medium text-gray-500">New link</button>
+                            </span>
                           )}
                           {c.status === 'stopped' && (
                             <span className="block text-xs text-gray-500">Left the chat · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>

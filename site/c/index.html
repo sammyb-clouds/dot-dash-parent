@@ -163,9 +163,22 @@
   function iosSafari() { return isIOS() && !standalone(); }
 
   // SMS notifications are offered only once the bridge really sends them
-  // (config.sms is false while it runs in DRY_RUN). ?sms=1 shows them anyway,
-  // for testing and screenshots; the server still sends nothing in DRY_RUN.
-  var smsOn = /[?&]sms=1\b/.test(location.search);
+  // (config.sms is false in DRY_RUN and sandbox mode). ?sms=1 shows them anyway
+  // for testers, and sticks on this device until ?sms=0. In sandbox mode every
+  // SMS lands on the sandbox phone page (/sms-sandbox.html), not on a phone.
+  var PREVIEW = 'dotdash_sms_preview';
+  if (/[?&]sms=1\b/.test(location.search)) { try { localStorage.setItem(PREVIEW, '1'); } catch (e) {} }
+  if (/[?&]sms=0\b/.test(location.search)) { try { localStorage.removeItem(PREVIEW); } catch (e) {} }
+  var preview = (function () { try { return localStorage.getItem(PREVIEW) === '1'; } catch (e) { return false; } })();
+  var smsOn = preview, sandboxMode = false;
+  function testBanner() {
+    if (!preview || !sandboxMode || document.getElementById('sbx')) return;
+    var b = document.createElement('div');
+    b.id = 'sbx';
+    b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9;background:#fef3c7;color:#92400e;font-size:13px;text-align:center;padding:6px 10px';
+    b.innerHTML = 'Test mode: SMS messages go to the <a href="/sms-sandbox.html" style="color:inherit">sandbox phone</a>, not to a real phone. <a href="?sms=0" style="color:inherit">Turn off</a>';
+    document.body.appendChild(b);
+  }
 
   // ------------------------------------------------------------------- boot --
   var parts = location.pathname.replace(/^\/c\/?/, '').split('.');
@@ -179,7 +192,7 @@
     var id = (location.hash.match(/chat=([A-Za-z0-9]{1,40})/) || [])[1], c = id && byId(id);
     if (c && c.claim) openChat(c.token);
   });
-  var ready = smsOn ? Promise.resolve() : call('GET', 'config').then(function (cfg) { smsOn = !!cfg.sms; }).catch(function () {});
+  var ready = call('GET', 'config').then(function (cfg) { smsOn = preview || !!cfg.sms; sandboxMode = !!cfg.sandbox; testBanner(); }).catch(function () {});
   ready.then(boot);
   function boot() {
   if (pToken) {

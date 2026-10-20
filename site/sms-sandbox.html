@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>SMS sandbox · Dot Dash</title>
+<link rel="icon" href="/icon.png">
+<!--
+  The sandbox phone, for testing SMS notifications before the toll-free number
+  is approved. Works only while the SMS bridge runs with SMS_SANDBOX=1; every
+  SMS it would have sent shows up here instead, and replies typed here go
+  through the bridge exactly as if Twilio had delivered them (STOP, START,
+  HELP included). The key is SMS_SANDBOX_KEY in /root/dotdash_sms/sms.env.
+  Talks to /chat/api/sandbox/ (bridge/sms/service.mjs, sandboxApi).
+  Deployed by hand to /var/www/dotdashdevice/.
+-->
+<style>
+  :root { color-scheme: light dark; --bg:#f4f6fb; --card:#fff; --ink:#1f2937; --muted:#6b7280; --blue:#3b82f6; --rule:#e5e7eb; --them:#e5e7eb; --themInk:#111827; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f172a; --card:#1e293b; --ink:#e5e7eb; --muted:#94a3b8; --rule:#334155; --them:#334155; --themInk:#f1f5f9; } }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 -apple-system,"Helvetica Neue",Arial,sans-serif; }
+  .wrap { max-width:520px; margin:0 auto; min-height:100%; display:flex; flex-direction:column; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  .banner { background:#fef3c7; color:#92400e; font-size:13px; border-radius:10px; padding:8px 12px; margin:12px 0 4px; }
+  h1 { font-size:20px; margin:14px 0 6px; }
+  p { margin:0 0 10px; color:var(--muted); }
+  input, textarea { font:inherit; padding:10px 12px; border-radius:12px; border:1px solid var(--rule); background:var(--card); color:var(--ink); }
+  .btn { border:0; background:var(--blue); color:#fff; font:inherit; font-weight:700; padding:10px 16px; border-radius:12px; cursor:pointer; }
+  .btn.ghost { background:transparent; color:var(--blue); border:1px solid var(--rule); }
+  .btn.small { font-size:14px; padding:6px 12px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > input { flex:1; min-width:0; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+  .chip { border:1px solid var(--rule); background:var(--card); color:var(--ink); border-radius:999px; padding:5px 12px; font:inherit; font-size:14px; cursor:pointer; }
+  .chip.on { background:var(--blue); color:#fff; border-color:var(--blue); }
+  header { position:sticky; top:0; background:var(--bg); padding:10px 0; border-bottom:1px solid var(--rule); text-align:center; z-index:1; }
+  header .who { font-weight:800; }
+  header .sub { font-size:13px; color:var(--muted); }
+  .stopped { display:inline-block; background:#fee2e2; color:#991b1b; font-size:12px; font-weight:700; border-radius:6px; padding:1px 6px; margin-left:6px; }
+  #log { flex:1; padding:14px 0; display:flex; flex-direction:column; gap:6px; }
+  .b { max-width:82%; padding:9px 13px; border-radius:18px; word-wrap:break-word; white-space:pre-wrap; }
+  .b.them { align-self:flex-start; background:var(--them); color:var(--themInk); border-bottom-left-radius:5px; }
+  .b.me { align-self:flex-end; background:#34c759; color:#fff; border-bottom-right-radius:5px; }
+  .b a { color:inherit; }
+  .when { font-size:12px; color:var(--muted); align-self:center; margin-top:8px; }
+  .empty { text-align:center; color:var(--muted); margin:auto 0; }
+  footer { position:sticky; bottom:0; background:var(--bg); padding:10px 0 14px; border-top:1px solid var(--rule); }
+  footer textarea { flex:1; resize:none; }
+  .quick { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+(function () {
+  var KEY = 'dotdash_sandbox_key', NUM = 'dotdash_sandbox_number';
+  var app = document.getElementById('app');
+  var key = get(KEY), number = get(NUM), from = null, timer = null, shown = '';
+
+  function get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function put(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  // Links in a message are tappable, as on a phone. Only http(s) ones.
+  function linkify(s) { return esc(s).replace(/https?:\/\/[^\s<]+/g, function (u) { return '<a href="' + u + '">' + u + '</a>'; }); }
+  function fmt(n) { var m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(n || ''); return m ? '(' + m[1] + ') ' + m[2] + '-' + m[3] : (n || ''); }
+  function api(method, route, body) {
+    return fetch('/chat/api/sandbox/' + route, {
+      method: method, headers: { 'Content-Type': 'application/json', 'X-Sandbox-Key': key },
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { b._status = r.status; return b; }); });
+  }
+  var banner = '<div class="banner">Sandbox: nothing here reaches a real phone. This page shows the SMS Dot Dash <i>would</i> send, and replies you type here are handled exactly as if they came from that phone.</div>';
+
+  function screenKey(msg) {
+    show(banner + '<h1>SMS sandbox</h1><p>Enter the sandbox key (SMS_SANDBOX_KEY on the server).</p>' +
+      '<div class="row"><input id="k" type="password" autocomplete="off" placeholder="Sandbox key"><button class="btn" id="go">Open</button></div>' +
+      '<p style="margin-top:10px;color:#dc2626">' + esc(msg || '') + '</p>');
+    document.getElementById('go').onclick = function () { key = document.getElementById('k').value.trim(); put(KEY, key); start(); };
+  }
+
+  function screenPick(numbers) {
+    stop();
+    show(banner + '<h1>SMS sandbox</h1>' +
+      '<p>Pick a phone, or enter the number you signed up with on a chat page (open a chat link with <b>?sms=1</b> to see the sign-up).</p>' +
+      '<div class="row"><input id="n" type="tel" inputmode="tel" placeholder="Mobile number"><button class="btn" id="open">Open</button></div>' +
+      '<div class="chips">' + numbers.map(function (x) { return '<button class="chip" data-n="' + esc(x.number) + '">' + esc(fmt(x.number)) + (x.stopped ? ' · stopped' : '') + '</button>'; }).join('') + '</div>' +
+      '<p style="margin-top:20px"><button class="btn ghost small" id="forget">Forget the key on this device</button></p>');
+    document.getElementById('open').onclick = function () { var v = document.getElementById('n').value; if (v.replace(/\D/g, '').length >= 10) openThread(v); };
+    Array.prototype.forEach.call(document.querySelectorAll('.chip'), function (b) { b.onclick = function () { openThread(b.getAttribute('data-n')); }; });
+    document.getElementById('forget').onclick = function () { put(KEY, ''); key = ''; screenKey(); };
+  }
+
+  function openThread(n) {
+    api('GET', 'thread?number=' + encodeURIComponent(n)).then(function (r) {
+      if (r._status === 403) return screenKey('That key is not right.');
+      if (r._status !== 200) return alert('Not a valid US mobile number.');
+      number = r.number; from = r.from; put(NUM, number);
+      shown = '';
+      show('<header><div class="who">' + esc(fmt(from)) + ' · Dot Dash</div><div class="sub">Sandbox phone ' + esc(fmt(number)) + '<span id="st"></span> · <a href="#" id="back">Change</a></div></header>' +
+        '<div id="log"></div>' +
+        '<footer><div class="row"><textarea id="msg" rows="1" placeholder="Reply as this phone"></textarea><button class="btn" id="send">Send</button></div>' +
+        '<div class="quick"><button class="chip" data-q="STOP">STOP</button><button class="chip" data-q="START">START</button><button class="chip" data-q="HELP">HELP</button>' +
+        '<button class="chip" id="reset" style="margin-left:auto">Reset this phone</button></div></footer>');
+      document.getElementById('back').onclick = function (e) { e.preventDefault(); put(NUM, ''); number = ''; start(); };
+      document.getElementById('send').onclick = function () { var t = document.getElementById('msg'); if (t.value.trim()) { reply(t.value); t.value = ''; } };
+      Array.prototype.forEach.call(document.querySelectorAll('[data-q]'), function (b) { b.onclick = function () { reply(b.getAttribute('data-q')); }; });
+      document.getElementById('reset').onclick = function () {
+        if (!confirm('Clear this phone\'s sandbox messages and opt-out, to test a first sign-up again?')) return;
+        api('POST', 'reset?number=' + encodeURIComponent(number)).then(render);
+      };
+      render(r);
+      stop(); timer = setInterval(refresh, 3000);
+    });
+  }
+
+  function refresh() { if (number && !document.hidden) api('GET', 'thread?number=' + encodeURIComponent(number)).then(function (r) { if (r._status === 200) render(r); }); }
+  function reply(text) { api('POST', 'reply', { number: number, body: text }).then(function (r) { if (r._status === 200) render(r); }); }
+
+  function render(r) {
+    var log = document.getElementById('log'); if (!log) return;
+    document.getElementById('st').innerHTML = r.stopped ? '<span class="stopped">STOPPED</span>' : '';
+    var sig = JSON.stringify(r.messages.map(function (m) { return m.id; }));
+    if (sig === shown) return;
+    shown = sig;
+    var last = 0;
+    log.innerHTML = r.messages.length ? r.messages.map(function (m) {
+      var w = m.at - last > 30 * 60e3 ? '<div class="when">' + esc(new Date(m.at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })) + '</div>' : '';
+      last = m.at;
+      return w + '<div class="b ' + (m.dir === 'out' ? 'them' : 'me') + '">' + linkify(m.body) + '</div>';
+    }).join('') : '<div class="empty">No messages yet. Sign up on a chat page with this number to get the first one.</div>';
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  function stop() { if (timer) clearInterval(timer); timer = null; }
+  function show(html) { app.innerHTML = html; }
+
+  function start() {
+    if (!key) return screenKey();
+    api('GET', 'numbers').then(function (r) {
+      if (r._status === 403) return screenKey('That key is not right.');
+      if (r._status === 404) return show(banner + '<h1>SMS sandbox is off</h1><p>The bridge is not running in sandbox mode (SMS_SANDBOX=1).</p>');
+      if (r._status !== 200) return show(banner + '<h1>Can\'t reach the bridge</h1><p>Try again in a moment.</p>');
+      from = r.from;
+      if (number) return openThread(number);
+      screenPick(r.numbers || []);
+    }).catch(function () { show(banner + '<h1>Can\'t reach the bridge</h1>'); });
+  }
+  start();
+})();
+</script>
+</body>
+</html>

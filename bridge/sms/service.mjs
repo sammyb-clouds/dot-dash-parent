@@ -5,6 +5,7 @@
  * See ../sms.mjs for what the bridge is and sms/README.md for the design.
  */
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as L from './lib.mjs';
@@ -22,7 +23,9 @@ const short = (s) => String(s).slice(0, 8);
 // fcm.send({ token, title, body, data }) notifies a contact using the iOS app's
 // contact mode; it rejects with err.code 'messaging/registration-token-not-registered'
 // (or invalid-registration-token) when the token is dead.
-export function createService({ db, FieldValue, client, twilio, webPush, fcm, verifyIdToken, keys, config, log }) {
+// sandbox: a makeSandbox() (sandbox.mjs) when SMS_SANDBOX=1 -- `twilio` is then
+// its stand-in, and /chat/api/sandbox/ serves the sandbox phone page.
+export function createService({ db, FieldValue, client, twilio, webPush, fcm, verifyIdToken, keys, config, log, sandbox = null }) {
   const { APP_ID, PUBLIC_BASE, STATE_PATH, APP_ORIGINS, TWILIO_AUTH_TOKEN } = config;
   // Where a web contact's link points: <CHAT_BASE>/c/<token>.
   const CHAT_BASE = (config.CHAT_BASE || 'https://dotdashdevice.com').replace(/\/$/, '');
@@ -182,7 +185,7 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     const entry = { at: Date.now(), from: 'dotdash', text };
     await store.addChat(pairing.id, entry);
     // A page waiting right now means the chat is open in front of them: no SMS.
-    const watching = waiters.has(pairing.id);
+    const watching = (waiters.get(pairing.id)?.size || 0) > 0;
     wake(pairing.id);
     log('INFO', `pairing ${short(pairing.id)}: message to web contact (${text.length} chars)`);
     await pushTo(pairing, text);
@@ -344,6 +347,9 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   const view = (p) => ({
     id: p.id, deviceId: p.deviceDocId, virtualId: p.virtualId, contactName: p.contactName,
     displayName: p.displayName, channel: p.channel || 'sms',
+    // How a link contact hears about new messages, for the account holder's
+    // list. Never the number itself.
+    notifyBy: p.notifyStatus === 'active' ? 'sms' : p.pushFcm ? 'app' : p.pushSub ? 'browser' : null,
     hint: p.contactHint || null, poolNumber: p.poolNumber || null, status: p.status,
   });
 
@@ -449,7 +455,7 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
 
     // sms: whether the chat page should offer SMS notifications. Off while the
     // bridge is in DRY_RUN, so nobody is promised a message that never comes.
-    if (route === 'config' && req.method === 'GET') return [200, { vapidPublicKey: config.VAPID_PUBLIC_KEY || null, sms: !!config.SMS_LIVE }];
+    if (route === 'config' && req.method === 'GET') return [200, { vapidPublicKey: config.VAPID_PUBLIC_KEY || null, sms: !!config.SMS_LIVE, sandbox: !!sandbox }];
 
     if ((route === 'open' || route === 'claim') && req.method === 'POST') {
       if (!limits.linkOpen.take(ip)) throw HTTP(429, { status: 'slow-down' });
@@ -529,7 +535,13 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
       let msgs = await newer();
       if (!msgs.length) {
         await new Promise((resolve) => {
-          const done = () => { clearTimeout(t); waiters.get(p.id)?.delete(done); resolve(); };
+          // An emptied set is removed, or the chat would look watched forever.
+          const done = () => {
+            clearTimeout(t);
+            const set = waiters.get(p.id);
+            if (set) { set.delete(done); if (!set.size) waiters.delete(p.id); }
+            resolve();
+          };
           const t = setTimeout(done, config.WAIT_MS ?? 25000);
           if (!waiters.has(p.id)) waiters.set(p.id, new Set());
           waiters.get(p.id).add(done);
@@ -595,6 +607,39 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
       return [200, { status: 'left' }];
     }
 
+    throw HTTP(404, { status: 'not-found' });
+  }
+
+  // ------------------------------------------------------- SMS sandbox API --
+  // For the sandbox phone page only (site/sms-sandbox.html), and only when the
+  // bridge runs with SMS_SANDBOX=1. Every call needs X-Sandbox-Key.
+  async function sandboxApi(req, url) {
+    if (!sandbox || !config.SANDBOX_KEY) throw HTTP(404, { status: 'not-found' });
+    const given = Buffer.from(String(req.headers['x-sandbox-key'] || ''));
+    const want = Buffer.from(config.SANDBOX_KEY);
+    if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) throw HTTP(403, { status: 'forbidden' });
+    const route = url.pathname.slice('/chat/api/sandbox/'.length);
+    const from = await notifyFrom();
+    if (route === 'numbers' && req.method === 'GET') return [200, { from, numbers: sandbox.numbers() }];
+    const number = L.toE164(url.searchParams.get('number'));
+    if (route === 'thread' && req.method === 'GET') {
+      if (!number) throw HTTP(400, { status: 'invalid-number' });
+      return [200, { from, number, ...sandbox.thread(number) }];
+    }
+    if (route === 'reply' && req.method === 'POST') {
+      let body = {};
+      try { body = JSON.parse(await readBody(req, 4096)); } catch (e) { if (e.http) throw e; }
+      const n = L.toE164(body.number);
+      const text = String(body.body || '').slice(0, 640);
+      if (!n || !text.trim() || !from) throw HTTP(400, { status: 'bad-request' });
+      await sandbox.reply({ from: n, to: from, body: text }, inbound);
+      return [200, { from, number: n, ...sandbox.thread(n) }];
+    }
+    if (route === 'reset' && req.method === 'POST') {
+      if (!number) throw HTTP(400, { status: 'invalid-number' });
+      sandbox.reset(number);
+      return [200, { from, number, ...sandbox.thread(number) }];
+    }
     throw HTTP(404, { status: 'not-found' });
   }
 
@@ -672,6 +717,11 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
           return send(403, { status: 'forbidden' });
         }
         return send(200, await inbound(params), 'text/xml');
+      }
+
+      if (url.pathname.startsWith('/chat/api/sandbox/')) {
+        extra['X-Robots-Tag'] = 'noindex';
+        return send(...(await sandboxApi(req, url)));
       }
 
       if (url.pathname.startsWith('/chat/api/')) {

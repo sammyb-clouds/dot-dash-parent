@@ -9,6 +9,7 @@ import * as L from './lib.mjs';
 import { createService } from './service.mjs';
 import { FakeDB, FakeMqtt, FakeTwilio, FieldValue } from './testfakes.mjs';
 import { TwilioError } from './twilio.mjs';
+import { makeSandbox } from './sandbox.mjs';
 
 const BASE = 'https://app.example.test';
 const AUTH = 'twilio-auth-token';
@@ -17,10 +18,11 @@ const GRANDMA = '+14155552671', STRANGER = '+14155559999';
 const MAYA = 'MAYA0515', LEO = 'LEO0101';
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
-async function setup() {
+async function setup({ sandboxed = false } = {}) {
   const db = new FakeDB();
   const client = new FakeMqtt();
-  const twilio = new FakeTwilio();
+  const sandbox = sandboxed ? makeSandbox({ file: path.join(os.tmpdir(), `sms-sandbox-${crypto.randomBytes(4).toString('hex')}.json`) }) : null;
+  const twilio = sandbox ? sandbox.twilio : new FakeTwilio();
   const fcm = { sent: [], failNext: null, async send(m) {
     if (this.failNext) { const e = this.failNext; this.failNext = null; throw e; }
     this.sent.push(m);
@@ -32,13 +34,14 @@ async function setup() {
   const keys = L.makeKeys(crypto.randomBytes(32).toString('base64'));
   const logs = [];
   const svc = createService({
-    db, FieldValue, client, twilio, webPush, fcm, keys,
+    db, FieldValue, client, twilio, webPush, fcm, keys, sandbox,
     verifyIdToken: async (t) => ({ 'tok-u1': 'u1', 'tok-u2': 'u2' }[t] || null),
     config: {
       APP_ID: 'dd', PUBLIC_BASE: BASE, TWILIO_AUTH_TOKEN: AUTH, RETRY_MS: 1, WAIT_MS: 300,
       CHAT_BASE: 'https://dd.example.test', VAPID_PUBLIC_KEY: 'BPUBKEY',
       STATE_PATH: path.join(os.tmpdir(), `sms-state-${crypto.randomBytes(4).toString('hex')}.json`),
       APP_ORIGINS: new Set(['https://app.example.test', 'capacitor://localhost']),
+      SANDBOX_KEY: sandboxed ? 'k'.repeat(32) : null,
     },
     log: (...a) => logs.push(a.join(' ')),
   });
@@ -82,7 +85,15 @@ async function setup() {
     return { status: r.status, body: await r.json() };
   };
 
-  return { db, client, twilio, webPush, fcm, svc, port, logs, addDevice, addPool, api, sms, chat, toDevice, pairingDocs, close: () => { svc.server.closeAllConnections?.(); svc.server.close(); } };
+  const sb = async (method, route, { key = 'k'.repeat(32), body, query = '' } = {}) => {
+    const r = await fetch(`http://127.0.0.1:${port}/chat/api/sandbox/${route}${query}`, {
+      method, headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '9.9.9.9', 'X-Sandbox-Key': key },
+      body: body && JSON.stringify(body),
+    });
+    return { status: r.status, body: await r.json() };
+  };
+
+  return { sb, db, client, twilio, webPush, fcm, svc, port, logs, addDevice, addPool, api, sms, chat, toDevice, pairingDocs, close: () => { svc.server.closeAllConnections?.(); svc.server.close(); } };
 }
 
 test('phone (SMS relay) contacts are retired', async () => {
@@ -192,6 +203,7 @@ test('SMS notifications: consent on the chat page, setup message, one per unread
     await open; await tick();
     assert.equal(t.twilio.sent.length, n);
 
+
     // Off: the number is deleted.
     r = await t.chat('DELETE', 'notify', { auth });
     assert.deepEqual(r.body.notify, { asked: true, status: null, hint: null });
@@ -232,6 +244,24 @@ test('SMS notifications: "not now", a number that STOPped us before, a bad numbe
     r = await t.chat('POST', 'notify', { auth: b.auth, body: { phone: '+14155550002', consent: true } });
     assert.equal(r.body.status, 'invalid-number');
     assert.equal(t.db.data.get(`artifacts/dd/smsPairings/${b.c.id}`).notifyEnc, null);
+
+    // A page that was waiting and went away (closed, or its wait timed out)
+    // must not leave the chat looking watched: the next message notifies.
+    const d = await join('Aunt');
+    await t.chat('POST', 'notify', { auth: d.auth, body: { phone: '+14155550004', consent: true } });
+    const vhD = L.hashId(d.c.virtualId);
+    await tick();
+    const before = t.twilio.sent.length;
+    const open = t.chat('GET', 'wait', { auth: d.auth, query: `?after=${Date.now()}` });
+    await tick();
+    t.client.deliver(`doorbell/msg/${vhD}/17000000000020`, `MORSE,WATCHING,${MAYA}`);
+    await open; await tick();
+    assert.equal(t.twilio.sent.length, before, 'notified while the chat was open');
+    await t.chat('GET', 'wait', { auth: d.auth, query: `?after=${Date.now() + 60e3}` });   // times out, then nobody waits
+    t.db.data.get(`artifacts/dd/smsPairings/${d.c.id}`).notifySentAt = 0;
+    t.client.deliver(`doorbell/msg/${vhD}/17000000000021`, `MORSE,NOBODY LOOKING,${MAYA}`);
+    await tick(); await tick();
+    assert.equal(t.twilio.sent.length, before + 1, 'a closed page left the chat looking watched');
 
     // Leaving the chat deletes the notification number too.
     await t.chat('POST', 'notify', { auth: b.auth, body: { phone: '+14155550003', consent: true } });
@@ -426,4 +456,72 @@ test('app contact mode: Firebase push, CORS for the app, dead tokens dropped', a
     await tick(); await tick();
     assert.equal(t.db.data.get(`artifacts/dd/smsPairings/${add.contact.id}`).pushFcm, null);
   } finally { t.close(); }
+});
+
+test('SMS sandbox: captured instead of sent, replies simulated like Twilio, key-protected', async () => {
+  const t = await setup({ sandboxed: true });
+  try {
+    await t.addPool(POOL1);
+    await t.addDevice('u1', 'MAC1', MAYA);
+    const add = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', contactName: 'Grandma', channel: 'web' } });
+    const c = add.body.contact, token = add.body.link.split('/c/')[1], vh = L.hashId(c.virtualId);
+    const auth = `${token}.${(await t.chat('POST', 'claim', { body: { token } })).body.claim}`;
+    await tick();
+
+    // The page still isn't offered SMS (sandbox is not live) -- testers use ?sms=1.
+    assert.equal((await t.chat('GET', 'config')).body.sms, false);
+    // The sandbox API needs its key.
+    assert.equal((await t.sb('GET', 'numbers', { key: 'wrong' })).status, 403);
+    assert.equal((await t.sb('GET', 'numbers', { key: '' })).status, 403);
+
+    // Sign-up: the setup message lands in the sandbox thread, nothing is sent.
+    await t.chat('POST', 'notify', { auth, body: { phone: GRANDMA, consent: true } });
+    let th = (await t.sb('GET', 'thread', { query: `?number=${encodeURIComponent(GRANDMA)}` })).body;
+    assert.equal(th.from, POOL1);
+    assert.deepEqual(th.messages.map((m) => m.dir), ['out']);
+    assert.match(th.messages[0].body, /SMS notifications are on/);
+    assert.deepEqual((await t.sb('GET', 'numbers')).body.numbers.map((n) => n.number), [GRANDMA]);
+
+    // A message from the Dot Dash: a notification, captured.
+    t.client.deliver(`doorbell/msg/${vh}/17000000000001`, `MORSE,HI GRANDMA,${MAYA}`);
+    await tick(); await tick();
+    th = (await t.sb('GET', 'thread', { query: `?number=${encodeURIComponent(GRANDMA)}` })).body;
+    assert.match(th.messages.at(-1).body, /you have a new message from Maya's Dot Dash/);
+
+    // Replying: the bridge's "notifications only" answer comes back, and nothing reaches the Dot Dash.
+    th = (await t.sb('POST', 'reply', { body: { number: GRANDMA, body: 'Love you!' } })).body;
+    assert.deepEqual(th.messages.slice(-2).map((m) => [m.dir, m.body.slice(0, 40)]), [['in', 'Love you!'], ['out', "Dot Dash: this number only sends notific"]]);
+    assert.equal(t.toDevice(L.hashId(MAYA)).length, 0);
+
+    // HELP: the Messaging Service's HELP reply.
+    th = (await t.sb('POST', 'reply', { body: { number: GRANDMA, body: 'help' } })).body;
+    assert.match(th.messages.at(-1).body, /^Dot Dash: SMS notifications that a new message is waiting/);
+
+    // STOP: Twilio's confirmation, the chat is marked stopped, and sending fails like Twilio's 21610.
+    th = (await t.sb('POST', 'reply', { body: { number: GRANDMA, body: 'STOP' } })).body;
+    assert.equal(th.stopped, true);
+    assert.match(th.messages.at(-1).body, /successfully been unsubscribed/);
+    assert.equal(t.db.data.get(`artifacts/dd/smsPairings/${c.id}`).notifyStatus, 'stopped');
+    await assert.rejects(t.twilio.send({ from: POOL1, to: GRANDMA, body: 'x' }), (e) => e.code === 21610);
+
+    // START: resubscribed, and the chat is active again.
+    th = (await t.sb('POST', 'reply', { body: { number: GRANDMA, body: 'START' } })).body;
+    assert.equal(th.stopped, false);
+    assert.match(th.messages.at(-1).body, /re-subscribed/);
+    assert.equal(t.db.data.get(`artifacts/dd/smsPairings/${c.id}`).notifyStatus, 'active');
+
+    // The account holder sees how the contact is notified, never the number.
+    const list = (await t.api('GET', '/sms/contacts')).body.contacts;
+    assert.equal(list[0].notifyBy, 'sms');
+    assert.ok(!JSON.stringify(list).includes('2671'));
+
+    // Reset clears a number's sandbox thread and opt-out, to test a first sign-up again.
+    th = (await t.sb('POST', 'reset', { query: `?number=${encodeURIComponent(GRANDMA)}` })).body;
+    assert.deepEqual([th.messages.length, th.stopped], [0, false]);
+  } finally { t.close(); }
+});
+
+test('without the sandbox, its API does not exist', async () => {
+  const t = await setup();
+  try { assert.equal((await t.sb('GET', 'numbers')).status, 404); } finally { t.close(); }
 });
