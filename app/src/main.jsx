@@ -3220,15 +3220,38 @@
          }
        };
 
-       // Waits for a device to announce itself on its presence topic, which this
-       // app already subscribes to. Resolves false on timeout.
-       const waitForOnline = (hash, ms) => new Promise((resolve) => {
-         const topic = `doorbell/presence/${hash}`;
-         const onMsg = (t, m) => { if (t === topic && m.toString() === 'ONLINE') finish(true); };
-         const timer = setTimeout(() => finish(false), ms);
-         function finish(ok) { clearTimeout(timer); mqttClient.removeListener('message', onMsg); resolve(ok); }
-         mqttClient.on('message', onMsg);
-       });
+       // Waits for ONE live message on a topic this app already hears (resolves
+       // false on timeout; the returned promise has .cancel() to give up early).
+       // Retained deliveries are ignored: the app re-subscribes whenever its device
+       // list changes, and every re-subscribe replays the retained value -- the
+       // OLD device's ONLINE, or its last PTS -- which is not news about now.
+       // `subscribe` is only for a topic whose filter the app already holds
+       // (presence), so asking again is a no-op rather than a second feed. Nothing
+       // is unsubscribed afterwards: the app's own presence tracking needs it.
+       const listenLive = (topic, test, ms, subscribe = false) => {
+         let cancel = () => {};
+         const p = new Promise((resolve) => {
+           if (!mqttClient || typeof mqttClient.on !== 'function') return resolve(false);
+           const onMsg = (t, m, packet) => {
+             if (t === topic && !packet?.retain && test(m.toString())) finish(true);
+           };
+           const timer = setTimeout(() => finish(false), ms);
+           function finish(ok) { clearTimeout(timer); mqttClient.removeListener('message', onMsg); resolve(ok); }
+           cancel = () => finish(false);
+           mqttClient.on('message', onMsg);
+           if (subscribe) { try { mqttClient.subscribe(topic, { qos: 1 }); } catch (e) {} }
+         });
+         p.cancel = () => cancel();
+         return p;
+       };
+
+       // The device announcing itself. Only a LIVE ONLINE counts, so call this
+       // after the old device has been released: the presence topic is shared by
+       // both devices (it is keyed on the child's hash, which a transfer does not
+       // change), and a retained ONLINE left by the old one would pass for the
+       // new one coming up.
+       const waitForOnline = (hash, ms) =>
+         listenLive(`doorbell/presence/${hash}`, (m) => m === 'ONLINE', ms, true);
 
        const handleReplace = async () => {
          const old = activeDevice;
@@ -3239,20 +3262,54 @@
          if (!mqttClient?.connected) return setBrokenStatus({ busy: false, msg: 'Not connected. Check your internet connection and try again.', error: true });
 
          const { identity, hashedId } = old;
+         const slot = `doorbell/cmd/${hashedId}`;
+         const childName = displayName(`${identity.name}${identity.pin}`);
+         // Read now: the old record is deleted below, and the new device's first
+         // report (zero) would overwrite the figure kept on the new one.
+         const points = devicePoints[old.id] ?? old.points;      // undefined = never reported
          try {
-           // 1. The old device's broker key first, while its record still proves
-           //    ownership. The new device enrolls under the same child ID seconds
-           //    after it is claimed; with the old key still there it would be
-           //    refused ("already enrolled") and stay on the fallback login.
+           // 1. Let the old device go FIRST. A transfer keeps the child's name and
+           //    PIN, so the hash -- and every topic under it -- is the same for both
+           //    devices. While the old one is still linked it also answers to that
+           //    identity: it consumes the commands sent below (a device clears the
+           //    retained command the moment it takes it) and banks the points.
+           //
+           //    UNPAIR is retained so a device that is awake takes it at once. The
+           //    receipt is the device's presence going OFFLINE: it wipes itself and
+           //    restarts, and the broker publishes its last will when the
+           //    connection dies (up to ~25 s). The proper receipt -- the device
+           //    clearing doorbell/cmd/<hash> -- is not one this app can see: both
+           //    of its logins may only WRITE that topic. A device that is switched
+           //    off or asleep cannot answer, so a device the app already shows as
+           //    offline is given only a short wait, and none of this blocks the
+           //    transfer.
+           say('Releasing the old Dot Dash…');
+           const seenOnline = childOnlineStatus?.[old.id];
+           const gone = listenLive(`doorbell/presence/${hashedId}`, (m) => m === 'OFFLINE',
+                                   seenOnline === false ? 8000 : 40000, true);
+           const asked = await publishConfirmed(slot, 'CMD,UNPAIR', { qos: 1, retain: true });
+           if (!asked) gone.cancel();
+           const released = asked && await gone;
+
+           // Whatever the outcome, take the UNPAIR off the slot before the new
+           // device exists. It wipes whichever device finds it there, and the new
+           // one subscribes to this same slot as soon as it restarts. (Current
+           // firmware also clears the slot when it is claimed; this does not rely
+           // on that.) Waited for: the CLAIM must land after it.
+           await publishConfirmed(slot, '', { qos: 1, retain: true });
+
+           // The old device's broker key next -- after UNPAIR, because deleting it
+           // would drop the very connection UNPAIR needs. The key is registered
+           // under the child's hash, which does not change, so while it exists the
+           // new device's enrollment is refused ("already enrolled") and it stays
+           // on the shared login. The identity record is NOT deleted, unlike
+           // Unlink: the new device needs it.
            if (old.mqttKey) {
-             say('Releasing the old device…');
+             say('Removing the old Dot Dash\'s private connection…');
              await requestKeyReset(old, 10000).catch(() => false);
            }
 
-           // 2. Claim the new device under the same child ID. No UNPAIR goes to
-           //    the old device: it shares this child ID, so the new device would
-           //    receive it too. (A device being claimed also clears whatever was
-           //    waiting for its ID, on current firmware.)
+           // 2. Claim the new device under the same child ID.
            say('Pairing the new Dot Dash…');
            const replyTopic = `doorbell/pairing/reply/${code}`;
            const reply = await new Promise((resolve) => {
@@ -3268,49 +3325,84 @@
              mqttClient.publish(`doorbell/pairing/${code}`, `CLAIM,${parentProfile?.virtualId || 'PENDING'},${identity.name},${identity.pin}`);
            });
            if (!reply) {
-             return setBrokenStatus({ busy: false, error: true, msg: "The new Dot Dash didn't answer. Make sure it is on, connected to Wi-Fi, and showing TOOLS > PAIRING, then try again." });
+             return setBrokenStatus({
+               busy: false, error: true,
+               msg: "The new Dot Dash didn't answer. Make sure it is on, connected to Wi-Fi, and showing TOOLS > PAIRING, then try again."
+                 + (released ? ` ${childName}'s old Dot Dash has already been released, so this is safe to retry.` : ''),
+             });
            }
            const mac = reply.replace(/:/g, '').toUpperCase();
+           // Listening from here: the new device restarts after this reply, and
+           // its ONLINE is the cue to send it things.
+           const online = waitForOnline(hashedId, 90000);
 
            // 3. The new record carries everything that belongs to the child --
            //    friends, quick messages, Arcade and Dot Dash Mode -- and nothing
            //    that belonged to the old hardware: its key, its code, its Wi-Fi
            //    list (passwords are never stored; the new device keeps its own).
+           //    The shared retained Monitor topics are left alone: they are the
+           //    new device's now.
            const { id: _id, mqttKey: _k, pairingCode: _c, wifiNets: _w, ...carried } = old;
            await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', mac), { ...carried, pairingCode: code });
            if (mac !== old.id) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', old.id));
            setActiveChildId(mac);
 
-           // 4. Friends and quick messages. A device keeps only the latest
-           //    command waiting for it, and it restarts right after being
-           //    claimed -- so wait until it is back, then send them in turn.
-           //    (Arcade and Dot Dash Mode need nothing: the app re-sends those
-           //    whenever a device reports something other than the record.)
+           // 4. Contacts, quick messages, points -- in that order, to the new
+           //    device and only once it is back. The command slot holds one
+           //    message: sent to a device that is not listening, each overwrites
+           //    the last. To one that is, each is delivered at once and in order.
+           //    No receipt exists for the first two (the device clears the slot as
+           //    it takes each, which this app cannot watch), but the device
+           //    answers SET_POINTS with its new total on its Monitor topic. It
+           //    handles commands one at a time, so that answer also shows the
+           //    two before it were taken. If it does not come the lot is sent
+           //    again -- every command is absolute, so a repeat does no harm.
            say('Waiting for the new Dot Dash to restart…');
-           const online = await waitForOnline(hashedId, 90000);
+           const isOnline = await online;
            const friends = friendsInOrder(old, parentProfile?.virtualId);
            const phrases = old.phrases?.length ? old.phrases : defaultPhrases;
-           say('Sending contacts and quick messages…');
-           await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SYNC_FRIENDS,${friends.join('|')}`, { qos: 1, retain: true });
-           await new Promise((r) => setTimeout(r, 2500));
-           await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SYNC_PHRASES,${phrases.join('|')}`, { qos: 1, retain: true });
-
-           // The child's points. A newly claimed device starts at zero, and the
-           // total is whatever the old one last reported -- which is on its record
-           // even if it never comes on again. An absolute figure, so a repeat does
-           // not double it.
-           const points = devicePoints[old.id] ?? old.points ?? 0;
-           if (points > 0) {
-             say('Moving points across…');
-             await new Promise((r) => setTimeout(r, 2500));
-             await publishConfirmed(`doorbell/cmd/${hashedId}`, `CMD,SET_POINTS,${points}`, { qos: 1, retain: true });
+           const pointsKnown = Number.isFinite(points);
+           let listsSent = false, pointsLanded = false;
+           const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+           if (isOnline) {
+             for (let attempt = 0; attempt < 3 && !pointsLanded; attempt++) {
+               say(attempt ? 'Sending again…' : 'Sending contacts and quick messages…');
+               await publishConfirmed(slot, `CMD,SYNC_FRIENDS,${friends.join('|')}`, { qos: 1, retain: true });
+               await pause(1500);
+               await publishConfirmed(slot, `CMD,SYNC_PHRASES,${phrases.join('|')}`, { qos: 1, retain: true });
+               listsSent = true;
+               if (!pointsKnown) break;                 // nothing to wait for
+               await pause(1500);
+               say('Moving points across…');
+               const echo = listenLive(`doorbell/monitor/${hashedId}/points`, (m) => m === `PTS,${points}`, 12000);
+               await publishConfirmed(slot, `CMD,SET_POINTS,${points}`, { qos: 1, retain: true });
+               pointsLanded = await echo;
+             }
+           } else if (pointsKnown) {
+             // Not back yet. Only the last command sent survives, so send the one
+             // that cannot be redone from the app (contacts and quick messages can).
+             await publishConfirmed(slot, `CMD,SET_POINTS,${points}`, { qos: 1, retain: true });
            }
 
+           const pointsNote = !pointsKnown
+             ? ' No points total was on record for the old Dot Dash, so no points moved.'
+             : points === 0
+               ? ' It had 0 points, so none moved.'
+               : pointsLanded
+                 ? ` ${points} points moved across.`
+                 : isOnline
+                   ? ` The new Dot Dash has not confirmed the ${points} points yet. Check the points total in Settings in a few minutes.`
+                   : ` Its ${points} points are waiting for it.`;
+           const oldNote = released ? '' :
+             ` The old Dot Dash could not be reached, so it is still linked to ${childName}. Unlink or reset it by hand the next time it is switched on, or it will keep answering to ${childName} and receive their messages.`;
+           const body = isOnline
+             ? `Done. ${childName} is on the new Dot Dash${listsSent ? ' with its contacts and quick messages' : ''}.${pointsNote}`
+             : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on.${pointsNote} Once it is on, drag any contact in the Contacts list and edit any quick message to send them to it again.`;
+           // Red (error) when something still needs doing by hand.
            setBrokenStatus({
-             busy: false, error: false, done: true,
-             msg: online
-               ? `Done. ${displayName(`${identity.name}${identity.pin}`)} is on the new Dot Dash with its contacts, quick messages${points > 0 ? ` and ${points} points` : ''}.`
-               : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on: its quick messages are waiting for it. If its contacts are missing once it’s on, drag any contact in the Contacts list to send it again.`,
+             busy: false, done: true,
+             error: !released || (isOnline && pointsKnown && !pointsLanded),
+             msg: body + oldNote,
            });
          } catch (e) {
            setBrokenStatus({ busy: false, error: true, msg: `Could not replace it: ${e.message}` });
