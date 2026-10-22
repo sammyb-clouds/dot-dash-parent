@@ -490,13 +490,15 @@
     const Users = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
     // The store badge, drawn rather than fetched: Apple's own artwork is theirs
     // and may not be redistributed, and an <img> to their CDN would be one more
-    // thing to break offline. Same proportions and layout as the familiar badge.
+    // thing to break offline. Same proportions and layout as the familiar badge,
+    // but it reads "Get the iOS app" rather than naming the App Store, because
+    // this leads to a TestFlight beta and the app is not listed there yet.
     const AppStoreBadge = ({className}) => (
-      <svg viewBox="0 0 160 54" className={className} role="img" aria-label="Download on the App Store">
+      <svg viewBox="0 0 160 54" className={className} role="img" aria-label="Get the iOS app">
         <rect x="0.5" y="0.5" width="159" height="53" rx="10" fill="#000" stroke="#4d4d4d"/>
         <path fill="#fff" d="M31.5 28.3c0-3.1 2.5-4.6 2.6-4.7-1.4-2.1-3.6-2.3-4.4-2.4-1.9-.2-3.7 1.1-4.6 1.1-.9 0-2.4-1.1-4-1.1-2 0-3.9 1.2-4.9 3-2.1 3.7-.5 9.1 1.5 12.1 1 1.5 2.2 3.1 3.8 3 1.5-.1 2.1-1 3.9-1 1.8 0 2.3 1 3.9 1 1.6 0 2.6-1.5 3.6-2.9 1.1-1.7 1.6-3.3 1.6-3.4-.1 0-3-1.2-3-4.7zm-3-8.6c.8-1 1.4-2.4 1.2-3.8-1.2.1-2.7.8-3.6 1.8-.8.9-1.5 2.3-1.3 3.7 1.4.1 2.8-.7 3.7-1.7z"/>
-        <text x="46" y="21" fill="#fff" fontFamily="-apple-system, Helvetica, Arial, sans-serif" fontSize="10">Download on the</text>
-        <text x="46" y="40" fill="#fff" fontFamily="-apple-system, Helvetica, Arial, sans-serif" fontSize="19" fontWeight="500">App Store</text>
+        <text x="46" y="21" fill="#fff" fontFamily="-apple-system, Helvetica, Arial, sans-serif" fontSize="10">Get the</text>
+        <text x="46" y="40" fill="#fff" fontFamily="-apple-system, Helvetica, Arial, sans-serif" fontSize="19" fontWeight="500">iOS app</text>
       </svg>
     );
 
