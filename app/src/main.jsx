@@ -488,6 +488,57 @@
     const Clock = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
     const X = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
     const Users = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+    // "On an iPhone?" and the badge, plus the instructions it opens, in one
+    // self-contained piece: it is offered both to an account holder on the
+    // landing page and to a contact on the Connect waiting screen, and those
+    // two live in different files with different navigation. Keeping the open
+    // state inside means neither caller has to carry a route for it.
+    //
+    // Hidden inside the native app, where offering to install the app you are
+    // already in reads as a bug.
+    const GetIosApp = ({ className = '' }) => {
+      const [open, setOpen] = useState(false);
+      if (isNativeApp()) return null;
+      if (open) return (
+        <div className="fixed inset-0 z-50 bg-[#f2f2f7] overflow-y-auto">
+          <div className="flex flex-col items-center min-h-full p-6 text-center">
+            <button onClick={() => setOpen(false)} className="self-start p-2 -ml-2 mt-10 text-gray-500 font-bold flex items-center active:text-gray-700">
+              <ArrowLeft className="w-5 h-5 mr-1"/> Back
+            </button>
+            <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-20 h-20 rounded-2xl shadow-lg mt-6 object-cover" />
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-6">Get the iOS app</h1>
+            <p className="text-gray-500 mt-2 max-w-sm">The Dot Dash app is in beta, so it is installed through Apple's {TESTFLIGHT_APP_NAME} app rather than the App Store.</p>
+
+            <div className="w-full max-w-sm text-left space-y-5 mt-8">
+              <div className="flex">
+                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">1</span>
+                <p className="pt-1 text-gray-800">Download <span className="font-bold">“{TESTFLIGHT_APP_NAME}”</span> from the App Store.</p>
+              </div>
+              <div className="flex">
+                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">2</span>
+                <p className="pt-1 text-gray-800">Afterwards, tap the link below to download the beta iOS app.</p>
+              </div>
+            </div>
+
+            <a href={TESTFLIGHT_JOIN_URL} target="_blank" rel="noopener noreferrer"
+              className="w-full max-w-sm bg-blue-500 text-white font-bold py-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors mt-8">
+              Download the beta iOS app
+            </a>
+            <p className="text-xs text-gray-400 mt-4 mb-10 max-w-sm break-all">{TESTFLIGHT_JOIN_URL}</p>
+          </div>
+        </div>
+      );
+      return (
+        <div className={`w-full max-w-sm ${className}`}>
+          <p className="text-sm text-gray-500 mb-3">On an iPhone?</p>
+          <button onClick={() => setOpen(true)} aria-label="Get the iOS app"
+            className="inline-block rounded-xl active:opacity-70 transition-opacity">
+            <AppStoreBadge className="h-14 w-auto" />
+          </button>
+        </div>
+      );
+    };
+
     // The store badge, drawn rather than fetched: Apple's own artwork is theirs
     // and may not be redistributed, and an <img> to their CDN would be one more
     // thing to break offline. Same proportions and layout as the familiar badge,
@@ -1874,50 +1925,13 @@
               </button>
             </div>
 
-            {/* The iOS app, kept well clear of the two things most people came
-                here to do. Opens instructions rather than the beta link itself:
-                tapping a TestFlight link without TestFlight installed lands on a
-                page most people read as the app being unavailable. */}
-            <div className="w-full max-w-sm pt-4">
-              <p className="text-sm text-gray-500 mb-3">Prefer the iOS app?</p>
-              <button onClick={() => setView('IOS')} aria-label="Get the iOS app"
-                className="inline-block rounded-xl active:opacity-70 transition-opacity">
-                <AppStoreBadge className="h-14 w-auto" />
-              </button>
-            </div>
+            {/* Kept well clear of the two things most people came here to do. */}
+            <GetIosApp className="pt-4" />
           </div>
         );
       }
 
-      if (view === 'IOS') {
-        return (
-          <div className="flex flex-col items-center min-h-screen p-6 text-center">
-            <button onClick={() => setView('LANDING')} className="absolute top-12 left-4 p-2 text-gray-500 font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
-            <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-20 h-20 rounded-2xl shadow-lg mt-24 object-cover" />
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-6">Get the iOS app</h1>
-            <p className="text-gray-500 mt-2 max-w-sm">The Dot Dash app is in beta, so it is installed through Apple's {TESTFLIGHT_APP_NAME} app rather than the App Store.</p>
-
-            <div className="w-full max-w-sm text-left space-y-5 mt-8">
-              <div className="flex">
-                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">1</span>
-                <p className="pt-1 text-gray-800">Download <span className="font-bold">“{TESTFLIGHT_APP_NAME}”</span> from the App Store.</p>
-              </div>
-              <div className="flex">
-                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">2</span>
-                <p className="pt-1 text-gray-800">Afterwards, tap the link below to download the beta iOS app.</p>
-              </div>
-            </div>
-
-            <a href={TESTFLIGHT_JOIN_URL} target="_blank" rel="noopener noreferrer"
-              className="w-full max-w-sm bg-blue-500 text-white font-bold py-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors mt-8">
-              Download the beta iOS app
-            </a>
-            <p className="text-xs text-gray-400 mt-4 max-w-sm break-all">{TESTFLIGHT_JOIN_URL}</p>
-          </div>
-        );
-      }
-
-      return (
+return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
           <button onClick={() => setView('LANDING')} className="absolute top-12 left-4 p-2 text-gray-500 font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
           

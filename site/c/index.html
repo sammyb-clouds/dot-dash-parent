@@ -68,6 +68,15 @@
   .links a, .links button { color:var(--muted); background:none; border:0; font:inherit; text-decoration:underline; cursor:pointer; padding:0 6px; }
   .hbtn { background:none; border:0; color:var(--blue); font:inherit; font-weight:700; cursor:pointer; padding:4px 6px; }
   .back { font-size:26px; line-height:1; padding:0 8px 0 0; }
+  .ios { margin:22px 0 4px; text-align:center; }
+  .ios p { font-size:14px; margin:0 0 10px; }
+  .ios button { background:none; border:0; padding:0; cursor:pointer; line-height:0; }
+  .ios svg { height:54px; width:auto; }
+  .steps { text-align:left; max-width:380px; margin:22px auto 0; }
+  .steps div { display:flex; gap:12px; margin-bottom:16px; }
+  .steps .n { flex:0 0 30px; height:30px; border-radius:50%; background:var(--blue); color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .steps p { margin:4px 0 0; color:var(--ink); }
+  .url { font-size:12px; color:var(--muted); word-break:break-all; margin-top:14px; }
   .list { padding:6px 0; }
   .chatrow { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--card); border:1px solid var(--rule); border-radius:16px; padding:12px; margin:8px 0; font:inherit; color:inherit; cursor:pointer; }
   .chatrow img { width:44px; height:44px; border-radius:11px; flex-shrink:0; }
@@ -140,6 +149,40 @@
   function logo() { return '<img class="logo" src="/icon.png" alt="Dot Dash">'; }
   function legal() { return '<div class="links"><a href="/privacy.html">Privacy</a>·<a href="/terms.html">Terms</a></div>'; }
   function linkUrl(token) { return location.origin + '/c/' + token; }
+
+  // The iOS app, offered to someone who was sent a link and is reading this on
+  // a phone. Matches the account holder's landing page in the parent app, and
+  // leads to instructions rather than the beta link itself: a TestFlight link
+  // opened without TestFlight installed reads as the app being unavailable.
+  // Replace both of these with the App Store listing once the app ships.
+  var TESTFLIGHT_JOIN_URL = 'https://testflight.apple.com/join/NxFDSV39';
+  // Apple's own badge artwork is theirs and may not be redistributed, so this
+  // is drawn: same proportions and layout, but it reads "Get the iOS app"
+  // because the app is not listed on the App Store yet.
+  function badgeSvg() {
+    return '<svg viewBox="0 0 160 54" role="img" aria-label="Get the iOS app">' +
+      '<rect x="0.5" y="0.5" width="159" height="53" rx="10" fill="#000" stroke="#4d4d4d"/>' +
+      '<path fill="#fff" d="M31.5 28.3c0-3.1 2.5-4.6 2.6-4.7-1.4-2.1-3.6-2.3-4.4-2.4-1.9-.2-3.7 1.1-4.6 1.1-.9 0-2.4-1.1-4-1.1-2 0-3.9 1.2-4.9 3-2.1 3.7-.5 9.1 1.5 12.1 1 1.5 2.2 3.1 3.8 3 1.5-.1 2.1-1 3.9-1 1.8 0 2.3 1 3.9 1 1.6 0 2.6-1.5 3.6-2.9 1.1-1.7 1.6-3.3 1.6-3.4-.1 0-3-1.2-3-4.7zm-3-8.6c.8-1 1.4-2.4 1.2-3.8-1.2.1-2.7.8-3.6 1.8-.8.9-1.5 2.3-1.3 3.7 1.4.1 2.8-.7 3.7-1.7z"/>' +
+      '<text x="46" y="21" fill="#fff" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="10">Get the</text>' +
+      '<text x="46" y="40" fill="#fff" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="19" font-weight="500">iOS app</text>' +
+      '</svg>';
+  }
+  function iosBlock() { return '<div class="ios"><p>On an iPhone?</p><button id="iosb">' + badgeSvg() + '</button></div>'; }
+  function wireIosBlock(back) { var b = document.getElementById('iosb'); if (b) b.onclick = function () { screenIos(back); }; }
+  function screenIos(back) {
+    view = 'other';
+    show('<div class="center">' + logo() + '<h1>Get the iOS app</h1>' +
+      '<p>The Dot Dash app is in beta, so it is installed through Apple\'s TestFlight app rather than the App Store.</p>' +
+      '<div class="steps">' +
+        '<div><span class="n">1</span><p>Download <b>"TestFlight"</b> from the App Store.</p></div>' +
+        '<div><span class="n">2</span><p>Afterwards, tap the link below to download the beta iOS app.</p></div>' +
+      '</div>' +
+      '<a class="btn" style="margin-top:18px;text-decoration:none" href="' + TESTFLIGHT_JOIN_URL + '" target="_blank" rel="noopener noreferrer">Download the beta iOS app</a>' +
+      '<p class="url">' + TESTFLIGHT_JOIN_URL + '</p>' +
+      '<button class="btn ghost" id="iosback" style="margin-top:14px">Back</button>' +
+      '</div>' + legal());
+    document.getElementById('iosback').onclick = back;
+  }
 
   // A copy of lib.toDeviceText, so the page can show what the Dot Dash will
   // actually display before anyone presses Send. The server's is the real one.
@@ -397,8 +440,9 @@
   function screenNoLink() {
     view = 'other';
     show('<div class="center">' + logo() + '<h1>Open your Dot Dash link</h1><p>Use the link you were sent to start chatting.</p>' +
-      '<button class="btn ghost" id="addc">Paste a link</button></div>' + legal());
+      '<button class="btn ghost" id="addc">Paste a link</button>' + iosBlock() + '</div>' + legal());
     document.getElementById('addc').onclick = screenAddChat;
+    wireIosBlock(screenNoLink);
   }
   function screenError() {
     view = 'other';
