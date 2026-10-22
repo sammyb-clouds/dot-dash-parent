@@ -163,6 +163,13 @@
     const SHOW_LINK_CONTACTS = import.meta.env.VITE_LINK_CONTACTS === '1';
     const SHOW_BRIDGE_CONTACTS = SHOW_PHONE_CONTACTS || SHOW_LINK_CONTACTS;
 
+    // The iOS app is a TestFlight beta, not an App Store listing, so the badge on
+    // the landing page leads to instructions rather than straight to a store page:
+    // a link to a beta is useless to anyone who has not installed TestFlight first.
+    // Replace both of these with the App Store listing once the app ships.
+    const TESTFLIGHT_JOIN_URL = 'https://testflight.apple.com/join/NxFDSV39';
+    const TESTFLIGHT_APP_NAME = 'TestFlight';
+
     const PUSH_ID_KEY = 'dotdash_push_token_id';
     const PUSH_MINT_KEY = 'dotdash_push_minted';
     // The account this install's token is registered under, and the accounts whose
@@ -481,6 +488,17 @@
     const Clock = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
     const X = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
     const Users = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+    // The store badge, drawn rather than fetched: Apple's own artwork is theirs
+    // and may not be redistributed, and an <img> to their CDN would be one more
+    // thing to break offline. Same proportions and layout as the familiar badge.
+    const AppStoreBadge = ({className}) => (
+      <svg viewBox="0 0 160 54" className={className} role="img" aria-label="Download on the App Store">
+        <rect x="0.5" y="0.5" width="159" height="53" rx="10" fill="#000" stroke="#4d4d4d"/>
+        <path fill="#fff" d="M31.5 28.3c0-3.1 2.5-4.6 2.6-4.7-1.4-2.1-3.6-2.3-4.4-2.4-1.9-.2-3.7 1.1-4.6 1.1-.9 0-2.4-1.1-4-1.1-2 0-3.9 1.2-4.9 3-2.1 3.7-.5 9.1 1.5 12.1 1 1.5 2.2 3.1 3.8 3 1.5-.1 2.1-1 3.9-1 1.8 0 2.3 1 3.9 1 1.6 0 2.6-1.5 3.6-2.9 1.1-1.7 1.6-3.3 1.6-3.4-.1 0-3-1.2-3-4.7zm-3-8.6c.8-1 1.4-2.4 1.2-3.8-1.2.1-2.7.8-3.6 1.8-.8.9-1.5 2.3-1.3 3.7 1.4.1 2.8-.7 3.7-1.7z"/>
+        <text x="46" y="21" fill="#fff" fontFamily="-apple-system, Helvetica, Arial, sans-serif" fontSize="10">Download on the</text>
+        <text x="46" y="40" fill="#fff" fontFamily="-apple-system, Helvetica, Arial, sans-serif" fontSize="19" fontWeight="500">App Store</text>
+      </svg>
+    );
 
     // --- Safe Hashing Utility ---
     // Two-player game traffic between devices. It rides the same retained
@@ -1846,13 +1864,53 @@
             
             <div className="w-full max-w-sm space-y-4">
               <button onClick={() => setView('REGISTER')} className="w-full bg-blue-500 text-white font-bold py-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors">
-                1. Set up or register a Dot Dash
+                Register
               </button>
-              
+
               <button onClick={() => setView('LOGIN')} className="w-full bg-white text-blue-500 border border-blue-500 font-bold py-5 rounded-2xl shadow-sm active:bg-gray-50 transition-colors">
-                2. Log in to the Dot Dash app
+                Sign In
               </button>
             </div>
+
+            {/* The iOS app, kept well clear of the two things most people came
+                here to do. Opens instructions rather than the beta link itself:
+                tapping a TestFlight link without TestFlight installed lands on a
+                page most people read as the app being unavailable. */}
+            <div className="w-full max-w-sm pt-4">
+              <p className="text-sm text-gray-500 mb-3">Prefer the iOS app?</p>
+              <button onClick={() => setView('IOS')} aria-label="Get the iOS app"
+                className="inline-block rounded-xl active:opacity-70 transition-opacity">
+                <AppStoreBadge className="h-14 w-auto" />
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'IOS') {
+        return (
+          <div className="flex flex-col items-center min-h-screen p-6 text-center">
+            <button onClick={() => setView('LANDING')} className="absolute top-12 left-4 p-2 text-gray-500 font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
+            <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-20 h-20 rounded-2xl shadow-lg mt-24 object-cover" />
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-6">Get the iOS app</h1>
+            <p className="text-gray-500 mt-2 max-w-sm">The Dot Dash app is in beta, so it is installed through Apple's {TESTFLIGHT_APP_NAME} app rather than the App Store.</p>
+
+            <div className="w-full max-w-sm text-left space-y-5 mt-8">
+              <div className="flex">
+                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">1</span>
+                <p className="pt-1 text-gray-800">Download <span className="font-bold">“{TESTFLIGHT_APP_NAME}”</span> from the App Store.</p>
+              </div>
+              <div className="flex">
+                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">2</span>
+                <p className="pt-1 text-gray-800">Afterwards, tap the link below to download the beta iOS app.</p>
+              </div>
+            </div>
+
+            <a href={TESTFLIGHT_JOIN_URL} target="_blank" rel="noopener noreferrer"
+              className="w-full max-w-sm bg-blue-500 text-white font-bold py-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors mt-8">
+              Download the beta iOS app
+            </a>
+            <p className="text-xs text-gray-400 mt-4 max-w-sm break-all">{TESTFLIGHT_JOIN_URL}</p>
           </div>
         );
       }
