@@ -10,6 +10,8 @@
     import { registerPlugin, CapacitorHttp } from '@capacitor/core';
     import { Share as NativeShare } from '@capacitor/share';
     import ContactApp, { savedContactChats } from './ContactApp.jsx';
+import { walkieCall } from './walkieCall.js';
+import { isVoicePayload } from './walkieAudio.js';
 
     // =========================================================================
     // ✅ YOUR FIREBASE CONFIGURATION ✅
@@ -888,6 +890,8 @@
       };
       const [activeTab, setActiveTab] = useState(() => parseHash().tab);
       const [childOnlineStatus, setChildOnlineStatus] = useState({});
+      // Walkie hardware per device id, from the retained doorbell/score/voice/<hash> marker.
+      const [deviceVoice, setDeviceVoice] = useState({});
       const [activeChildId, setActiveChildId] = useState(null); 
       
       const [messages, setMessages] = useState(() => {
@@ -1175,6 +1179,17 @@
             return; // do NOT fall through to the auto-clear: the device owns this slot
           }
 
+          // ---- Walkie capability marker ----
+          // Retained "1" = walkie hardware; empty/absent = none. Ahead of the
+          // empty-payload guard because an empty payload is a meaningful "no".
+          if (tParts[1] === 'score' && tParts[2] === 'voice') {
+            for (const d of devicesRef.current) {
+              const h = d.hashedId || await hashId(d.identity.name + d.identity.pin);
+              if (h === tParts[3]) { setDeviceVoice(prev => ({ ...prev, [d.id]: payload === '1' })); break; }
+            }
+            return;
+          }
+
           if (!payload) return;
 
           const currentProfile = parentProfileRef.current;
@@ -1191,6 +1206,15 @@
             childHashMap[hash] = d.id;
             inboxTopics[`doorbell/msg/${hash}`] = d.id;
             monitorTopics[`doorbell/monitor/${hash}`] = d.id;
+          }
+
+          // Walkie call signalling (VOICE_REQ/ACC/BUSY/END) shares the message
+          // topics. Never an inbox item, a record or a count: replies on OUR topic
+          // drive the call state, everything else (including the echo of our own
+          // VOICE_REQ/VOICE_END on the device's topic) is dropped.
+          if (topic.startsWith('doorbell/msg/') && isVoicePayload(payload)) {
+            if (topic.startsWith(`doorbell/msg/${hashedParent}`)) walkieCall.handleSignal(payload);
+            return;
           }
 
           if (topic.startsWith('doorbell/presence/')) {
@@ -1523,6 +1547,8 @@
            }
            for (const hash of deviceHashes) {
                mqttClient.subscribe(`doorbell/presence/${hash}`);
+               // Refused by the broker until the voice ACL is deployed: the UI then just stays hidden.
+               mqttClient.subscribe(`doorbell/score/voice/${hash}`);
                mqttClient.subscribe(`doorbell/msg/${hash}/#`, { qos: 1 });
                mqttClient.subscribe(`doorbell/monitor/${hash}/#`, { qos: 1 });
            }
@@ -1816,7 +1842,7 @@
         <div className="flex flex-col h-full w-full bg-[#f2f2f7] text-black font-sans selection:bg-blue-200 overflow-hidden">
           <div className="flex-1 flex flex-col px-4 overflow-hidden" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
             
-            {activeTab === 'chat' && <ChatView unreadByChild={unreadByChild} mqttClient={mqttClient} messages={messages} setMessages={setMessages} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} childOnlineStatus={childOnlineStatus} activeChildLabel={activeChildLabel} />}
+            {activeTab === 'chat' && <ChatView unreadByChild={unreadByChild} mqttClient={mqttClient} messages={messages} setMessages={setMessages} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} childOnlineStatus={childOnlineStatus} activeChildLabel={activeChildLabel} user={user} deviceVoice={deviceVoice} />}
             {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
@@ -4438,7 +4464,7 @@ return (
     // ==============================================
     //                MAIN APP VIEWS
     // ==============================================
-    function ChatView({ unreadByChild = {}, mqttClient, messages, setMessages, parentProfile, devices, activeChildId, setActiveChildId, childOnlineStatus, activeChildLabel }) {
+    function ChatView({ unreadByChild = {}, mqttClient, messages, setMessages, parentProfile, devices, activeChildId, setActiveChildId, childOnlineStatus, activeChildLabel, user, deviceVoice = {} }) {
       const [inputText, setInputText] = useState('');
       const messagesEndRef = useRef(null);
 
@@ -4449,6 +4475,22 @@ return (
       ).sort((a, b) => a.id - b.id);
 
       useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeMessages]);
+
+      // ---- Walkie call (shown only for an ONLINE device with walkie hardware) ----
+      const [call, setCall] = useState(walkieCall.getState());
+      useEffect(() => walkieCall.subscribe(setCall), []);
+      const canCall = !!(activeDevice && childOnlineStatus[activeDevice.id] && deviceVoice[activeDevice.id]);
+      const callingThis = call.deviceHash && call.deviceHash === activeDevice?.hashedId;
+      // Leaving the chat or switching device ends the call.
+      useEffect(() => () => walkieCall.hangup(), [activeDevice?.hashedId]);
+      // The panel disappearing (device went offline, marker lost) must not strand a call.
+      useEffect(() => { if (!canCall) walkieCall.hangup(); }, [canCall]);
+      const startCall = () => {
+        if (!mqttClient || !parentProfile?.virtualId || !activeDevice) return;
+        walkieCall.start({ mqttClient, user, deviceHash: activeDevice.hashedId, label: activeChildLabel, parentId: parentProfile.virtualId });
+      };
+      const callName = displayName(activeChildLabel);
+      const noSelect = { WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'none' };
 
       const handleSend = async (type = 'MORSE') => {
         if (!mqttClient || !parentProfile?.virtualId || !activeDevice) return;
@@ -4522,6 +4564,41 @@ return (
                 <Send className="w-5 h-5 ml-0.5" />
               </button>
             </div>
+            {canCall && (
+              <div className="mt-3 flex flex-col items-center space-y-2" style={noSelect}>
+                {(!callingThis || call.phase === 'idle') && (
+                  <button onClick={startCall} className="w-full bg-green-500 text-white font-bold py-3 rounded-full shadow-sm active:bg-green-600">
+                    Call {callName}
+                  </button>
+                )}
+                {callingThis && call.phase === 'starting' && <p className="text-gray-500 text-sm">Starting call...</p>}
+                {callingThis && call.phase === 'calling' && (
+                  <>
+                    <p className="text-gray-600 font-semibold">Calling {callName}...</p>
+                    <button onClick={() => walkieCall.hangup()} className="w-full bg-gray-200 text-gray-800 font-bold py-3 rounded-full">Cancel</button>
+                  </>
+                )}
+                {callingThis && call.phase === 'busy' && <p className="text-gray-600 font-semibold">Busy</p>}
+                {callingThis && call.phase === 'active' && (
+                  <>
+                    <p className="text-gray-600 font-semibold">In call with {callName}</p>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {} walkieCall.pttDown(); }}
+                      onPointerUp={() => walkieCall.pttUp()}
+                      onPointerCancel={() => walkieCall.pttUp()}
+                      onLostPointerCapture={() => walkieCall.pttUp()}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={`w-40 h-40 rounded-full font-bold text-lg shadow-lg select-none ${call.talking ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}
+                      style={noSelect}
+                    >
+                      {call.talking ? 'Talking...' : call.rxTalking ? `${callName} is talking` : 'Hold to talk'}
+                    </button>
+                    <button onClick={() => walkieCall.hangup()} className="w-full bg-red-500 text-white font-bold py-3 rounded-full">Hang up</button>
+                  </>
+                )}
+                {call.notice && <p className="text-sm text-gray-500 text-center">{call.notice}</p>}
+              </div>
+            )}
           </div>
         </div>
       );
