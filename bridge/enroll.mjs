@@ -499,6 +499,7 @@ const deviceHashAcls = (h) => [
   ['publishClientSend', `doorbell/msg/${h}/#`],        // chatting with the child
   ['publishClientSend', `doorbell/monitor/${h}/#`],    // clearing Monitor alerts
   ['publishClientSend', `doorbell/cmd/${h}`],
+  ['subscribePattern', `doorbell/score/voice/${h}`],   // read-only: the device's retained voice-capability marker
 ];
 const aclKey = ([acltype, topic]) => `${acltype} ${topic}`;
 const aclObj = ([acltype, topic]) => ({ acltype, topic, allow: true, priority: 0 });
@@ -679,6 +680,54 @@ async function appLogin(token, ip) {
   }];
 }
 
+// ---- Walkie voice call tokens ------------------------------------------------
+// /call-token mints a short-lived HMAC token the voice bridge (Python) verifies.
+// Byte-exact format: "v1." + b64url(payload) + "." + b64url(HMAC(secret, "v1." + b64url(payload)))
+// payload key order is fixed: tag, dev, uid, jti, exp. Pure so a test can call it.
+const b64url = (buf) => Buffer.from(buf).toString('base64url');   // Node's base64url has no padding
+function signCallToken(payloadObj, secretBuf) {
+  const body = 'v1.' + b64url(JSON.stringify(payloadObj));
+  return body + '.' + b64url(crypto.createHmac('sha256', secretBuf).update(body).digest());
+}
+
+// Missing or malformed secret disables the route only; never a startup failure.
+const voiceSecret = (() => {
+  const hex = String(env.VOICE_TOKEN_SECRET || '');
+  return /^[0-9a-fA-F]{64}$/.test(hex) ? Buffer.from(hex, 'hex') : null;
+})();
+const VOICE_URL = 'wss://app.dotdashdevice.com/voice';
+const TAG_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const callRecent = new Map();          // uid -> token timestamps
+const CALL_TOKENS_PER_10_MIN = 20;
+
+async function callToken(token, rawBody, ip) {
+  if (!voiceSecret) return [503, { status: 'voice_disabled' }];
+  let device;
+  try { device = JSON.parse(rawBody)?.device; } catch { return [400, { status: 'bad-request' }]; }
+  if (typeof device !== 'string' || !/^[0-9a-f]{64}$/.test(device)) return [400, { status: 'bad-request' }];
+  const uid = await verifyIdToken(token);
+  if (!uid) {
+    log('INFO', `call-token refused from ${ip}: bad token`);
+    return [401, { status: 'unauthenticated' }];
+  }
+  const now = Date.now();
+  const calls = (callRecent.get(uid) || []).filter((t) => now - t < 600_000);
+  calls.push(now); callRecent.set(uid, calls);
+  if (calls.length > CALL_TOKENS_PER_10_MIN) return [429, { status: 'slow-down' }];
+
+  // Same ownership source as app-login: the identity record must name this uid.
+  const g = await grantsFor(uid);
+  if (!g.devices.includes(device)) return [403, { status: 'forbidden' }];
+
+  let tag = '';
+  for (let i = 0; i < 8; i++) tag += TAG_CHARS[crypto.randomInt(TAG_CHARS.length)];
+  const jti = crypto.randomBytes(8).toString('hex');
+  const exp = Math.floor(Date.now() / 1000) + 120;
+  const signed = signCallToken({ tag, dev: device, uid, jti, exp }, voiceSecret);
+  log('INFO', `CALL TOKEN uid=${uid.slice(0, 8)}.. dev=${short(device)} tag=${tag}`);
+  return [200, { status: 'ok', tag, token: signed, exp, url: VOICE_URL }];
+}
+
 // Daily: every app role re-derived from the database, so a grant can never
 // outlive the identity behind it for long -- whatever the phone does. An account
 // with no profile and no devices left (deleted, or never set up) loses its login;
@@ -745,6 +794,27 @@ const server = http.createServer(async (req, res) => {
       return send(code, body);
     } catch (e) {
       log('ERROR', `app-login failed: ${e.message}`);
+      return send(503, { status: 'unavailable' });
+    }
+  }
+
+  if (req.url === '/call-token') {
+    const origin = req.headers.origin;
+    if (origin && APP_ORIGINS.has(origin)) Object.assign(extra, { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' });
+    extra['Cache-Control'] = 'no-store';
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { ...extra, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600' });
+      return res.end();
+    }
+    if (req.method !== 'POST') return send(405, { status: 'method' });
+    const token = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '')?.[1];
+    let rawBody;
+    try { rawBody = await readBody(req); } catch { return send(400, { status: 'bad-request' }); }
+    try {
+      const [code, body] = await callToken(token, rawBody, ip);
+      return send(code, body);
+    } catch (e) {
+      log('ERROR', `call-token failed: ${e.message}`);
       return send(503, { status: 'unavailable' });
     }
   }
