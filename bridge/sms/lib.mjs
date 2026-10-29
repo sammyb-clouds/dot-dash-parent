@@ -209,6 +209,9 @@ export function toDeviceText(body, { numMedia = 0, max = DEVICE_MAX } = {}) {
  */
 export const isGameTraffic = (action) => action === 'GAME';
 
+/** Walkie call signalling (VOICE_*) shares the msg topics; never relay it as a message. */
+export const isVoiceTraffic = (payload) => String(payload).startsWith('VOICE_');
+
 /**
  * A device's outgoing message: "TYPE,TEXT,SENDER". Split on the first and LAST
  * comma, as the push bridge does, so a sender field can never absorb text.

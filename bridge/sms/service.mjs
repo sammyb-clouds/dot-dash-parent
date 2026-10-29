@@ -150,6 +150,7 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     // Game traffic is released above and goes no further. Checked before parsing
     // so it is dropped silently rather than logged as an unparseable message.
     if (L.isGameTraffic(payload.slice(0, payload.indexOf(',')))) return;
+    if (L.isVoiceTraffic(payload)) return;
 
     const msg = L.parseDeviceMessage(payload);
     const tag = `pairing ${short(pairing.id)}`;

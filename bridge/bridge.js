@@ -209,6 +209,12 @@ export function parseEvent(topic, payload) {
 export const isGameTraffic = (action) => action === 'GAME';
 
 /**
+ * Walkie call signalling (VOICE_REQ / VOICE_ACC / VOICE_BUSY / VOICE_END) rides
+ * the same msg topics. Transient machine data: never recorded, notified or counted.
+ */
+export const isVoiceTraffic = (payload) => String(payload).startsWith('VOICE_');
+
+/**
  * A message addressed to someone. Payload is "TYPE,TEXT,SENDER".
  *
  * The same wildcard also carries messages to CHILDREN's devices -- the hash in
@@ -791,6 +797,7 @@ async function main() {
     // Game traffic on a msg topic: no record, no notification, no count. Not
     // even the replay guard needs it -- the app clears the retained copy.
     if (topic.startsWith('doorbell/msg/') && isGameTraffic(payload.slice(0, payload.indexOf(',')))) return;
+    if (topic.startsWith('doorbell/msg/') && isVoiceTraffic(payload)) return;
     const ev = parseEvent(topic, payload);
 
     // Record EVERY topic, alert or not, so a cleared battery flag updates the
