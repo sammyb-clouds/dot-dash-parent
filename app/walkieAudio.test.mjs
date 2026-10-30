@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   FRAME_BYTES, FRAME_SAMPLES, markerTxOn, markerTxOff, detectMarker, floatToInt16LE, int16LEToFloat,
   LinearResampler, FrameBuilder, MicEncoder, makeTone, makeNoise, ringbackCycle, voiceReq, voiceEnd,
-  parseVoiceSignal, isVoicePayload,
+  parseVoiceSignal, isVoicePayload, makeHighPass, highPassProcess,
 } from './src/walkieAudio.js';
 
 let n = 0;
@@ -89,6 +89,42 @@ t('signalling payloads', () => {
   assert.equal(parseVoiceSignal('VOICE_NOPE,X'), null);
   assert.ok(isVoicePayload('VOICE_END,X') && !isVoicePayload('TEXT,VOICE_,X'));
   assert.equal(FRAME_SAMPLES, 256);
+});
+
+const sine = (hz, len) => Float32Array.from({ length: len }, (_, i) => 0.5 * Math.sin(2 * Math.PI * hz * i / 11025));
+
+t('high-pass: DC step decays to ~0 within 50 ms', () => {
+  const out = highPassProcess(makeHighPass(), new Float32Array(1100).fill(0.6));
+  const from = Math.round(0.05 * 11025);
+  for (let i = from; i < out.length; i++) assert.ok(Math.abs(out[i]) < 0.01, `i=${i} ${out[i]}`);
+});
+
+t('high-pass: 1 kHz passes at >= 0.95 amplitude', () => {
+  const out = highPassProcess(makeHighPass(), sine(1000, 4000));
+  let peak = 0;
+  for (let i = 2000; i < out.length; i++) peak = Math.max(peak, Math.abs(out[i]));
+  assert.ok(peak / 0.5 >= 0.95, `ratio ${peak / 0.5}`);
+});
+
+t('high-pass: state carries across frames like one long frame', () => {
+  const x = sine(300, 512);
+  const whole = highPassProcess(makeHighPass(), x);
+  const st = makeHighPass();
+  const split = [...highPassProcess(st, x.subarray(0, 256)), ...highPassProcess(st, x.subarray(256))];
+  assert.deepEqual(split, [...whole]);
+});
+
+t('incoming: sub-20 Hz wave no longer drives voice into the clamp', () => {
+  const N = 2048, b = new DataView(new ArrayBuffer(N * 2));
+  for (let i = 0; i < N; i++) {
+    const v = 20000 * Math.sin(2 * Math.PI * 10 * i / 11025) + 3000 * Math.sin(2 * Math.PI * 1000 * i / 11025);
+    b.setInt16(i * 2, Math.round(v), true);
+  }
+  const hp = makeHighPass();
+  const f = int16LEToFloat(b.buffer, 4, hp);
+  let clamped = 0;
+  for (let i = 1024; i < N; i++) if (Math.abs(f[i]) >= 1) clamped++;
+  assert.ok(clamped < 10, `clamped ${clamped}`);
 });
 
 console.log(`${n} passed`);

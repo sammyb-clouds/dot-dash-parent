@@ -8,7 +8,7 @@
 import voiceWorkletSource from './voiceWorklet.js?raw';
 import {
   WIRE_RATE, FRAME_BYTES, markerTxOn, markerTxOff, detectMarker, isAudioFrame,
-  int16LEToFloat, LinearResampler, MicEncoder, makeTone, makeNoise, ringbackCycle,
+  int16LEToFloat, makeHighPass, LinearResampler, MicEncoder, makeTone, makeNoise, ringbackCycle,
   voiceReq, voiceEnd, parseVoiceSignal,
 } from './walkieAudio.js';
 
@@ -35,6 +35,7 @@ class Player {
     this.ctx = ctx;
     this.rs = new LinearResampler(WIRE_RATE, ctx.sampleRate);
     this.pending = [];
+    this.hp = makeHighPass();   // incoming low cut, one state per call
     this.playing = false;
     this.nextTime = 0;
     this.sources = [];
@@ -65,7 +66,7 @@ class Player {
     this.playing = false;
   }
   _flushPending() {
-    for (const f of this.pending) this._schedule(this.rs.process(int16LEToFloat(f, PLAY_GAIN)));
+    for (const f of this.pending) this._schedule(this.rs.process(int16LEToFloat(f, PLAY_GAIN, this.hp)));
     this.pending = [];
   }
   frame(bytes) {
@@ -74,7 +75,7 @@ class Player {
       this.playing = false; this.pending = [];
     }
     if (this.playing) {
-      this._schedule(this.rs.process(int16LEToFloat(bytes, PLAY_GAIN)));
+      this._schedule(this.rs.process(int16LEToFloat(bytes, PLAY_GAIN, this.hp)));
       return;
     }
     this.pending.push(bytes);

@@ -45,13 +45,34 @@ export function floatToInt16LE(f32) {
   return buf;
 }
 
-// int16 LE bytes -> Float32 [-1,1), optional gain with a hard clamp.
-export function int16LEToFloat(data, gain = 1) {
+// ~100 Hz "low cut": two cascaded one-pole high-passes, identical to the walkie
+// firmware (a = 30900/32768, fc ~100 Hz at 11025 Hz). Removes the sub-20 Hz
+// pressure wave from a squeezed sealed case. State persists across frames.
+export const HP_A = 30900 / 32768;
+export const makeHighPass = () => ({ x1a: 0, y1a: 0, x1b: 0, y1b: 0 });
+// Filters one sample; mutates st.
+export function highPassSample(st, x) {
+  const y = x - st.x1a + HP_A * st.y1a; st.x1a = x; st.y1a = y;
+  const z = y - st.x1b + HP_A * st.y1b; st.x1b = y; st.y1b = z;
+  return z;
+}
+// Filters an array in place-safe fashion (returns a new Float32Array). Scale-free.
+export function highPassProcess(st, input) {
+  const out = new Float32Array(input.length);
+  for (let i = 0; i < input.length; i++) out[i] = highPassSample(st, input[i]);
+  return out;
+}
+
+// int16 LE bytes -> Float32 [-1,1), optional high-pass state (applied BEFORE
+// the gain) and gain with a hard clamp.
+export function int16LEToFloat(data, gain = 1, hp = null) {
   const dv = data instanceof ArrayBuffer ? new DataView(data) : new DataView(data.buffer, data.byteOffset, data.byteLength);
   const n = dv.byteLength >> 1;
   const out = new Float32Array(n);
   for (let i = 0; i < n; i++) {
-    let v = (dv.getInt16(i * 2, true) / 32768) * gain;
+    let x = dv.getInt16(i * 2, true) / 32768;
+    if (hp) x = highPassSample(hp, x);
+    let v = x * gain;
     out[i] = v > 1 ? 1 : v < -1 ? -1 : v;
   }
   return out;
@@ -119,9 +140,11 @@ export class MicEncoder {
   constructor(ctxRate) {
     this.rs = new LinearResampler(ctxRate, WIRE_RATE, { cutoffHz: 4500 });
     this.fb = new FrameBuilder();
+    this.hp = makeHighPass();
   }
-  push(chunk) { return this.fb.push(this.rs.process(chunk)); }
-  reset() { this.fb.reset(); }
+  // High-pass runs on the 11025 Hz samples, before framing (floatToInt16LE clamps).
+  push(chunk) { return this.fb.push(highPassProcess(this.hp, this.rs.process(chunk))); }
+  reset() { this.fb.reset(); }   // filter state lives for the whole call
 }
 
 // Short sine beep (default 40 ms, 700 Hz) with 4 ms edges to avoid clicks.
