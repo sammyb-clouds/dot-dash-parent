@@ -2275,8 +2275,21 @@ return (
           return fail('INTRO', 'Couldn’t join the “Dot Dash Setup” network. It can take a few seconds to appear after the screen says WI-FI SETUP.', detail);
         }
 
-        setStatus('Finding Wi-Fi networks your Dot Dash can see…');
         const http = CapacitorHttp;
+        // Check in at once, before iOS's captive-portal check gets an answer: the
+        // device holds that check for a few seconds after a phone joins, and a
+        // check-in inside the hold means the setup page never pops up over the
+        // app. Cheap and retried fast; firmware without /app_hello just serves
+        // its setup page here, and ?app=1 on the scan below still covers it.
+        for (const t0 = Date.now(); Date.now() - t0 < 6000;) {
+          if (cancelled.current) return;
+          try {
+            await http.get({ url: `${PORTAL}/app_hello`, connectTimeout: 700, readTimeout: 1500 });
+            break;
+          } catch (e) { await new Promise((r) => setTimeout(r, 250)); }
+        }
+
+        setStatus('Finding Wi-Fi networks your Dot Dash can see…');
         // The first requests can fail while iOS finishes joining, or while it
         // shows the local network permission prompt -- so keep trying briefly.
         for (let attempt = 0; attempt < 8; attempt++) {
