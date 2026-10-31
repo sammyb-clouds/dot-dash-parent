@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dot Dash Activity</title>
+<style>
+:root {
+  color-scheme: light;
+  --plane:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,0.10);
+  --s1:#2a78d6;           /* messages */
+  --s2:#eb6834;           /* games */
+  --m1:#2a78d6; --m2:#5598e7; --m3:#86b6ef;   /* message kinds: one hue, ordinal */
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --up:#006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19;
+    --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926;
+    --m1:#3987e5; --m2:#6da7ec; --m3:#9ec5f4;
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    --up:#0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane:#0d0d0d; --surface:#1a1a19;
+  --ink:#f0efec; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,0.10);
+  --s1:#3987e5; --s2:#d95926;
+  --m1:#3987e5; --m2:#6da7ec; --m3:#9ec5f4;
+  --up:#0ca30c;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--plane); color:var(--ink);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap { max-width:1100px; margin:0 auto; padding:28px 16px 64px; }
+header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
+h1 { font-size:21px; margin:0; font-weight:650; letter-spacing:-0.01em; }
+.live { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-2); }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--good); }
+.dot.stale { background:var(--warn); }
+.spacer { flex:1 1 auto; }
+button.ghost {
+  font:inherit; font-size:13px; color:var(--ink-2); background:none;
+  border:1px solid var(--ring); border-radius:7px; padding:4px 10px; cursor:pointer;
+}
+button.ghost:hover { background:var(--surface); color:var(--ink); }
+.note {
+  font-size:13px; color:var(--ink-2); background:var(--surface);
+  border:1px solid var(--ring); border-radius:10px; padding:10px 13px; margin:14px 0 22px;
+}
+.note b { color:var(--ink); font-weight:600; }
+.tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+.tile {
+  background:var(--surface); border:1px solid var(--ring); border-radius:12px; padding:14px 16px;
+}
+.tile .k { font-size:12.5px; color:var(--muted); letter-spacing:0.02em; }
+.tile .v { font-size:30px; font-weight:640; letter-spacing:-0.02em; margin-top:2px; }
+.tile .d { font-size:12.5px; color:var(--ink-2); margin-top:1px; }
+.tile .d.up { color:var(--up); }
+.card {
+  background:var(--surface); border:1px solid var(--ring); border-radius:12px;
+  padding:16px 18px 10px; margin-top:22px;
+}
+.cardhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
+h2 { font-size:15px; margin:0; font-weight:620; }
+.sub { font-size:12.5px; color:var(--muted); }
+.pills { display:flex; gap:4px; }
+.pill {
+  font:inherit; font-size:12.5px; padding:3px 10px; border-radius:999px; cursor:pointer;
+  border:1px solid var(--ring); background:none; color:var(--ink-2);
+}
+.pill[aria-pressed="true"] { background:var(--ink); color:var(--surface); border-color:var(--ink); }
+.legend { display:flex; gap:14px; font-size:12.5px; color:var(--ink-2); }
+.legend i { width:10px; height:10px; border-radius:3px; display:inline-block; margin-right:5px; vertical-align:-1px; }
+svg { display:block; width:100%; overflow:visible; }
+.tick { font-size:11px; fill:var(--muted); font-variant-numeric:tabular-nums; }
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+@media (max-width:760px){ .cols { grid-template-columns:1fr; } }
+table { width:100%; border-collapse:collapse; font-size:13.5px; }
+th { text-align:left; font-weight:600; color:var(--muted); font-size:12px; padding:6px 8px; border-bottom:1px solid var(--grid); }
+td { padding:7px 8px; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; }
+tr:last-child td { border-bottom:none; }
+td.dev { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; }
+.state { display:inline-flex; align-items:center; gap:6px; }
+.empty { color:var(--muted); font-size:13.5px; padding:22px 2px; }
+#tip {
+  position:fixed; pointer-events:none; opacity:0; transition:opacity .08s;
+  background:var(--surface); border:1px solid var(--ring); border-radius:8px;
+  padding:7px 10px; font-size:12.5px; box-shadow:0 6px 20px rgba(0,0,0,.13); z-index:9;
+}
+#tip .t { color:var(--muted); font-size:11.5px; }
+#tip .r { display:flex; gap:8px; align-items:center; font-variant-numeric:tabular-nums; }
+.srow { display:flex; gap:1px; align-items:flex-end; height:18px; }
+.srow i { width:5px; background:var(--s1); border-radius:1.5px 1.5px 0 0; min-height:1px; display:block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Dot Dash activity</h1>
+    <span class="live"><span class="dot" id="livedot"></span><span id="livetext">connecting…</span></span>
+    <span class="spacer"></span>
+    <button class="ghost" id="theme">Theme</button>
+  </header>
+
+  <div class="note">
+    <b>Metadata only.</b> This records that a message was sent, how big it was, and when —
+    never what it said. Devices appear as the first eight characters of their topic hash,
+    not by name. Hourly detail is kept 90 days; daily totals are kept beyond that.
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card" id="kindsCard" hidden>
+    <div class="cardhead"><h2>Message types</h2><span class="sub">last 30 days &middot; format only, never content</span></div>
+    <div id="kinds"></div>
+  </section>
+
+  <section class="card">
+    <div class="cardhead">
+      <h2>Traffic</h2>
+      <span class="spacer"></span>
+      <div class="pills" id="ranges">
+        <button class="pill" data-r="48h" aria-pressed="true">48 hours</button>
+        <button class="pill" data-r="30d" aria-pressed="false">30 days</button>
+        <button class="pill" data-r="90d" aria-pressed="false">90 days</button>
+      </div>
+    </div>
+    <div id="traffic"></div>
+    <div class="cardhead" style="margin-top:2px">
+      <button class="ghost" id="tabletoggle" style="font-size:12px;padding:2px 8px">Show numbers</button>
+    </div>
+    <div id="trafficTable" hidden></div>
+  </section>
+
+  <div class="cols">
+    <section class="card">
+      <div class="cardhead">
+        <h2>Games</h2><span class="sub">personal bests, last 30 days</span>
+      </div>
+      <div id="games"></div>
+    </section>
+
+    <section class="card">
+      <div class="cardhead">
+        <h2>Devices</h2><span class="sub">last 7 days</span>
+      </div>
+      <div id="devices"></div>
+    </section>
+  </div>
+</div>
+<div id="tip"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const fmt = (n) => n.toLocaleString();
+const tip = $("#tip");
+
+$("#theme").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const dark = cur ? cur === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+  draw();
+};
+
+function showTip(e, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  const r = tip.getBoundingClientRect();
+  let x = e.clientX + 14, y = e.clientY - r.height - 10;
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14;
+  if (y < 8) y = e.clientY + 16;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.opacity = 0; };
+
+let state = { range: "48h", overview: null, series: null, games: null, devices: null };
+
+async function load(what) {
+  const r = await fetch(what, { cache: "no-store" });
+  if (!r.ok) throw new Error(what + " " + r.status);
+  return r.json();
+}
+
+async function refresh() {
+  try {
+    const [o, s, g, d, k] = await Promise.all([
+      load("api/overview.json"),
+      load("api/series.json?range=" + state.range),
+      load("api/games.json?days=30"),
+      load("api/devices.json"),
+      load("api/msgkinds.json"),
+    ]);
+    state = { ...state, overview: o, series: s, games: g, devices: d, kinds: k };
+    $("#livedot").classList.remove("stale");
+    $("#livetext").textContent = "updated " + new Date().toLocaleTimeString();
+    draw();
+  } catch (e) {
+    $("#livedot").classList.add("stale");
+    $("#livetext").textContent = "logger unreachable";
+  }
+}
+
+function tiles(o) {
+  const delta = (now, prev, unit) => {
+    if (!prev && !now) return "—";
+    if (!prev) return "first " + unit;
+    const pct = Math.round(((now - prev) / prev) * 100);
+    if (pct === 0) return "level with yesterday";
+    return (pct > 0 ? "+" : "") + pct + "% vs yesterday";
+  };
+  const t = [
+    { k: "SEEN IN 15 MIN", v: o.devicesOnline + " / " + o.devicesKnown, d: "devices checking in" },
+    { k: "MESSAGES 24H", v: fmt(o.last24h.msgs), d: delta(o.last24h.msgs, o.prev24h.msgs, "day"), up: o.last24h.msgs > o.prev24h.msgs },
+    { k: "GAME SESSIONS 24H", v: fmt(o.last24h.games), d: delta(o.last24h.games, o.prev24h.games, "day"), up: o.last24h.games > o.prev24h.games },
+    { k: "ACTIVE DEVICES 24H", v: fmt(o.devicesActive24h), d: "sent or played" },
+  ];
+  $("#tiles").innerHTML = t.map((x) =>
+    `<div class="tile"><div class="k">${x.k}</div><div class="v">${x.v}</div>
+     <div class="d${x.up ? " up" : ""}">${x.d}</div></div>`).join("");
+}
+
+// Two panels, one x-axis, separate y-scales -- small multiples, not a stacked
+// bar and never a second y-axis on the same plot. Game sessions run about one
+// for every thirty messages, so stacking them produced a sliver you could not
+// read and could not hover. Each panel carries one series and names it, so no
+// legend box is needed.
+function traffic(s) {
+  const rows = s.rows, W = 1000, padL = 36, padB = 22, padT = 14;
+  const hA = 116, gapP = 26, hB = 52;
+  const H = padT + hA + gapP + hB + padB;
+  const plotW = W - padL;
+  const slot = plotW / rows.length;
+  const bw = Math.max(2, slot - (rows.length > 60 ? 1 : 2.5));
+  const x = (i) => padL + slot * i + (slot - bw) / 2;
+  const label = (t) => s.bucket === "hour" ? t.slice(11) + ":00 " + t.slice(5, 10) : t.slice(5);
+
+  function panel(key, top, h, colour, title) {
+    const max = Math.max(1, ...rows.map((r) => r[key]));
+    const nice = max <= 4 ? 4 : Math.ceil(max / 4) * 4;
+    const y = (v) => top + h - (v / nice) * h;
+    let g = `<text class="tick" x="${padL}" y="${top - 4}" style="fill:var(--ink-2);font-size:11.5px">${title}</text>`;
+    for (const f of [0, 0.5, 1]) {
+      const v = nice * f;
+      g += `<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>
+            <text class="tick" x="${padL - 7}" y="${y(v) + 3.5}" text-anchor="end">${v}</text>`;
+    }
+    rows.forEach((r, i) => {
+      if (!r[key]) return;
+      const bh = Math.max(1.5, (r[key] / nice) * h);
+      g += `<rect x="${x(i)}" y="${y(r[key])}" width="${bw}" height="${bh}" rx="${Math.min(2, bw / 2)}" fill="${colour}"/>`;
+    });
+    g += `<line x1="${padL}" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--axis)" stroke-width="1"/>`;
+    return g;
+  }
+
+  let g = panel("msg", padT, hA, "var(--s1)", "Messages")
+        + panel("game", padT + hA + gapP, hB, "var(--s2)", "Game sessions");
+
+  // One hit target per bucket, spanning both panels, wider than the bars.
+  rows.forEach((r, i) => {
+    g += `<rect x="${padL + slot * i}" y="${padT}" width="${slot}" height="${hA + gapP + hB}" fill="transparent" data-i="${i}"/>`;
+  });
+  const every = Math.ceil(rows.length / 8);
+  rows.forEach((r, i) => {
+    if (i % every) return;
+    g += `<text class="tick" x="${x(i) + bw / 2}" y="${H - 6}" text-anchor="middle">${label(r.t)}</text>`;
+  });
+
+  $("#traffic").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Messages and game sessions over time">${g}</svg>`;
+  const svg = $("#traffic svg");
+  svg.addEventListener("mousemove", (e) => {
+    const t = e.target.closest("[data-i]");
+    if (!t) return hideTip();
+    const r = rows[+t.dataset.i];
+    showTip(e, `<div class="t">${label(r.t)}</div>
+      <div class="r"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--s1)"></i> ${fmt(r.msg)} messages</div>
+      <div class="r"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--s2)"></i> ${fmt(r.game)} game sessions</div>`);
+  });
+  svg.addEventListener("mouseleave", hideTip);
+
+  $("#trafficTable").innerHTML = `<table><thead><tr><th>Bucket</th><th>Messages</th><th>Game sessions</th><th>Points</th></tr></thead>
+    <tbody>${rows.filter((r) => r.msg || r.game || r.points).reverse()
+      .map((r) => `<tr><td>${label(r.t)}</td><td>${fmt(r.msg)}</td><td>${fmt(r.game)}</td><td>${fmt(r.points)}</td></tr>`).join("")
+      || `<tr><td colspan="4" class="empty">Nothing recorded in this window yet.</td></tr>`}</tbody></table>`;
+}
+
+function gamesChart(g) {
+  if (!g.rows.length) {
+    $("#games").innerHTML = `<div class="empty">No personal bests set in the last 30 days.</div>`;
+    return;
+  }
+  const max = Math.max(...g.rows.map((r) => r.n));
+  $("#games").innerHTML = g.rows.map((r) => `
+    <div style="display:flex;align-items:center;gap:10px;margin:7px 0">
+      <div style="width:76px;font-size:12.5px;color:var(--ink-2);text-transform:capitalize">${r.game}</div>
+      <div style="flex:1;height:14px;background:transparent">
+        <div style="width:${Math.max(2, (r.n / max) * 100)}%;height:14px;background:var(--s2);border-radius:0 4px 4px 0"></div>
+      </div>
+      <div style="width:28px;text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px">${r.n}</div>
+    </div>`).join("");
+}
+
+function devicesTable(d) {
+  if (!d.rows.length) {
+    $("#devices").innerHTML = `<div class="empty">No devices have reported yet.</div>`;
+    return;
+  }
+  const ago = (ms) => {
+    const s = (Date.now() - ms) / 1000;
+    if (s < 90) return "just now";
+    if (s < 5400) return Math.round(s / 60) + "m ago";
+    if (s < 172800) return Math.round(s / 3600) + "h ago";
+    return Math.round(s / 86400) + "d ago";
+  };
+  const smax = Math.max(1, ...d.rows.flatMap((r) => r.spark));
+  const CAP = 12;
+  const shown = d.rows.slice(0, CAP);
+  $("#devices").innerHTML = `<table>
+    <thead><tr><th>Device</th><th>Last seen</th><th>Messages, 7d</th><th>Msgs</th><th>Check-ins</th></tr></thead>
+    <tbody>${shown.map((r) => `<tr>
+      <td class="dev">${r.dev}</td>
+      <td><span class="state"><span class="dot" style="background:${Date.now() - r.lastSeen < 9e5 ? "var(--good)" : "var(--muted)"}"></span>${ago(r.lastSeen)}</span></td>
+      <td><span class="srow">${r.spark.map((v) => `<i style="height:${Math.max(1, (v / smax) * 18)}px"></i>`).join("")}</span></td>
+      <td>${fmt(r.msgs7d)}</td>
+      <td title="broker connections, de-duplicated to one a minute">${fmt(r.conns7d)}</td>
+    </tr>`).join("")}</tbody></table>
+    ${d.rows.length > CAP ? `<div class="empty" style="padding:10px 2px 2px">${d.rows.length - CAP} quieter devices not shown — busiest first.</div>` : ""}`;
+}
+
+// One quantity split into parts, so one hue in ordinal steps rather than three
+// competing colours. Directly labelled, which is also what keeps the lighter
+// steps legible against the surface.
+function kindsStrip(k) {
+  const card = $("#kindsCard");
+  const total = k.rows.reduce((a, r) => a + r.n, 0);
+  if (!total) { card.hidden = true; return; }
+  card.hidden = false;
+  const vars = ["var(--m1)", "var(--m2)", "var(--m3)", "var(--muted)"];
+  $("#kinds").innerHTML = `
+    <div style="display:flex;gap:2px;height:16px;margin:4px 0 10px;border-radius:4px;overflow:hidden">
+      ${k.rows.map((r, i) => `<div title="${r.kind}" style="width:${(r.n / total) * 100}%;background:${vars[Math.min(i, 3)]}"></div>`).join("")}
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2)">
+      ${k.rows.map((r, i) => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:-1px;margin-right:5px;background:${vars[Math.min(i, 3)]}"></i>
+        <span style="text-transform:capitalize">${r.kind}</span>
+        <b style="color:var(--ink);font-variant-numeric:tabular-nums">${fmt(r.n)}</b>
+        <span style="color:var(--muted)">${Math.round((r.n / total) * 100)}%</span></span>`).join("")}
+    </div>`;
+}
+
+function draw() {
+  if (state.overview) tiles(state.overview);
+  if (state.kinds) kindsStrip(state.kinds);
+  if (state.series) traffic(state.series);
+  if (state.games) gamesChart(state.games);
+  if (state.devices) devicesTable(state.devices);
+}
+
+$("#ranges").addEventListener("click", (e) => {
+  const b = e.target.closest(".pill");
+  if (!b) return;
+  state.range = b.dataset.r;
+  [...$("#ranges").children].forEach((c) => c.setAttribute("aria-pressed", c === b));
+  refresh();
+});
+$("#tabletoggle").onclick = () => {
+  const t = $("#trafficTable");
+  t.hidden = !t.hidden;
+  $("#tabletoggle").textContent = t.hidden ? "Show numbers" : "Hide numbers";
+};
+
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+[Unit]
+Description=Dot Dash activity logger (metadata only)
+After=network-online.target mosquitto.service
+Wants=network-online.target
+# Deliberately NOT Requires= or BindsTo= the bridge. That process holds the push
+# subscription and serves the /c/ chats; nothing here may ever be a reason for it
+# to stop, restart, or wait.
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/dotdash_stats
+EnvironmentFile=/root/dotdash_stats/stats.env
+ExecStart=/usr/bin/node /root/dotdash_stats/stats.mjs
+Restart=always
+RestartSec=10
+
+# The box has 961 MB and one CPU, with the bridge, enroll, sms, voice, giveaway,
+# postgres and mosquitto already on it. This is the least important process on
+# the machine, and it is configured to be the first one the kernel kills: a
+# dashboard must never be why a message fails to deliver.
+MemoryMax=100M
+OOMScoreAdjust=500
+Nice=10
+CPUWeight=20
+
+# It reads a broker and writes its own data directory. Nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/root/dotdash_stats/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

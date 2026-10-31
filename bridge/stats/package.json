@@ -1,0 +1,10 @@
+{
+  "name": "dotdash-stats",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Metadata-only activity logger and private dashboard for the Dot Dash network",
+  "main": "stats.mjs",
+  "scripts": { "start": "node stats.mjs" },
+  "dependencies": { "mqtt": "^5.15.2" }
+}
