@@ -2085,14 +2085,6 @@ return (
       new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('timed out'), { code })), ms)),
     ]);
 
-    // EXPERIMENTAL Bluetooth setup. Compiled in only by `npm run ios:sync:ble`
-    // (VITE_BLE_SETUP=1); otherwise the condition is a build-time constant false
-    // and the bleSetup module is never even bundled.
-    const BLE_SETUP_BUILD = import.meta.env.VITE_BLE_SETUP === '1';
-    const loadBle = import.meta.env.VITE_BLE_SETUP === '1'
-      ? () => import('./bleSetup.js')
-      : () => Promise.reject(new Error('BLE setup not built in'));
-
     const headerValue = (headers, name) => {
       const key = Object.keys(headers || {}).find((k) => k.toLowerCase() === name);
       return key ? String(headers[key]) : '';
@@ -2154,11 +2146,6 @@ return (
       const [trouble, setTrouble] = useState(false);
       const [showManual, setShowManual] = useState(false);
       const cancelled = useRef(false);
-      // Bluetooth path: the open session (a plain object, not a plugin), and the
-      // devices found when there was more than one to choose from.
-      const bleRef = useRef(null);
-      const viaBle = useRef(false);
-      const [bleDevices, setBleDevices] = useState([]);
       const onlineRef = useRef(isDeviceOnline);
       onlineRef.current = isDeviceOnline;
 
@@ -2169,7 +2156,6 @@ return (
         return () => {
           wifiSetupRunning.active = false;
           cancelled.current = true;
-          if (bleRef.current) { bleRef.current.close(); bleRef.current = null; }
           DeviceWifi.leave({ ssid: SETUP_SSID }).catch(() => {});
         };
       }, []);
@@ -2179,84 +2165,7 @@ return (
         if (backTo === 'INTRO') setTrouble(true);
       };
 
-      // ---- Bluetooth first (experimental, ios:sync:ble builds only) ----------
-      // Looks for a Dot Dash in setup mode for ~8 s. Anything that goes wrong
-      // before a device is chosen falls back to the Wi-Fi flow below, untouched.
-      const begin = async () => {
-        if (!BLE_SETUP_BUILD || !isNativeApp()) return joinAndScan();
-        setError(''); setErrorDetail(''); setPhase('WORKING'); setStatus('Looking for your Dot Dash over Bluetooth…');
-        let chosen = [];
-        try {
-          const ble = await loadBle();
-          const found = await ble.scanForDevices({ ms: 8000, stopEarlyFor: isNew ? '' : expectedCode });
-          chosen = ble.chooseDevices(found, isNew ? '' : expectedCode);
-        } catch (e) { chosen = []; }
-        if (cancelled.current) return;
-        if (!chosen.length) return joinAndScan();
-        viaBle.current = true;
-        if (chosen.length > 1) { setBleDevices(chosen); setPhase('BLE_PICK'); return; }
-        return bleOpen(chosen[0]);
-      };
-
-      const bleOpen = async (dev) => {
-        setError(''); setErrorDetail(''); setPhase('WORKING'); setStatus('Connecting to your Dot Dash over Bluetooth…');
-        try {
-          const ble = await loadBle();
-          if (bleRef.current) { await bleRef.current.close(); bleRef.current = null; }
-          const session = new ble.BleSession(dev.deviceId);
-          bleRef.current = session;
-          await session.open();
-          const hello = await session.hello(() => { if (!cancelled.current) setStatus('Press ENTER on your Dot Dash to allow this.'); });
-          if (cancelled.current) return;
-          if (!isNew && expectedCode && hello.code !== expectedCode) throw Object.assign(new Error('wrong device'), { code: 'WRONG_DEVICE' });
-          codeRef.current = hello.code;
-          setStatus('Finding Wi-Fi networks your Dot Dash can see…');
-          const nets = await session.scanNetworks();
-          if (cancelled.current) return;
-          const names = nets.map((n) => n.ssid);
-          setNetworks(names);
-          if (presetSsid) setSsid(names.includes(presetSsid) ? presetSsid : '__other__');
-          else setSsid(names[0] || '__other__');
-          setPhase('CHOOSE');
-        } catch (e) {
-          if (cancelled.current) return;
-          const code = e?.code || '';
-          const detail = [code, e?.message].filter(Boolean).join(' — ');
-          if (bleRef.current) { bleRef.current.close(); bleRef.current = null; }
-          if (code === 'DECLINED') return fail('INTRO', 'The setup was declined on your Dot Dash. Tap Next to try again, then press ENTER on it to allow.', detail);
-          if (code === 'WRONG_DEVICE') return fail('INTRO', `That looks like a different Dot Dash. Make sure you’re setting up ${childName ? `${childName}’s` : 'the right'} Dot Dash.`, detail);
-          if (code === 'TIMEOUT') return fail('INTRO', 'Your Dot Dash didn’t answer over Bluetooth. If it asked, press ENTER on it to allow this, then try again.', detail);
-          fail('INTRO', 'Lost the Bluetooth connection to your Dot Dash. Check it still says WI-FI SETUP, then try again.', detail);
-        }
-      };
-
-      const bleConnect = async (chosen) => {
-        const session = bleRef.current;
-        if (!session) return fail('INTRO', 'Lost the Bluetooth connection to your Dot Dash. Tap Next to try again.');
-        setError(''); setPhase('WORKING'); setStatus(`Connecting your Dot Dash to ${chosen}…`);
-        try {
-          const r = await session.join(chosen, pass);
-          if (cancelled.current) return;
-          if (!r.ok) {
-            if (r.reason === 'NOT_FOUND') return fail('CHOOSE', `Your Dot Dash couldn’t find “${chosen}”. Check the name, and that the network is in range of the device (2.4GHz only).`);
-            if (r.reason === 'REJECTED') return fail('CHOOSE', `“${chosen}” didn’t accept that password. Check it and try again.`);
-            return fail('CHOOSE', `Your Dot Dash couldn’t join “${chosen}” in time. Check the password and that it’s in range, then try again.`);
-          }
-          setStatus('Saving…');
-          // Timezone only for a new device; an empty one tells it to keep its own.
-          await session.save(chosen, pass, isNew ? tz : '');
-        } catch (e) {
-          if (cancelled.current) return;
-          if (e?.code === 'NOT_CONNECTED') return fail('CHOOSE', `Your Dot Dash dropped off “${chosen}” before it could save it. Check the password and try again.`);
-          if (bleRef.current) { bleRef.current.close(); bleRef.current = null; }
-          return fail('INTRO', 'Lost the Bluetooth connection to your Dot Dash. Check it still says WI-FI SETUP, then tap Next to try again.', [e?.code, e?.message].filter(Boolean).join(' — '));
-        }
-        if (bleRef.current) { bleRef.current.close(); bleRef.current = null; }
-        await comeHome();
-      };
-
       const joinAndScan = async () => {
-        viaBle.current = false;
         setError(''); setErrorDetail(''); setPhase('WORKING'); setStatus('Joining your Dot Dash’s network…');
         try {
           await withTimeout(DeviceWifi.join({ ssid: SETUP_SSID }), 25000, 'JOIN_TIMEOUT');
@@ -2321,7 +2230,6 @@ return (
       const connect = async () => {
         const chosen = ssid === '__other__' ? manualSsid.trim() : ssid;
         if (!chosen) return setError('Choose a network, or type its name.');
-        if (viaBle.current) return bleConnect(chosen);
         setError(''); setPhase('WORKING'); setStatus(`Connecting your Dot Dash to ${chosen}…`);
 
         const http = CapacitorHttp;
@@ -2380,7 +2288,7 @@ return (
 
       const comeHome = async () => {
         setError(''); setPhase('WORKING'); setStatus('Reconnecting your phone to your home internet…');
-        if (!viaBle.current) { try { await DeviceWifi.leave({ ssid: SETUP_SSID }); } catch (e) {} }
+        try { await DeviceWifi.leave({ ssid: SETUP_SSID }); } catch (e) {}
         for (let i = 0; i < 45 && !cancelled.current && !(mqttClient && mqttClient.connected); i++) await pause(1000);
 
         // A new device on firmware too old to report its code cannot be pinged,
@@ -2457,7 +2365,7 @@ return (
                   )}
                 </div>
               )}
-              <button onClick={begin} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4">{trouble ? 'Try again' : 'Next'}</button>
+              <button onClick={joinAndScan} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4">{trouble ? 'Try again' : 'Next'}</button>
               <p className="text-xs text-gray-400 leading-relaxed text-center">
                 Your phone will briefly join your Dot Dash’s own network. iOS asks first — tap <strong>Join</strong>, and <strong>Allow</strong> if it asks about devices on your local network. If a Dot Dash setup page opens on top, tap <strong>Cancel</strong> — setup carries on here.
               </p>
@@ -2472,21 +2380,6 @@ return (
               <Activity className="w-12 h-12 text-blue-500 animate-pulse" />
               <p className="text-gray-700 font-bold">{status}</p>
             </div>
-          )}
-
-          {phase === 'BLE_PICK' && (
-            <>
-              <h2 className="text-2xl font-bold text-center">Which Dot Dash?</h2>
-              <p className="text-gray-500 text-center">More than one Dot Dash is in setup mode nearby. Pick the one whose code is on its screen.</p>
-              <div className="bg-gray-50 border border-gray-200 rounded-xl divide-y divide-gray-200">
-                {bleDevices.map((d) => (
-                  <button key={d.code} onClick={() => bleOpen(d)} className="w-full flex items-center justify-between px-4 py-3 text-left">
-                    <span className="font-bold text-gray-800 font-mono">{d.code}</span>
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => { viaBle.current = false; joinAndScan(); }} className="w-full text-blue-500 text-sm font-bold py-2">Use Wi-Fi instead</button>
-            </>
           )}
 
           {phase === 'CHOOSE' && (

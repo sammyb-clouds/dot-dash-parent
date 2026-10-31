@@ -31,8 +31,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Dot Dash uses Bluetooth to set up your device’s Wi-Fi.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Dot Dash uses your local network to set up your device’s Wi-Fi from the app.</string>
 	<key>UIApplicationSceneManifest</key>
