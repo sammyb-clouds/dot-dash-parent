@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "deploy:test": "npm run build:links && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
     "ios:sync": "npm run build:links && npx cap sync ios",
+    "ios:sync:ble": "VITE_BLE_SETUP=1 npm run build:links && npx cap sync ios",
     "ios:open": "npx cap open ios",
     "deploy:prod": "npm run build:links && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/index.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
     "build:phones": "VITE_PHONE_CONTACTS=1 VITE_LINK_CONTACTS=1 vite build",
@@ -26,6 +27,7 @@
     "vite-plugin-singlefile": "^2.3.3"
   },
   "dependencies": {
+    "@capacitor-community/bluetooth-le": "^8.3.0",
     "@capacitor-firebase/messaging": "^7.3.0",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.2",
