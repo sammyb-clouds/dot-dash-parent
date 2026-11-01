@@ -637,7 +637,7 @@ import { isVoicePayload } from './walkieAudio.js';
     const SMS_ERRORS = {
       'invalid-number': "That doesn't look like a mobile number. Include the area code.",
       'invalid-name': 'Give them a name with at least two letters, like GRANDMA.',
-      'friends-full': 'A Dot Dash can hold 10 contacts. Remove one to add another.',
+      'friends-full': 'This Dot Dash is full. Remove a contact to add another.',
       'already-added': 'That number is already a contact on this Dot Dash.',
       'pool-exhausted': "We can't add that number to another device just yet. We've been told and are adding capacity. Try again in a day or two.",
       'slow-down': 'Too many phone numbers added today. Try again tomorrow.',
@@ -693,10 +693,20 @@ import { isVoicePayload } from './walkieAudio.js';
       finally { brokerAccess.inFlight = null; }
     }
 
-    // What the device firmware holds (friendList[10], phrases[20] in every line).
-    // Past these the device silently drops the END of the list -- and new entries
-    // go at the top -- so the app refuses rather than let one fall off.
-    const MAX_FRIENDS = 10;
+    // What the device firmware holds. Past these the device silently drops the
+    // END of the list -- and new entries go at the top -- so the overflow is an
+    // OLD contact vanishing, which nobody thinks to go looking for. The app
+    // refuses rather than let one fall off.
+    //
+    // Contacts are no longer one number for the whole fleet: firmware from
+    // 2026-11-01 holds 20 and says so, retained, on
+    // doorbell/monitor/<hash>/contacts. Ask the device rather than reading its
+    // version -- the walkie runs its own version track, so the same number means
+    // different builds on different lines. A device that publishes nothing is a
+    // device on the old firmware, which held ten.
+    const CONTACTS_FLOOR = 10;
+    const contactLimitFor = (dev, reported = {}) =>
+      (dev && reported[dev.id]) || CONTACTS_FLOOR;
     const MAX_PHRASES = 20;
 
     // Text the device can actually carry over the wire.
@@ -953,6 +963,7 @@ import { isVoicePayload } from './walkieAudio.js';
       const [deviceTypewriter, setDeviceTypewriter] = useState({});
       // What each device reports it is running: { version, line, build }.
       const [deviceFirmware, setDeviceFirmware] = useState({});
+      const [deviceContacts, setDeviceContacts] = useState({});
       
       const isAppActiveRef = useRef(true); 
       
@@ -1307,6 +1318,14 @@ import { isVoicePayload } from './walkieAudio.js';
             if (topicParts[3] === 'fw') {
               const [tag, version, line, ...rest] = payload.split(',');
               if (tag === 'FW') setDeviceFirmware(prev => ({ ...prev, [sourceChildMac]: { version, line, build: rest.join(',') } }));
+              return; // retained and device-owned; do not auto-clear
+            }
+
+            // The device reporting how many contacts it holds: CONTACTS,<n>.
+            if (topicParts[3] === 'contacts') {
+              const [tag, n] = payload.split(',');
+              const v = parseInt(n, 10);
+              if (tag === 'CONTACTS' && v > 0) setDeviceContacts(prev => ({ ...prev, [sourceChildMac]: v }));
               return; // retained and device-owned; do not auto-clear
             }
 
@@ -1843,10 +1862,10 @@ import { isVoicePayload } from './walkieAudio.js';
           <div className="flex-1 flex flex-col px-4 overflow-hidden" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
             
             {activeTab === 'chat' && <ChatView unreadByChild={unreadByChild} mqttClient={mqttClient} messages={messages} setMessages={setMessages} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} childOnlineStatus={childOnlineStatus} activeChildLabel={activeChildLabel} user={user} deviceVoice={deviceVoice} />}
-            {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} />}
+            {activeTab === 'monitor' && <MonitorView monitorMessages={monitorMessages} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeChildLabel={activeChildLabel} pendingApprovals={pendingApprovals} setPendingApprovals={setPendingApprovals} mqttClient={mqttClient} lowBattery={lowBattery} pendingFriendReqs={pendingFriendReqs} setPendingFriendReqs={setPendingFriendReqs} user={user} parentProfile={parentProfile} deviceContacts={deviceContacts} />}
             {activeTab === 'tutorials' && <div className="h-full overflow-y-auto pb-4"><TutorialsView /></div>}
             {activeTab === 'settings' && <div className="h-full overflow-y-auto pb-4">
-               <SettingsView onContactMode={onContactMode} user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} devicePoints={devicePoints} deviceArcadeRules={deviceArcadeRules} deviceSeen={deviceSeen} deviceFinding={deviceFinding} setDeviceFinding={setDeviceFinding} findAsked={findAsked} setFindAsked={setFindAsked} />
+               <SettingsView onContactMode={onContactMode} user={user} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} activeDevice={activeDevice} mqttClient={mqttClient} appId={appId} startAddDeviceFlow={() => setIsWizardActive(true)} childOnlineStatus={childOnlineStatus} deviceWifi={deviceWifi} deviceArcade={deviceArcade} deviceTypewriter={deviceTypewriter} deviceFirmware={deviceFirmware} deviceContacts={deviceContacts} devicePoints={devicePoints} deviceArcadeRules={deviceArcadeRules} deviceSeen={deviceSeen} deviceFinding={deviceFinding} setDeviceFinding={setDeviceFinding} findAsked={findAsked} setFindAsked={setFindAsked} />
             </div>}
           </div>
 
@@ -2784,7 +2803,7 @@ return (
     // ==============================================
     //           SETTINGS & DEVICE MANAGEMENT
     // ==============================================
-    function SettingsView({ onContactMode = null, user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, devicePoints = {}, deviceArcadeRules = {}, deviceSeen = {}, deviceFinding = {}, setDeviceFinding = () => {}, findAsked = {}, setFindAsked = () => {} }) {
+    function SettingsView({ onContactMode = null, user, parentProfile, devices, activeChildId, setActiveChildId, activeDevice, mqttClient, appId, startAddDeviceFlow, childOnlineStatus, deviceWifi, deviceArcade = {}, deviceTypewriter = {}, deviceFirmware = {}, deviceContacts = {}, devicePoints = {}, deviceArcadeRules = {}, deviceSeen = {}, deviceFinding = {}, setDeviceFinding = () => {}, findAsked = {}, setFindAsked = () => {} }) {
        const [unlinkMode, setUnlinkMode] = useState(false);
        // A device that cannot be switched on: replace it (same child ID, carried
        // over) or release it without the on-screen code Unlink asks for.
@@ -2925,6 +2944,8 @@ return (
 
        // ---------- BETA FIRMWARE ----------
        const firmware = activeDevice ? deviceFirmware[activeDevice.id] : undefined;
+       // What THIS Dot Dash says it holds, not what the fleet holds.
+       const contactLimit = contactLimitFor(activeDevice, deviceContacts);
        const handleBetaUpdate = () => {
          if (!activeDevice || !mqttClient) return;
          const name = displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`);
@@ -3533,7 +3554,7 @@ return (
          const fId = newFriendId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
          const current = friendsInOrder(activeDevice, parentProfile.virtualId);
          if (!current.includes(fId)) {
-             if (current.length >= MAX_FRIENDS) return alert(`A Dot Dash can hold ${MAX_FRIENDS} contacts. Remove one to add another.`);
+             if (current.length >= contactLimit) return alert(`This Dot Dash holds ${contactLimit} contacts. Remove one to add another.`);
              await saveFriends([fId, ...current]);        // newest at the top
          }
          setNewFriendId('');
@@ -3588,7 +3609,7 @@ return (
 
        const handleAddPhone = async () => {
          const current = friendsInOrder(activeDevice, parentProfile.virtualId);
-         if (current.length >= MAX_FRIENDS) return setPhoneForm(f => ({ ...f, error: SMS_ERRORS['friends-full'] }));
+         if (current.length >= contactLimit) return setPhoneForm(f => ({ ...f, error: `This Dot Dash holds ${contactLimit} contacts. Remove one to add another.` }));
          setPhoneForm(f => ({ ...f, busy: true, error: '' }));
          const r = await smsApi(user, 'POST', '', { deviceId: activeDevice.id, phone: phoneForm.phone, contactName: phoneForm.name });
          if (!r.ok) return setPhoneForm(f => ({ ...f, busy: false, error: smsError(r) }));
@@ -3633,7 +3654,7 @@ return (
 
        const handleAddLink = async () => {
          const current = friendsInOrder(activeDevice, parentProfile.virtualId);
-         if (current.length >= MAX_FRIENDS) return setLinkForm(f => ({ ...f, error: SMS_ERRORS['friends-full'] }));
+         if (current.length >= contactLimit) return setLinkForm(f => ({ ...f, error: `This Dot Dash holds ${contactLimit} contacts. Remove one to add another.` }));
          setLinkForm(f => ({ ...f, busy: true, error: '' }));
          const r = await smsApi(user, 'POST', '', { deviceId: activeDevice.id, contactName: linkForm.name, channel: 'web' });
          if (!r.ok) return setLinkForm(f => ({ ...f, busy: false, error: smsError(r) }));
@@ -4617,7 +4638,7 @@ return (
       );
     }
 
-    function MonitorView({ monitorMessages, devices, activeChildId, setActiveChildId, activeChildLabel, pendingApprovals = [], setPendingApprovals, mqttClient, lowBattery = {}, pendingFriendReqs = [], setPendingFriendReqs, user, parentProfile }) {
+    function MonitorView({ monitorMessages, devices, activeChildId, setActiveChildId, activeChildLabel, pendingApprovals = [], setPendingApprovals, mqttClient, lowBattery = {}, pendingFriendReqs = [], setPendingFriendReqs, user, parentProfile, deviceContacts = {} }) {
       const activeMonitorMsgs = monitorMessages.filter(m => m.childMac === activeChildId && !isGameTraffic(m.type)).sort((a, b) => b.id - a.id);
 
       // Entries from the database carry the recipient's HASH -- that is what
@@ -4674,9 +4695,10 @@ return (
             // write and the device push.
             const current = friendsInOrder(dev, parentProfile?.virtualId);
             if (!current.includes(req.strangerId)) {
-              if (current.length >= MAX_FRIENDS) {
+              const limit = contactLimitFor(dev, deviceContacts);
+              if (current.length >= limit) {
                 // Left unanswered on purpose, so it can be approved after a removal.
-                alert(`${displayName(`${dev.identity.name}${dev.identity.pin}`)} already has ${MAX_FRIENDS} contacts, the most a Dot Dash holds. Remove one in Settings, then approve this request.`);
+                alert(`${displayName(`${dev.identity.name}${dev.identity.pin}`)} already has ${limit} contacts, the most that Dot Dash holds. Remove one in Settings, then approve this request.`);
                 return;
               }
               const updatedFriends = [req.strangerId, ...current];
