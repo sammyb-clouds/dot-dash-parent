@@ -318,6 +318,7 @@ function devicesTable(d) {
     return;
   }
   const ago = (ms) => {
+    if (!ms) return "not yet";   // known from a retained value, never heard live
     const s = (Date.now() - ms) / 1000;
     if (s < 90) return "just now";
     if (s < 5400) return Math.round(s / 60) + "m ago";

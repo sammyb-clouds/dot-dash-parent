@@ -160,7 +160,7 @@ client.on("message", async (topic, payload, packet) => {
         if (c.t === "presence") {
             const online = control.startsWith("ONLINE");
             const now = Date.now();
-            const changed = store.markPresence(c.dev, online, now);
+            const changed = store.markPresence(c.dev, online, now, retained);
             // A retained presence value is the broker telling us the state, not a
             // device changing it. Seed silently.
             if (!changed || retained) return;

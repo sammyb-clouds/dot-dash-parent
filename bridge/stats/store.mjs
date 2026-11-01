@@ -90,18 +90,28 @@ export class Store {
     // is how long a device was up, which only exists as the gap between two
     // transitions. `firstSeen` is kept so a device that has never been offline
     // still has a denominator.
-    markPresence(dev, online, ts) {
+    // `seed` marks a retained value: the broker replaying the last state it
+    // holds, not a device speaking now. Those values are often stale by months,
+    // because these boards disconnect gracefully and the will never fires, so a
+    // retained "ONLINE" outlives the session that set it.
+    //
+    // A seed therefore moves neither `lastSeen` nor the uptime ledger. Letting
+    // it would have made the headline tile -- seen in the last fifteen minutes
+    // -- report the entire fleet for fifteen minutes after every restart, which
+    // is the exact dishonesty that tile exists to avoid.
+    markPresence(dev, online, ts, seed = false) {
         const cur = this.presence.get(dev);
-        if (cur && cur.state === (online ? "on" : "off")) { cur.lastSeen = ts; this.dirty = true; return false; }
-        if (cur && cur.state === "on") this.#creditUptime(dev, cur.since, ts);
+        const heard = seed ? (cur?.lastSeen ?? 0) : ts;
+        if (cur && cur.state === (online ? "on" : "off")) { cur.lastSeen = heard; this.dirty = true; return false; }
+        if (cur && cur.state === "on" && !seed) this.#creditUptime(dev, cur.since, ts);
         this.presence.set(dev, {
             state: online ? "on" : "off",
             since: ts,
-            lastSeen: ts,
+            lastSeen: heard,
             firstSeen: cur?.firstSeen ?? ts,
         });
         this.dirty = true;
-        return true;   // a real transition, worth an event row
+        return !seed;   // a real transition, worth an event row
     }
 
     // Split an online stretch across the days it spans, so a device left on

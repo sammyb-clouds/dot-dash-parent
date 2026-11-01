@@ -25,10 +25,15 @@ Nice=10
 CPUWeight=20
 
 # It reads a broker and writes its own data directory. Nothing else.
+# ProtectSystem=strict makes the whole hierarchy read-only, /root included, and
+# ReadWritePaths punches the one hole this needs.
+#
+# No ProtectHome=: it mounts an empty tmpfs over /root, and this service -- like
+# the bridge, enroll, sms and voice -- is installed there, so the unit died at
+# 200/CHDIR before node ever ran. ProtectSystem=strict already covers /root.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
 ReadWritePaths=/root/dotdash_stats/data
 ProtectKernelTunables=true
 ProtectControlGroups=true
