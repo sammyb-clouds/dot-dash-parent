@@ -4584,6 +4584,7 @@ return (
                 <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.isMe ? 'bg-blue-500 text-white' : 'bg-white text-black shadow-sm border border-gray-100'}`}>
                   {msg.type === 'PULSE' && <Volume2 className="inline mr-2 w-5 h-5" />}
                   {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
+                  {msg.type === 'VNOTE' && <span><Volume2 className="inline mr-2 w-5 h-5" />Voice note</span>}
                 </div>
                 <span className="text-xs text-gray-400 mt-1 px-1">{msg.timestamp}</span>
               </div>
@@ -4861,6 +4862,9 @@ return (
                   <div className={`p-3 rounded-xl text-black ${isOutgoing ? 'bg-indigo-50' : 'bg-green-50'}`}>
                     {msg.type === 'PULSE' && <div className="flex items-center text-gray-500"><Volume2 className="w-4 h-4 mr-2" /> Buzz / Notification</div>}
                     {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
+                    {/* A walkie voice note (walkie repo VoiceNote.ino). msg.text is the
+                        note's id on the server; the app cannot play it yet. */}
+                    {msg.type === 'VNOTE' && <div className="flex items-center text-gray-500"><Volume2 className="w-4 h-4 mr-2" /> Voice note</div>}
                   </div>
                 </div>
               );
