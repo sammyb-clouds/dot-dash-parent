@@ -81,3 +81,45 @@ In the hero the window is 385 px wide, which makes one device pixel 2.81 px.
 The window's corners are fitted to subpixel accuracy (max residual 0.72 px)
 and the type follows the 0.7-degree tilt of the real screen rather than
 sitting square to the frame.
+
+## build.py -> site/media/device.gif
+
+The animated hero: the same photograph with the screen playing HELLO out as
+Morse and the LED keyed to the marks. 960x657, 37 frames, a 7.5s loop with a
+2.1s rest on the finished word, 471 KB.
+
+```
+sips -Z 960 big.png --out base960.png
+python3 build.py "DOT DASH" 180        # sender, end-hold in 1/100s
+```
+
+**Nothing here is timed or drawn by eye either.** The sequence is the
+firmware's `STATE_PLAY_MORSE` (`dot_dash_7_3.ino:1600`): dot 100 ms, dash
+300 ms, 100 ms between marks, 300 ms between letters -- and
+`digitalWrite(LED_PIN, HIGH)` sits on the same line as `tone(BUZZER_PIN, 700)`,
+so the LED sync is simply what the device does. The marks are
+`drawMorseSymbols()` (`Helpers.ino:122`): a dot is `fillCircle(sx+2, 4, 2)`,
+which rasterises to a 5x5, a dash is `fillRect(sx, 3, 9, 3)`, origin x=62,
+advancing 8 and 13. Checked against the reference video: at 3.33s the firmware
+says *one dot, "HEL"*, the frame shows that, and the dot lands within 3 px of
+where the geometry puts it.
+
+Every event falls on a 100 ms boundary, so the 10fps grid loses nothing.
+
+`gifout.py` is a GIF89a writer -- median-cut palette, a 5-bit-per-channel
+nearest-colour table so indexing a frame is a lookup, and LZW. Only the first
+frame is the whole picture; the rest are the changed rectangle with unchanged
+pixels transparent under disposal method 1, which is why 37 frames of a
+photograph cost 471 KB rather than ten times that.
+
+**One trap worth recording.** The LZW code size must widen the way
+`compress(1)` does it: write the code at the CURRENT size, *then* widen if the
+next table slot no longer fits. The obvious-looking `if nxt == 1<<size` right
+after the table insert widens one code early, desynchronises the decoder at
+code 255, and the image renders blank with no error anywhere.
+
+Verify a build by decoding it back rather than trusting the encoder:
+
+```
+swiftc -O -o readgif readgif.swift && ./readgif ../site/media/device.gif
+```

@@ -65,12 +65,16 @@
     both themes, showing the real main menu). They are gone: the screen
     gallery section went with the 2026-11-05 edit. /faq still has them, so the
     treatment lives there now.
-  - MOTION: there is none, and that is the point. No scroll-jacking, no
+  - MOTION: the hero moves, and nothing else does. No scroll-jacking, no
     parallax, no autoplaying video, no popups -- the pitch is calm technology
     and a restless page would contradict it in the first three seconds. The
-    hero screen that used to sit here was briefly animated (the Morse playing
-    out letter by letter, the way the device does); it was dropped, and then
-    the screen itself was replaced by the photograph.
+    hero was static from 2026-11-04 to 2026-11-05 for exactly that reason, and
+    the argument has not gone away; what changed is that the motion is now the
+    DEVICE DOING ITS ONE JOB -- a message playing out as Morse, letter by
+    letter, at the firmware's real speed -- rather than decoration. It is a
+    7.5s loop with a 2.1s rest on the finished word. If this ever starts to
+    feel like a thing demanding attention, the still is one line away: delete
+    the <source> in the hero and /media/device.jpg takes over.
 
   Deployed by hand: scp site/* and legal/* to /var/www/dotdashdevice/
   (videos and posters to /var/www/dotdashdevice/media/).
@@ -261,13 +265,19 @@
     <h1>Dot Dash</h1>
     <p class="lede">A pocket messaging device that works in Morse code. Two buttons, one small screen, and only the people you have approved.</p>
 
-    <!-- The object itself, straight on. This took the place of a drawn 128x32
-         screen reading FROM MAYA0101 / HELLO; see the note at the top of the
-         file. It is the only <img> on the page. -->
+    <!-- The object itself, straight on, with the screen playing a message out
+         as Morse and the LED keyed to the marks. The <source> is the whole
+         accessibility story here: CSS cannot stop a GIF, so anyone who has
+         asked their system for less motion is served the STILL JPEG instead,
+         and never downloads the 471 KB animation. An older browser that does
+         not understand the query also falls through to the still. -->
     <figure class="shot">
-      <img src="/media/device.jpg" width="1600" height="1096"
-           alt="A Dot Dash seen from the front: a small white box with a round blue button on the left, a narrow black screen on the right, and a smile cut into the case between them. A green button and a green indicator light sit along the top edge."
-           fetchpriority="high" decoding="async">
+      <picture>
+        <source srcset="/media/device.gif" media="(prefers-reduced-motion: no-preference)">
+        <img src="/media/device.jpg" width="1600" height="1096"
+             alt="A Dot Dash seen from the front: a small white box with a round blue button on the left, a narrow black screen on the right, and a smile cut into the case between them. The screen reads DOT DASH over HELLO, and a green indicator light sits along the top edge."
+             fetchpriority="high" decoding="async">
+      </picture>
     </figure>
 
     <div class="cta">
