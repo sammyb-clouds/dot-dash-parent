@@ -198,7 +198,7 @@
   ul.plain li { margin:0 0 8px; }
   ul.plain li:last-child { margin-bottom:0; }
 
-  /* ---- Videos. Down the page, never autoplaying. ---- */
+  /* ---- Videos. Second on the page, never autoplaying. ---- */
   .videos { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,224px));
             justify-content:center; gap:20px; margin:6px 0 14px; }
   .videos figure { margin:0; }
@@ -291,6 +291,24 @@
     <p>There is nothing to scroll and nobody new to meet. A Dot Dash can reach up to twenty contacts, and every one of them is a contact you approved yourself.</p>
   </section>
 
+  <section id="watch">
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="7" y="4" width="2" height="16"/><rect x="9" y="5" width="2" height="14"/><rect x="11" y="6" width="2" height="12"/><rect x="13" y="7" width="2" height="10"/><rect x="15" y="8" width="2" height="8"/><rect x="17" y="9" width="2" height="6"/><rect x="19" y="10" width="2" height="4"/></svg>
+      <h2>See it working</h2>
+    </div>
+    <div class="videos">
+      <figure>
+        <video src="/media/clip-1.mp4" poster="/media/clip-1.jpg" controls playsinline preload="metadata"></video>
+        <figcaption><b>Dot Dash to Dot Dash</b>Tap out HELLO in Morse on one Dot Dash, and it arrives on another.</figcaption>
+      </figure>
+      <figure>
+        <video src="/media/clip-2.mp4" poster="/media/clip-2.jpg" controls playsinline preload="metadata"></video>
+        <figcaption><b>Dot Dash and the app</b>Send from the Dot Dash, read it in the Dot Dash app, and reply from your phone.</figcaption>
+      </figure>
+    </div>
+    <p class="note">These clips are served from this site rather than embedded from Instagram, so watching them loads no third-party scripts and sets no third-party cookies. More of them, including the ones that don't fit here: <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice</a>.</p>
+  </section>
+
   <section id="how">
     <div class="head">
       <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="2" y="4" width="20" height="1"/><rect x="2" y="5" width="2" height="1"/><rect x="20" y="5" width="2" height="1"/><rect x="2" y="6" width="3" height="1"/><rect x="19" y="6" width="3" height="1"/><rect x="2" y="7" width="1" height="12"/><rect x="4" y="7" width="2" height="1"/><rect x="18" y="7" width="2" height="1"/><rect x="21" y="7" width="1" height="12"/><rect x="5" y="8" width="2" height="1"/><rect x="17" y="8" width="2" height="1"/><rect x="6" y="9" width="2" height="1"/><rect x="16" y="9" width="2" height="1"/><rect x="7" y="10" width="2" height="1"/><rect x="15" y="10" width="2" height="1"/><rect x="8" y="11" width="2" height="1"/><rect x="14" y="11" width="2" height="1"/><rect x="9" y="12" width="2" height="1"/><rect x="13" y="12" width="2" height="1"/><rect x="10" y="13" width="4" height="1"/><rect x="11" y="14" width="2" height="1"/><rect x="2" y="19" width="20" height="1"/></svg>
@@ -325,24 +343,6 @@
       <li><b>Someone without a device can still reply.</b> A grandparent can be sent a private web link and message from any phone, with no app to install.</li>
       <li><b>Fifteen minutes to set up the first one.</b> Wi-Fi, an account, a six-character pairing code, and a call sign for the device. The <a href="/faq#setup">FAQ walks through all five steps</a>.</li>
     </ul>
-  </section>
-
-  <section id="watch">
-    <div class="head">
-      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="7" y="4" width="2" height="16"/><rect x="9" y="5" width="2" height="14"/><rect x="11" y="6" width="2" height="12"/><rect x="13" y="7" width="2" height="10"/><rect x="15" y="8" width="2" height="8"/><rect x="17" y="9" width="2" height="6"/><rect x="19" y="10" width="2" height="4"/></svg>
-      <h2>See it working</h2>
-    </div>
-    <div class="videos">
-      <figure>
-        <video src="/media/clip-1.mp4" poster="/media/clip-1.jpg" controls playsinline preload="metadata"></video>
-        <figcaption><b>Dot Dash to Dot Dash</b>Tap out HELLO in Morse on one Dot Dash, and it arrives on another.</figcaption>
-      </figure>
-      <figure>
-        <video src="/media/clip-2.mp4" poster="/media/clip-2.jpg" controls playsinline preload="metadata"></video>
-        <figcaption><b>Dot Dash and the app</b>Send from the Dot Dash, read it in the Dot Dash app, and reply from your phone.</figcaption>
-      </figure>
-    </div>
-    <p class="note">These clips are served from this site rather than embedded from Instagram, so watching them loads no third-party scripts and sets no third-party cookies. More of them, including the ones that don't fit here: <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice</a>.</p>
   </section>
 
   <section id="more">
