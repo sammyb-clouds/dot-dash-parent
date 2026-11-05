@@ -6,72 +6,361 @@
 <title>Dot Dash</title>
 <link rel="icon" href="/icon.png">
 <link rel="apple-touch-icon" href="/icon.png">
+<link rel="canonical" href="https://dotdashdevice.com/">
 <meta name="description" content="Dot Dash is a pocket Morse-code messaging device, with an app and a messaging service that connect it to the people you choose.">
+<meta property="og:title" content="Dot Dash">
+<meta property="og:description" content="A pocket messaging device that works in Morse code. Two buttons, one small screen, and only the people you have approved.">
+<meta property="og:url" content="https://dotdashdevice.com/">
+<meta property="og:image" content="https://dotdashdevice.com/icon-512.png">
+<meta property="og:type" content="website">
 <!--
   Public home page for https://dotdashdevice.com (hosted on the droplet since
-  2026-09-30, replacing the unconnected Wix site). Twilio's toll-free reviewers
-  read this page: keep the SMS section (with its consent statement), the
-  contact details and the policy links.
+  2026-09-30, replacing the unconnected Wix site).
+
+  ---- COMPLIANCE: DO NOT MOVE THE SMS SECTION OFF THIS URL ----
+  Twilio's toll-free reviewers read this page, and the opt-in proof submitted
+  with the verification (bridge/sms/opt-in/) names the bare apex -- "Program
+  details, Privacy Policy and Terms: dotdashdevice.com" -- as where the program
+  is described. That verification was rejected three times before it passed and
+  the number is live, so the SMS section, the consent statement, the contact
+  details and the policy links all stay ON THIS PAGE and their wording is not
+  tidied for rhythm. The 2026-11-04 redesign DEMOTED them (bottom of the page,
+  quiet styling) rather than moving them, deliberately, for this reason.
 
   Videos are SELF-HOSTED in /media rather than embedded from Instagram: an
   Instagram embed loads Meta's scripts and cookies, which the privacy policy
   says we don't use. A clip whose file is missing hides itself (script at the
   bottom); with none uploaded, the section shows just the Instagram link.
 
+  ---- DESIGN ----
+  Shares its whole system with /faq: same two self-hosted faces, same tokens,
+  same 24-unit pixel marks, same 128x32 screen treatment. Change one, change
+  both. The rules that are easy to break by accident:
+
+  - The accent is a UI colour, not a brand colour, and it is a PAIR. Every
+    device ships a different pair of button colours, so no single colour can
+    stand for the product; the page stays achromatic so it can be a background
+    for a device whose colour it does not know. #2563eb passes on light,
+    #93c5fd on dark. The old single #3b82f6 was 3.68:1 on white and failed AA.
+  - The HERO mark is not icon.png. It is the pixel redraw from brand/marks,
+    measured off a photograph of a finished unit: the eye is the white button
+    cap, the dash is the screen window as a true rectangle, and the smile is
+    centred on the frame (the engraving on the object sits right of centre,
+    which reads as a mistake at this size). Inline rather than an <img> so it
+    inherits currentColor and survives dark mode. It is a 48-unit grid, so it
+    is shown at 96px or 48px only. icon.png is still the favicon; icon-512.png
+    is still the og:image -- those want an opaque square, which is the lockup
+    rather than the mark.
+  - Marks are drawn on a 24-unit grid and shown at 24px or 48px ONLY -- the
+    sizes where one grid unit lands on whole device pixels at 1x, 2x and 3x.
+  - Screens are 128x32 at 4:1, white on black in BOTH themes, because that is
+    what the hardware does. The labels in them are real: INBOX, FRIENDS, TRAIN,
+    ARCADE, TIMER, TOOLS is the device's actual main menu, in its actual order.
+  - MOTION: there is none, and that is the point. No scroll-jacking, no
+    parallax, no autoplaying video, no popups -- the pitch is calm technology
+    and a restless page would contradict it in the first three seconds. The
+    hero screen was briefly animated (the Morse playing out letter by letter,
+    the way the device does); it was dropped because a page that argues for
+    nothing competing for a child's attention should not open with something
+    moving. If motion is ever reconsidered, the device screen is the ONLY
+    candidate, because it is the one thing that would be literally true.
+
   Deployed by hand: scp site/* and legal/* to /var/www/dotdashdevice/
   (videos and posters to /var/www/dotdashdevice/media/).
 -->
 <style>
-  :root { color-scheme: light dark; --bg:#f4f6fb; --card:#fff; --ink:#1f2937; --muted:#6b7280; --blue:#3b82f6; --rule:#e5e7eb; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f172a; --card:#1e293b; --ink:#e5e7eb; --muted:#94a3b8; --rule:#334155; } }
+  /* ---- Faces. Local on purpose, same two files /faq uses. ---- */
+  @font-face {
+    font-family:"Atkinson Hyperlegible Next"; font-style:normal;
+    font-weight:400 700;            /* one variable file covers the whole range */
+    font-display:swap;
+    src:url("/fonts/AtkinsonHyperlegibleNext-latin.woff2") format("woff2");
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,
+                  U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,
+                  U+2212,U+2215,U+FEFF,U+FFFD;
+  }
+  @font-face {
+    font-family:"Atkinson Hyperlegible Next"; font-style:normal;
+    font-weight:400 700; font-display:swap;
+    src:url("/fonts/AtkinsonHyperlegibleNext-latin-ext.woff2") format("woff2");
+    unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,
+                  U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+  }
+  @font-face {
+    font-family:"Departure Mono"; font-style:normal; font-weight:400;
+    font-display:swap;
+    src:url("/fonts/DepartureMono-Regular.woff2") format("woff2");
+  }
+
+  /* ---- Tokens. Identical to /faq; see the note above before editing. ---- */
+  :root {
+    color-scheme: light dark;
+    --bg:#f6f5f3; --card:#ffffff; --ink:#1b1a18; --muted:#55514b; --rule:#d8d3cb;
+    --accent:#2563eb;        /* 5.17:1 on white */
+    --accent-ink:#ffffff;    /* 5.17:1 on the accent fill */
+    --accent-soft:rgba(37,99,235,.16);
+    --screen-edge:#1b1a18;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#131211; --card:#1c1b19; --ink:#ecebe8; --muted:#a8a39b; --rule:#3a3733;
+      --accent:#93c5fd;      /* 8.11:1 on the dark card */
+      --accent-ink:#0b1220;
+      --accent-soft:rgba(147,197,253,.20);
+      --screen-edge:#494540;
+    }
+  }
+
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.6 -apple-system,"Helvetica Neue",Arial,sans-serif; }
-  main { max-width:860px; margin:0 auto; padding:48px 16px 40px; }
-  .hero { text-align:center; padding:12px 0 24px; }
-  .logo { display:block; width:132px; height:132px; margin:0 auto; border-radius:30px; box-shadow:0 2px 12px rgba(0,0,0,.10); }
-  h1 { font-size:40px; line-height:1.15; margin:8px 0 12px; }
-  .lede { font-size:20px; color:var(--muted); max-width:620px; margin:0 auto; }
-  .cta { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:20px; }
-  .cta a { text-decoration:none; font-weight:700; padding:11px 18px; border-radius:12px; }
-  .cta .primary { background:var(--blue); color:#fff; }
-  .cta .secondary { border:1px solid var(--rule); color:var(--ink); background:var(--card); }
-  section { background:var(--card); border-radius:20px; padding:26px 26px 20px; margin:18px 0; box-shadow:0 2px 10px rgba(0,0,0,.05); }
-  h2 { font-size:23px; margin:0 0 10px; }
-  p, li { margin:0 0 10px; }
-  ul { padding-left:22px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:6px; }
-  .grid div { border:1px solid var(--rule); border-radius:14px; padding:14px 16px; }
-  .grid b { display:block; margin-bottom:4px; }
-  .videos { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,300px)); justify-content:center; gap:20px; margin:8px 0 14px; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:400 17px/1.6 "Atkinson Hyperlegible Next",ui-sans-serif,-apple-system,"Helvetica Neue",Arial,sans-serif;
+         -webkit-text-size-adjust:100%; }
+  main { max-width:860px; margin:0 auto; padding:40px 16px 8px; }
+  a { color:var(--accent); }
+  .mono { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace; }
+
+  /* Skip link: this page is long and the first thing after the hero is the
+     explanation, which is what a screen-reader user is here for. */
+  .skip { position:absolute; left:-9999px; }
+  .skip:focus { left:16px; top:10px; z-index:9; background:var(--card); color:var(--ink);
+                border:1px solid var(--rule); border-radius:10px; padding:10px 14px; }
+
+  /* ---- Hero ---- */
+  .hero { text-align:center; padding:4px 0 10px; }
+  /* The hero mark is drawn on a 48-unit grid (brand/marks), so it is shown at
+     96px -- 2 units per CSS px, whole device pixels at 1x, 2x and 3x. 72px
+     would be 1.5 units per px and fringe. Line art on nothing: no
+     border-radius to round, no shadow to cast, and currentColor is what makes
+     it work on the dark ground, which the opaque icon.png could not. */
+  .logo { display:block; width:96px; height:96px; margin:0 auto 12px; color:var(--ink); }
+  h1 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+       font-weight:400; font-size:34px; line-height:1.1; letter-spacing:.01em;
+       text-transform:uppercase; margin:0 0 12px; }
+  .lede { font-size:19px; color:var(--muted); max-width:580px; margin:0 auto; }
+  .cta { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:22px; }
+  .cta a { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+           font-size:15px; text-transform:uppercase; text-decoration:none;
+           border-radius:12px; padding:13px 18px 11px; border:1px solid var(--rule); }
+  .cta .primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .cta .secondary { background:var(--card); color:var(--ink); }
+  .cta .secondary:hover { border-color:var(--accent); color:var(--accent); }
+  .cta a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  /* ---- Sections ---- */
+  section { background:var(--card); border:1px solid var(--rule); border-radius:18px;
+            padding:22px 24px; margin:14px 0; }
+  .head { display:flex; align-items:center; gap:16px; margin:0 0 12px; }
+  h2 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+       font-weight:400; font-size:21px; line-height:1.25; margin:0; }
+  /* 24-unit grid; 24px or 48px only -- see the note at the top. */
+  .mk { flex:0 0 auto; width:48px; height:48px; color:var(--ink); }
+  p { margin:0 0 12px; }
+  p:last-child { margin-bottom:0; }
+  .note { color:var(--muted); font-size:15px; }
+
+  /* ---- The device screen. 128x32, 1-bit, white on black in both themes. ---- */
+  .screen svg { display:block; width:100%; height:auto; background:#000;
+                border:1px solid var(--screen-edge); border-radius:3px; }
+  .screen .s1 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+                font-size:10px; fill:#fff; }
+  .screen .s2 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+                font-size:20px; fill:#fff; }
+  .hero .screen { max-width:420px; margin:26px auto 10px; }
+  .cap { color:var(--muted); font-size:14px; text-align:center; margin:0; }
+
+  /* The screen gallery: real menu rows, at the device's own proportions. */
+  .screens { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px 18px; margin-top:4px; }
+  .screens figure { margin:0; }
+  .screens figcaption { color:var(--muted); font-size:15px; margin-top:8px; line-height:1.45; }
+
+  /* ---- The "nothing on it" strip. Four absences, stated as plainly as the
+     firmware states them. Type, not icons: these are words, not pictures. ---- */
+  .nots { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin:4px 0 14px; }
+  .nots div { border:1px solid var(--rule); border-radius:12px; padding:12px 14px; text-align:center;
+              font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+              font-size:14px; text-transform:uppercase; line-height:1.3; }
+  .nots b { display:block; font-size:19px; font-weight:400; }
+
+  /* ---- Numbered steps ---- */
+  ol.steps { list-style:none; counter-reset:s; padding:0; margin:0; }
+  ol.steps li { counter-increment:s; display:flex; gap:16px; padding:14px 0; border-top:1px solid var(--rule); }
+  ol.steps li:first-child { border-top:0; padding-top:4px; }
+  ol.steps li::before { content:counter(s); flex:0 0 auto;
+                        font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+                        font-size:20px; color:var(--muted); width:24px; text-align:center; }
+  ol.steps li > div > b:first-child { display:block; }   /* the step title only -- NOT the SELECT/ENTER mentions inside it */
+  ol.steps p { margin:0; }
+
+  /* ---- Plain lists ---- */
+  ul.plain { padding-left:22px; margin:0 0 12px; }
+  ul.plain li { margin:0 0 8px; }
+  ul.plain li:last-child { margin-bottom:0; }
+
+  /* ---- Videos. Down the page, never autoplaying. ---- */
+  .videos { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,224px));
+            justify-content:center; gap:20px; margin:6px 0 14px; }
   .videos figure { margin:0; }
-  .videos video { display:block; width:100%; aspect-ratio:9/16; object-fit:cover; background:#000; border-radius:14px; }
+  .videos video { display:block; width:100%; aspect-ratio:9/16; object-fit:cover;
+                  background:#000; border-radius:14px; border:1px solid var(--rule); }
   .videos figcaption { font-size:15px; color:var(--muted); margin-top:8px; line-height:1.45; }
   .videos figcaption b { color:var(--ink); display:block; }
-  .stats { display:flex; gap:14px; flex-wrap:wrap; margin:6px 0 12px; }
-  .stats div { flex:1 1 200px; border:1px solid var(--rule); border-radius:14px; padding:12px 14px; }
-  .stats b { display:block; font-size:24px; }
-  .consent { border:2px solid var(--blue); border-radius:14px; padding:14px 16px; margin:14px 0; }
-  code { font-family:"SF Mono",Menlo,monospace; font-weight:800; color:var(--blue); }
-  .num { font-size:22px; font-weight:800; white-space:nowrap; }
-  a { color:var(--blue); }
-  footer { text-align:center; color:var(--muted); font-size:15px; padding:18px 16px 40px; }
+
+  /* ---- The quiet block. Program details, SMS and contact live here: present
+     and findable (Twilio reads this page -- see the note at the top) but out of
+     the way of someone trying to work out what the product is. ---- */
+  .fine { max-width:860px; margin:26px auto 0; padding:0 16px; }
+  .fine hr { border:0; border-top:1px solid var(--rule); margin:0 0 20px; }
+  .fine h2 { font-size:16px; margin:0 0 8px; }
+  .fine .blk { margin:0 0 22px; font-size:15px; line-height:1.55; color:var(--muted); }
+  .fine .blk p { margin:0 0 8px; }
+  .fine .blk b, .fine .blk strong { color:var(--ink); }
+  .fine ul { padding-left:20px; margin:8px 0 0; }
+  .fine li { margin:0 0 7px; }
+  .stats { display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 0; }
+  .stats div { flex:1 1 220px; border:1px solid var(--rule); border-radius:12px; padding:10px 13px; }
+  .stats b { display:block; font-size:19px;
+             font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace; font-weight:400; }
+  /* The consent statement. Kept visually distinct because it is the thing a
+     reviewer is looking for, even though the block around it is quiet. */
+  .consent { border:1px solid var(--accent); border-radius:12px; padding:12px 14px; margin:12px 0; }
+  .consent p:last-child { margin-bottom:0; }
+  code { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+         font-size:.95em; color:var(--accent); }
+  .num { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+         font-size:1.05em; white-space:nowrap; color:var(--ink); }
+
+  footer { text-align:center; color:var(--muted); font-size:15px; padding:16px 16px 40px; }
   footer a { margin:0 8px; }
+  footer .who { margin-top:8px; }
+
+  @media (max-width: 560px) {
+    main { padding:28px 16px 8px; }
+    h1 { font-size:26px; }
+    .lede { font-size:17px; }
+    section { padding:18px 16px; }
+    .head { gap:12px; }
+    h2 { font-size:17px; }
+    .logo { width:48px; height:48px; }  /* 1 unit per px -- the 48 grid's other crisp size */
+    .mk { width:24px; height:24px; }   /* the other crisp size; see above */
+    ol.steps li { gap:12px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation:none !important; transition:none !important; }
+  }
 </style>
 </head>
 <body>
+<a class="skip" href="#what">Skip to what a Dot Dash is</a>
 <main>
   <div class="hero">
-    <img class="logo" src="/icon.png" alt="Dot Dash logo" width="132" height="132">
+    <svg class="logo" viewBox="0 0 48 48" role="img" aria-label="Dot Dash"
+         shape-rendering="crispEdges" fill="currentColor"><rect x="6" y="10" width="36" height="1"/><rect x="5" y="11" width="38" height="1"/><rect x="4" y="12" width="2" height="1"/><rect x="42" y="12" width="2" height="1"/><rect x="3" y="13" width="2" height="1"/><rect x="43" y="13" width="2" height="1"/><rect x="2" y="14" width="2" height="19"/><rect x="44" y="14" width="2" height="19"/><rect x="13" y="19" width="3" height="1"/><rect x="12" y="20" width="5" height="1"/><rect x="26" y="20" width="12" height="5"/><rect x="11" y="21" width="7" height="3"/><rect x="12" y="24" width="5" height="1"/><rect x="13" y="25" width="3" height="1"/><rect x="22" y="30" width="1" height="1"/><rect x="25" y="30" width="1" height="1"/><rect x="23" y="31" width="2" height="1"/><rect x="3" y="33" width="2" height="1"/><rect x="43" y="33" width="2" height="1"/><rect x="4" y="34" width="2" height="1"/><rect x="42" y="34" width="2" height="1"/><rect x="5" y="35" width="38" height="1"/><rect x="6" y="36" width="36" height="1"/></svg>
     <h1>Dot Dash</h1>
-    <p class="lede">A pocket Morse-code messaging device. Tap out messages in Morse or send quick phrases, only to the contacts you've approved.</p>
+    <p class="lede">A pocket messaging device that works in Morse code. Two buttons, one small screen, and only the people you have approved.</p>
+
+    <!-- A real message on the real 128x32 screen, at its real aspect. Static:
+         this was briefly animated letter-by-letter and the page is better
+         without it -- see the MOTION note at the top of this file. -->
+    <div class="screen">
+      <svg viewBox="0 0 128 32" role="img"
+           aria-label="The Dot Dash screen, showing a message from MAYA0101 reading HELLO.">
+        <rect width="128" height="32" fill="#000"/>
+        <text class="s1" x="3" y="9">FROM MAYA0101</text>
+        <text class="s2" x="3" y="29">HELLO</text>
+      </svg>
+    </div>
+    <p class="cap">A message on the screen, at its real size and aspect.</p>
+
     <div class="cta">
-      <a class="primary" href="#watch">Watch it work</a>
-      <a class="secondary" href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice on Instagram</a>
+      <a class="primary" href="#what">What it is</a>
+      <a class="secondary" href="/faq">Read the FAQ</a>
     </div>
   </div>
 
+  <section id="what">
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="3" y="8" width="3" height="7"/><rect x="2" y="9" width="1" height="5"/><rect x="6" y="9" width="1" height="5"/><rect x="11" y="9" width="12" height="5"/><rect x="1" y="10" width="1" height="3"/><rect x="7" y="10" width="1" height="3"/></svg>
+      <h2>What a Dot Dash is</h2>
+    </div>
+    <p>A small, hand-built object with a 128&nbsp;&times;&nbsp;32 screen, two arcade buttons, a buzzer and an LED. You tap a message out in Morse — or pick one of your own ready-made phrases — and it arrives on another Dot Dash, or in the Dot Dash app on a phone.</p>
+    <p>It is a messaging device and nothing else. That is the whole idea, and it is easier to show as a list of things it hasn't got:</p>
+    <div class="nots">
+      <div><b>No</b>camera</div>
+      <div><b>No</b>microphone</div>
+      <div><b>No</b>web browser</div>
+      <div><b>No</b>location tracking</div>
+    </div>
+    <p>There is nothing to scroll and nobody new to meet. A Dot Dash can reach up to twenty contacts, and every one of them is a contact you approved yourself.</p>
+  </section>
+
+  <section id="how">
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="2" y="4" width="20" height="1"/><rect x="2" y="5" width="2" height="1"/><rect x="20" y="5" width="2" height="1"/><rect x="2" y="6" width="3" height="1"/><rect x="19" y="6" width="3" height="1"/><rect x="2" y="7" width="1" height="12"/><rect x="4" y="7" width="2" height="1"/><rect x="18" y="7" width="2" height="1"/><rect x="21" y="7" width="1" height="12"/><rect x="5" y="8" width="2" height="1"/><rect x="17" y="8" width="2" height="1"/><rect x="6" y="9" width="2" height="1"/><rect x="16" y="9" width="2" height="1"/><rect x="7" y="10" width="2" height="1"/><rect x="15" y="10" width="2" height="1"/><rect x="8" y="11" width="2" height="1"/><rect x="14" y="11" width="2" height="1"/><rect x="9" y="12" width="2" height="1"/><rect x="13" y="12" width="2" height="1"/><rect x="10" y="13" width="4" height="1"/><rect x="11" y="14" width="2" height="1"/><rect x="2" y="19" width="20" height="1"/></svg>
+      <h2>How a message gets there</h2>
+    </div>
+    <ol class="steps">
+      <li><div><b>Tap it out.</b><p>Tap <b>SELECT</b> for each mark — a short tap is a dot, a longer press is a dash. The device learns your own rhythm, so a slow tapper and a fast one are both read correctly. Hold <b>ENTER</b> for about a second to send.</p></div></li>
+      <li><div><b>It travels over Wi-Fi.</b><p>There is no SIM and no mobile data. A Dot Dash remembers up to five networks and uses whichever it finds, so it works at home, at a grandparent's and on holiday without being set up again. Messages go through Dot Dash's own servers, not anybody else's.</p></div></li>
+      <li><div><b>It arrives.</b><p>On another Dot Dash, where it can play out mark by mark like a telegraph, or in the Dot Dash app on a phone. Someone with neither can be sent a private web link and reply from that.</p></div></li>
+    </ol>
+  </section>
+
+  <section id="screen">
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="6" y="3" width="12" height="2"/><rect x="6" y="5" width="2" height="16"/><rect x="16" y="5" width="2" height="16"/><rect x="9" y="6" width="6" height="10"/><rect x="11" y="17" width="2" height="4"/><rect x="8" y="19" width="3" height="2"/><rect x="13" y="19" width="3" height="2"/></svg>
+      <h2>Everything on it fits in 128 &times; 32 pixels</h2>
+    </div>
+    <p>One line of big type, or two of small. No colour, no greys, no animation beyond what the device is actually doing. Working inside that is the reason a Dot Dash feels calm: there is no room on the screen for anything that isn't the message. This is the whole menu.</p>
+    <div class="screens">
+      <figure>
+        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the INBOX menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="2" y="4" width="20" height="1"/><rect x="2" y="5" width="2" height="1"/><rect x="20" y="5" width="2" height="1"/><rect x="2" y="6" width="3" height="1"/><rect x="19" y="6" width="3" height="1"/><rect x="2" y="7" width="1" height="12"/><rect x="4" y="7" width="2" height="1"/><rect x="18" y="7" width="2" height="1"/><rect x="21" y="7" width="1" height="12"/><rect x="5" y="8" width="2" height="1"/><rect x="17" y="8" width="2" height="1"/><rect x="6" y="9" width="2" height="1"/><rect x="16" y="9" width="2" height="1"/><rect x="7" y="10" width="2" height="1"/><rect x="15" y="10" width="2" height="1"/><rect x="8" y="11" width="2" height="1"/><rect x="14" y="11" width="2" height="1"/><rect x="9" y="12" width="2" height="1"/><rect x="13" y="12" width="2" height="1"/><rect x="10" y="13" width="4" height="1"/><rect x="11" y="14" width="2" height="1"/><rect x="2" y="19" width="20" height="1"/></g><text class="s2" x="34" y="25">INBOX</text></svg></div>
+        <figcaption><b>Inbox and Friends.</b> Messages in, and the approved list they can come from.</figcaption>
+      </figure>
+      <figure>
+        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the TRAIN menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="14" y="2" width="7" height="2"/><rect x="1" y="3" width="11" height="2"/><rect x="15" y="4" width="5" height="5"/><rect x="2" y="5" width="9" height="1"/><rect x="2" y="6" width="2" height="3"/><rect x="9" y="6" width="2" height="3"/><rect x="2" y="9" width="20" height="7"/><rect x="5" y="16" width="5" height="1"/><rect x="14" y="16" width="5" height="1"/><rect x="4" y="17" width="7" height="1"/><rect x="13" y="17" width="7" height="1"/><rect x="4" y="18" width="3" height="1"/><rect x="8" y="18" width="3" height="1"/><rect x="13" y="18" width="3" height="1"/><rect x="17" y="18" width="3" height="1"/><rect x="4" y="19" width="7" height="1"/><rect x="13" y="19" width="7" height="1"/><rect x="5" y="20" width="5" height="1"/><rect x="14" y="20" width="5" height="1"/><rect x="6" y="21" width="3" height="1"/><rect x="15" y="21" width="3" height="1"/></g><text class="s2" x="34" y="25">TRAIN</text></svg></div>
+        <figcaption><b>Train.</b> Morse practice in stages — letters, then words, then a test.</figcaption>
+      </figure>
+      <figure>
+        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the ARCADE menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="10" y="2" width="4" height="8"/><rect x="9" y="3" width="1" height="7"/><rect x="14" y="3" width="1" height="7"/><rect x="8" y="4" width="1" height="5"/><rect x="15" y="4" width="1" height="5"/><rect x="11" y="10" width="2" height="11"/><rect x="7" y="16" width="4" height="5"/><rect x="13" y="16" width="4" height="5"/><rect x="6" y="17" width="1" height="4"/><rect x="17" y="17" width="1" height="4"/><rect x="5" y="19" width="1" height="2"/><rect x="18" y="19" width="1" height="2"/></g><text class="s2" x="34" y="25">ARCADE</text></svg></div>
+        <figcaption><b>Arcade.</b> Four games, unlocked for the day with points earned by messaging and practising.</figcaption>
+      </figure>
+      <figure>
+        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the TIMER menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="3" y="2" width="18" height="2"/><rect x="4" y="4" width="1" height="1"/><rect x="19" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="8" y="5" width="8" height="1"/><rect x="18" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="9" y="6" width="6" height="1"/><rect x="17" y="6" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="10" y="7" width="4" height="1"/><rect x="16" y="7" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="11" y="8" width="2" height="1"/><rect x="15" y="8" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="14" y="9" width="1" height="1"/><rect x="10" y="10" width="1" height="1"/><rect x="13" y="10" width="1" height="1"/><rect x="11" y="11" width="2" height="2"/><rect x="10" y="13" width="1" height="1"/><rect x="13" y="13" width="1" height="1"/><rect x="9" y="14" width="1" height="1"/><rect x="14" y="14" width="1" height="1"/><rect x="8" y="15" width="1" height="1"/><rect x="15" y="15" width="1" height="1"/><rect x="7" y="16" width="1" height="1"/><rect x="16" y="16" width="1" height="1"/><rect x="6" y="17" width="1" height="1"/><rect x="17" y="17" width="1" height="1"/><rect x="5" y="18" width="1" height="1"/><rect x="18" y="18" width="1" height="1"/><rect x="4" y="19" width="1" height="1"/><rect x="19" y="19" width="1" height="1"/><rect x="3" y="20" width="18" height="2"/></g><text class="s2" x="34" y="25">TIMER</text></svg></div>
+        <figcaption><b>Timer.</b> The one feature with nothing to do with messaging. Train, the games and the timer all work offline.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="morse">
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="14" y="2" width="7" height="2"/><rect x="1" y="3" width="11" height="2"/><rect x="15" y="4" width="5" height="5"/><rect x="2" y="5" width="9" height="1"/><rect x="2" y="6" width="2" height="3"/><rect x="9" y="6" width="2" height="3"/><rect x="2" y="9" width="20" height="7"/><rect x="5" y="16" width="5" height="1"/><rect x="14" y="16" width="5" height="1"/><rect x="4" y="17" width="7" height="1"/><rect x="13" y="17" width="7" height="1"/><rect x="4" y="18" width="3" height="1"/><rect x="8" y="18" width="3" height="1"/><rect x="13" y="18" width="3" height="1"/><rect x="17" y="18" width="3" height="1"/><rect x="4" y="19" width="7" height="1"/><rect x="13" y="19" width="7" height="1"/><rect x="5" y="20" width="5" height="1"/><rect x="14" y="20" width="5" height="1"/><rect x="6" y="21" width="3" height="1"/><rect x="15" y="21" width="3" height="1"/></svg>
+      <h2>Why Morse, and not a keyboard</h2>
+    </div>
+    <p>Morse is a real encoding: a whole alphabet built out of two symbols and the gaps between them. That is the same idea underneath every digital system a child will ever use, and here it is small enough to hold in your head and see working.</p>
+    <p>It is also rare in being <b>finishable</b>. A few weeks of practice and you have it for life, and the practice is the messaging — every message sent is a rep. The device teaches it from nothing: Train adapts to how fast you actually tap rather than demanding textbook timing, and most people send their first messages with the ready-made phrases and pick up the code alongside.</p>
+    <p>And the slowness is the point. Morse is too slow to argue in and far too slow to doomscroll. What it is good at is the short, deliberate message you meant to send.</p>
+  </section>
+
+  <section id="parents">
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="9" y="3" width="6" height="2"/><rect x="8" y="4" width="1" height="8"/><rect x="15" y="4" width="1" height="8"/><rect x="9" y="5" width="1" height="7"/><rect x="14" y="5" width="1" height="7"/><rect x="4" y="10" width="4" height="2"/><rect x="10" y="10" width="4" height="2"/><rect x="16" y="10" width="4" height="2"/><rect x="4" y="12" width="2" height="8"/><rect x="18" y="12" width="2" height="8"/><rect x="10" y="13" width="4" height="2"/><rect x="11" y="15" width="2" height="2"/><rect x="6" y="18" width="12" height="2"/></svg>
+      <h2>For the grown-up setting it up</h2>
+    </div>
+    <ul class="plain">
+      <li><b>You are the account.</b> Each Dot Dash is paired to your account in the Dot Dash app, and you approve every contact by call sign. There is no discovery and no friend suggestions — a stranger's attempt becomes a request for you, not a message on the device.</li>
+      <li><b>You can read everything.</b> Both sides of every conversation appear in the Log. If you have set a device up for somebody else to carry, it is worth telling them that plainly.</li>
+      <li><b>It never leaves the list.</b> No camera, no microphone, no browser, no location — so there is no way to reach the open internet from a Dot Dash, intentionally or otherwise.</li>
+      <li><b>Someone without a device can still reply.</b> A grandparent can be sent a private web link and message from any phone, with no app to install.</li>
+      <li><b>Fifteen minutes to set up the first one.</b> Wi-Fi, an account, a six-character pairing code, and a call sign for the device. The <a href="/faq#setup">FAQ walks through all five steps</a>.</li>
+    </ul>
+  </section>
+
   <section id="watch">
-    <h2>See it in action</h2>
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="7" y="4" width="2" height="16"/><rect x="9" y="5" width="2" height="14"/><rect x="11" y="6" width="2" height="12"/><rect x="13" y="7" width="2" height="10"/><rect x="15" y="8" width="2" height="8"/><rect x="17" y="9" width="2" height="6"/><rect x="19" y="10" width="2" height="4"/></svg>
+      <h2>See it working</h2>
+    </div>
     <div class="videos">
       <figure>
         <video src="/media/clip-1.mp4" poster="/media/clip-1.jpg" controls playsinline preload="metadata"></video>
@@ -82,34 +371,38 @@
         <figcaption><b>Dot Dash and the app</b>Send from the Dot Dash, read it in the Dot Dash app, and reply from your phone.</figcaption>
       </figure>
     </div>
-    <p style="margin:0">Watch Dot Dash in use on Instagram: <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice</a>.</p>
+    <p class="note">These clips are served from this site rather than embedded from Instagram, so watching them loads no third-party scripts and sets no third-party cookies. More of them, including the ones that don't fit here: <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice</a>.</p>
   </section>
 
-  <section>
-    <h2>How it works</h2>
-    <div class="grid">
-      <div><b>Simple on purpose</b>A small screen, two buttons and a buzzer. No camera, no microphone, no web browser and no location tracking.</div>
-      <div><b>You're the base</b>You pair your Dot Dash in the Dot Dash app, choose who it can message, and can see those messages in the Log.</div>
-      <div><b>Learning while playing</b>Morse practice, games, timers and points turn messaging into a skill you build over time.</div>
+  <section id="more">
+    <div class="head">
+      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="3" y="8" width="3" height="7"/><rect x="2" y="9" width="1" height="5"/><rect x="6" y="9" width="1" height="5"/><rect x="11" y="9" width="12" height="5"/><rect x="1" y="10" width="1" height="3"/><rect x="7" y="10" width="1" height="3"/></svg>
+      <h2>Still deciding?</h2>
     </div>
+    <p>The <a href="/faq">FAQ</a> is the long version — sixty-odd questions covering setup, everyday use, points and Train, what the app controls, Wi-Fi and battery, privacy, and what to do when something misbehaves. If yours isn't in there, email <a href="mailto:support@dotdashdevice.com">support@dotdashdevice.com</a>; during the pilot it is usually answered by the person who built the thing.</p>
   </section>
+</main>
 
-  <section id="about">
-    <h2>About Dot Dash</h2>
+<!-- Program details, SMS notifications and contact. Quiet on purpose, and ON
+     THIS PAGE on purpose -- see the compliance note at the top of the file. -->
+<div class="fine">
+  <hr>
+
+  <div class="blk">
+    <h2 class="mono">Who makes Dot Dash</h2>
     <p>Dot Dash designs and builds the device, the Dot Dash app, and the messaging service that connects them. Every message a Dot Dash sends or receives is delivered by Dot Dash's own servers, which also handle software updates, contact approvals and the Log.</p>
     <div class="stats">
-      <div><b>About 30</b>Dot Dash devices in use today, in our pilot</div>
+      <div><b>Around 60</b>Dot Dash devices in use today, in our pilot</div>
       <div><b>None</b>No ads or trackers, and no messages or numbers sold or shared for marketing</div>
     </div>
-    <p>SMS notifications are one feature of that service, described below.</p>
-  </section>
+  </div>
 
-  <section id="sms">
-    <h2>SMS notifications (optional)</h2>
+  <div class="blk" id="sms">
+    <h2 class="mono">SMS notifications (optional)</h2>
     <p>Someone without a Dot Dash, like a grandparent, can message one from our chat page using a private link the account holder sends them. On that page they can choose to get an SMS notification when a new message is waiting. Notifications only say that a message is waiting and link back to the chat. They never contain what anyone wrote. This is optional. Nobody has to receive SMS messages to use Dot Dash.</p>
     <div class="consent">
       <p><b>How to sign up:</b> open your chat link, enter your own mobile number, and tick the box:</p>
-      <p style="margin:0"><b>"Yes, send me SMS notifications from Dot Dash</b> when I have a new message. Each one links back to this chat; message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to cancel." See our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>.</p>
+      <p><b>"Yes, send me SMS notifications from Dot Dash</b> when I have a new message. Each one links back to this chat; message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to cancel." See our <a href="/terms.html">Terms</a> and <a href="/privacy.html">Privacy Policy</a>.</p>
     </div>
     <ul>
       <li>We never message a number that wasn't signed up this way. <a href="/sms-opt-in.png">See the full opt-in flow</a>.</li>
@@ -117,29 +410,38 @@
       <li>Notifications come from <span class="num">(866) 786-1245</span>. Reply <code>STOP</code> at any time to stop, or <code>HELP</code> for help. Carriers are not liable for delayed or undelivered messages.</li>
       <li>Mobile numbers are stored encrypted and are never shared or sold for marketing. Turning notifications off deletes your number.</li>
     </ul>
-  </section>
+  </div>
 
-  <section>
-    <h2>Contact</h2>
+  <div class="blk" id="contact">
+    <h2 class="mono">Contact</h2>
     <p>Dot Dash is made by Samuel Posner, a sole proprietor, doing business as Dot Dash.</p>
     <p>Email <a href="mailto:support@dotdashdevice.com">support@dotdashdevice.com</a><br>467 Van Buren St., Brooklyn, NY 11221</p>
-  </section>
-</main>
+  </div>
+</div>
+
 <footer>
-  <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">Instagram</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a> · <a href="mailto:support@dotdashdevice.com">Support</a>
+  <a href="/faq">FAQ</a> · <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">Instagram</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a> · <a href="mailto:support@dotdashdevice.com">Support</a>
+  <div class="who">Dot Dash is made by Samuel Posner, a sole proprietor doing business as Dot Dash. 467 Van Buren St., Brooklyn, NY 11221.</div>
   <div>© 2026 Dot Dash</div>
 </footer>
+
 <script>
-  // A clip whose file isn't uploaded yet hides itself. With none uploaded the
-  // section keeps its Instagram link, so the page never shows an empty player.
+(function () {
+  'use strict';
+
+  // ---- A clip whose file isn't uploaded yet hides itself. With none uploaded
+  // the section keeps its Instagram link, so the page never shows an empty
+  // player. (Carried over unchanged from the first version of this page.)
   var figs = document.querySelectorAll('#watch figure');
   var gone = 0;
-  figs.forEach(function (f) {
+  Array.prototype.forEach.call(figs, function (f) {
     f.querySelector('video').addEventListener('error', function () {
       f.style.display = 'none';
       if (++gone === figs.length) document.querySelector('#watch .videos').style.display = 'none';
     });
   });
+
+})();
 </script>
 </body>
 </html>

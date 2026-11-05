@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dot Dash — FAQ</title>
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="description" content="Everything a new Dot Dash owner tends to ask, in roughly the order it comes up: setup, everyday use, points and Train, app settings, Wi-Fi, privacy and troubleshooting.">
+<link rel="canonical" href="https://dotdashdevice.com/faq">
+<!-- Shared-link preview. icon-512.png rather than icon.png: preview cards
+     upscale, and the 512 is the only copy big enough not to go soft. Same set
+     the home page carries; keep the two in step. -->
+<meta property="og:title" content="Dot Dash FAQ">
+<meta property="og:description" content="Everything a new Dot Dash owner tends to ask, in roughly the order it comes up: setup, everyday use, points and Train, Wi-Fi, privacy and troubleshooting.">
+<meta property="og:url" content="https://dotdashdevice.com/faq">
+<meta property="og:image" content="https://dotdashdevice.com/icon-512.png">
+<meta property="og:type" content="website">
+<!--
+  Public FAQ for https://dotdashdevice.com/faq
+
+  Deployed by hand alongside the home page: scp site/* and legal/* to
+  /var/www/dotdashdevice/.
+
+  Every section is a <details> and they all start CLOSED, so the page opens as
+  a one-screen table of contents rather than a wall of text. Two consequences
+  that drove the rest of this file:
+
+  - Find-in-page does not reach inside a closed <details> in Safari or Firefox,
+    so the filter box is not a nicety -- without it most of the page is
+    unreachable. It opens the sections that match and hides the rest.
+  - Printing has the same problem, so beforeprint opens everything and
+    afterprint puts it back.
+
+  Section ids are the anchor contract: /faq#setup and friends are linkable from
+  the app and from support email, and a matching hash opens that section on
+  load. Renaming an id breaks links we have already sent people.
+
+  TYPE AND FONTS. Two faces, both served from /fonts on our own origin and both
+  SIL Open Font License (the LICENCE files deploy with them -- the OFL requires
+  the licence to travel with the font):
+
+  - Atkinson Hyperlegible Next carries everything you actually read. It was
+    commissioned by the Braille Institute and drawn for distinction between
+    commonly confused characters, which is the right bias for a page read by
+    children and by grandparents. One variable file covers 400-700, so there is
+    no separate bold to fetch.
+  - Departure Mono is display type: the page title, the section headings, the
+    counts, inline code, and the device-screen panels. It is a pixel face, so
+    it is only ever used short and large. Never at paragraph length.
+
+  The fonts are LOCAL on purpose. index.html already records that the videos are
+  self-hosted rather than embedded from Instagram, because an embed loads Meta's
+  scripts and cookies and the privacy policy says we do not use those. A webfont
+  CDN is the same problem in a different hat: every page view would become a
+  request to a third party carrying the visitor's IP and referrer. So: no Google
+  Fonts link, no CDN, no exceptions.
+
+  ILLUSTRATION. Every drawing on this page is 1-bit -- pure black and white, no
+  greys, no gradients, no accent colour -- and drawn on an integer pixel grid in
+  the same idiom as the device's own Icons.h. The nine section marks are 24x24,
+  the size the device draws its menu icons at. The device-screen panels are
+  128x32, the screen's true size, which is why they are 4:1. All of it is inline
+  SVG so the page stays one file and stays crisp at any pixel density.
+
+  Four of the nine marks are the device's own art rather than drawings of it:
+  POINTS is icon_arcade (the joystick), ACCOUNTS is icon_friends, and both are
+  byte-for-byte the bitmaps in dot_dash_7_3/Icons.h. WI-FI is the glyph
+  drawConnIcon() draws procedurally in Helpers.ino -- dot at the lower-left,
+  two quarter-arcs sweeping up and right, which is Adafruit's 0x2 corner mask
+  and is why it is lopsided rather than a centred fan. Those four are placed
+  exactly where the device places them in its 24x24 box rather than being
+  optically re-centred like the other five.
+
+  Marks are shown at 24px or 48px ONLY. Those are the sizes where one grid unit
+  lands on a whole number of device pixels at 1x, 2x and 3x; in between, the 2px
+  strokes snap unevenly and come out at mixed weights. For the same reason the
+  sideways spanner on TROUBLESHOOTING is drawn lying down IN THE GRID, not stood
+  upright and turned with a CSS transform -- a transform would put those strokes
+  on half-pixel boundaries. It lies head-RIGHT, with jaws 5 grid units long on
+  a handle 4 grid units thick.
+  Both numbers were earned. Head-left with 3-unit jaws read as a lobster claw,
+  and lengthening the jaws alone did not fix it: the real culprit was a 6-unit
+  handle against a 12-unit head, thick enough that handle and head merged into
+  one blob and the jaws became claws coming off a body. Keep the handle at most
+  a third of the head's height, or the whole thing stops reading as a tool.
+
+  The HERO mark is not icon.png. It is the pixel redraw from brand/marks --
+  measured off a photograph of a finished unit, so the eye is the white button
+  cap, the dash is the screen window as a true rectangle, and the smile is
+  centred on the frame (the engraving on the object sits 0.0143 of the face
+  width right of centre, which reads as a mistake at this size). It is inline
+  rather than an <img> so it inherits currentColor and survives dark mode.
+  icon.png is still the favicon and the og:image.
+
+  One finding worth not rediscovering: the device's own TOOLS mark (icon_tools,
+  a symmetrical double-ended wrench) CANNOT be put on its side. It is exactly
+  4-fold rotationally symmetric, so a quarter turn changes 0 of its 576 pixels.
+  It was tried on TROUBLESHOOTING and read as a cog; the single-ended spanner
+  here replaced it. Do not try to rotate icon_tools again -- it is geometrically
+  impossible, by CSS or by grid.
+-->
+<style>
+  /* ---- Faces. Local on purpose; see the note at the top of this file. ---- */
+  @font-face {
+    font-family:"Atkinson Hyperlegible Next"; font-style:normal;
+    font-weight:400 700;            /* one variable file covers the whole range */
+    font-display:swap;
+    src:url("/fonts/AtkinsonHyperlegibleNext-latin.woff2") format("woff2");
+    unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,
+                  U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,
+                  U+2212,U+2215,U+FEFF,U+FFFD;
+  }
+  @font-face {
+    font-family:"Atkinson Hyperlegible Next"; font-style:normal;
+    font-weight:400 700; font-display:swap;
+    src:url("/fonts/AtkinsonHyperlegibleNext-latin-ext.woff2") format("woff2");
+    unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,U+2020,
+                  U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+  }
+  @font-face {
+    font-family:"Departure Mono"; font-style:normal; font-weight:400;
+    font-display:swap;
+    src:url("/fonts/DepartureMono-Regular.woff2") format("woff2");
+  }
+
+  /* ---- Tokens.
+     The brand palette here is achromatic plus ONE functional accent. The accent
+     is a UI colour -- links, focus, highlight -- not a brand colour and not one
+     of the device's button colours, because every device ships a different pair
+     of those and no single one of them can stand for the product.
+     The accent is a PAIR: #2563eb only passes contrast on a light ground and
+     #93c5fd only on a dark one. The old single #3b82f6 was 3.68:1 on white,
+     which fails WCAG AA for text and for the button label. ---- */
+  :root {
+    color-scheme: light dark;
+    --bg:#f6f5f3; --card:#ffffff; --ink:#1b1a18; --muted:#55514b; --rule:#d8d3cb;
+    --accent:#2563eb;        /* 5.17:1 on white */
+    --accent-ink:#ffffff;    /* 5.17:1 on the accent fill */
+    --accent-soft:rgba(37,99,235,.16);
+    --screen-edge:#1b1a18;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#131211; --card:#1c1b19; --ink:#ecebe8; --muted:#a8a39b; --rule:#3a3733;
+      --accent:#93c5fd;      /* 8.11:1 on the dark card */
+      --accent-ink:#0b1220;  /* dark ink on the light-blue fill */
+      --accent-soft:rgba(147,197,253,.20);
+      --screen-edge:#494540;
+    }
+  }
+
+  /* Body text is Atkinson: drawn for distinction between confusable characters,
+     which is what a page read by a seven-year-old and by a grandparent needs.
+     Display type is Departure Mono -- short strings, set large, never a
+     paragraph. */
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:400 17px/1.6 "Atkinson Hyperlegible Next",ui-sans-serif,-apple-system,"Helvetica Neue",Arial,sans-serif;
+         -webkit-text-size-adjust:100%; }
+  main { max-width:860px; margin:0 auto; padding:40px 16px 40px; }
+  a { color:var(--accent); }
+
+  .hero { text-align:center; padding:4px 0 18px; }
+  /* The hero mark is drawn on a 48-unit grid (brand/marks), so it is shown at
+     96px -- 2 units per CSS px, whole device pixels at 1x, 2x and 3x. 72px
+     would be 1.5 units per px and fringe. It is line art on nothing, so it
+     takes no border-radius and casts no shadow: there is no tile to round or
+     to lift, and inheriting currentColor is what makes it work on the dark
+     ground, which the old opaque icon.png could not do. */
+  .logo { display:block; width:96px; height:96px; margin:0 auto 12px; color:var(--ink); }
+  h1 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+       font-weight:400; font-size:30px; line-height:1.1; letter-spacing:.01em;
+       text-transform:uppercase; margin:0 0 12px; }
+  .lede { font-size:18px; color:var(--muted); max-width:620px; margin:0 auto; }
+
+  /* Controls: filter box on the left, expand/collapse on the right. */
+  .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:22px 0 14px; }
+  .search { position:relative; flex:1 1 240px; }
+  .search input { width:100%; font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--rule);
+                  border-radius:12px; padding:11px 34px 11px 14px; -webkit-appearance:none; }
+  .search input:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .search button { position:absolute; right:4px; top:50%; transform:translateY(-50%); border:0; background:none;
+                   color:var(--muted); font:inherit; font-size:20px; line-height:1; padding:4px 8px; cursor:pointer; display:none; }
+  .search.has-text button { display:block; }
+  .toggle { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace; font-size:15px;
+            text-transform:uppercase; color:var(--ink); background:var(--card); border:1px solid var(--rule);
+            border-radius:12px; padding:12px 16px 10px; cursor:pointer; }
+  .toggle:hover { border-color:var(--accent); color:var(--accent); }
+  .toggle:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .nohits { display:none; color:var(--muted); background:var(--card); border-radius:20px; padding:22px 26px; margin:18px 0; }
+  .nohits.show { display:block; }
+
+  /* A section is a card that happens to be collapsible. The summary row is the
+     strongest thing on the page: a 24x24 bitmap mark drawn on the same grid as
+     the device's menu icons, beside a heading set in the device's pixel face. */
+  details.sec { background:var(--card); border:1px solid var(--rule); border-radius:18px; margin:12px 0; }
+  details.sec > summary { display:flex; align-items:center; gap:16px; cursor:pointer; padding:13px 20px;
+                          list-style:none; border-radius:17px; }
+  details.sec > summary::-webkit-details-marker { display:none; }
+  details.sec > summary:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  details.sec > summary h2 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+                             font-weight:400; font-size:19px; line-height:1.25; letter-spacing:.005em;
+                             margin:0; flex:1 1 auto; min-width:0; }
+  /* The marks are drawn on a 24-unit grid, so they are only ever shown at 24px
+     or 48px: those are the sizes where one grid unit lands on a whole number of
+     device pixels at 1x, 2x and 3x. Anything between the two snaps unevenly and
+     the 2px strokes come out at mixed weights. */
+  .mk { flex:0 0 auto; width:48px; height:48px; color:var(--ink); }
+  .count { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+           color:var(--muted); font-size:13px; text-transform:uppercase; white-space:nowrap; flex:0 0 auto; }
+  .chev { color:var(--muted); font-size:12px; transition:transform .15s ease; flex:0 0 auto; }
+  details.sec[open] > summary .chev { transform:rotate(90deg); }
+  details.sec[open] > summary { border-bottom:1px solid var(--rule); border-radius:17px 17px 0 0; }
+  .body { padding:6px 20px 18px; }
+
+  /* One question and its answer. The h3 is the question -- deliberately NOT in
+     the pixel face: headings carry the device's voice, questions have to be
+     read. */
+  .qa { padding:14px 0; border-top:1px solid var(--rule); }
+  .qa:first-child { border-top:0; }
+  .qa h3 { font-size:17px; font-weight:700; margin:0 0 6px; }
+  .qa p, .qa li { margin:0 0 8px; }
+  .qa p:last-child, .qa li:last-child { margin-bottom:0; }
+  ul, ol { padding-left:22px; margin:0 0 8px; }
+  code { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+         font-size:.95em; color:var(--accent); }
+  mark { background:var(--accent-soft); color:inherit; border-radius:3px; padding:0 1px; }
+  table { border-collapse:collapse; margin:4px 0 8px; font-size:16px; }
+  th, td { text-align:left; padding:6px 18px 6px 0; border-bottom:1px solid var(--rule); }
+  th { color:var(--muted); font-weight:700; }
+  blockquote { margin:10px 0; padding:12px 16px; background:var(--bg); border-left:3px solid var(--accent); border-radius:0 10px 10px 0; }
+  blockquote p { margin:0; }
+  .note { color:var(--muted); }
+  .num { font-weight:700; white-space:nowrap; }
+
+  /* The device screen, at its real size and its real aspect: 128x32, 1-bit,
+     white on black in BOTH themes because that is what the hardware does. */
+  .screen { margin:12px 0 2px; }
+  .screen svg { display:block; width:100%; max-width:276px; height:auto;
+                border:1px solid var(--screen-edge); border-radius:3px; }
+  .screen .s1 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+                font-size:10px; fill:#fff; }
+  .screen .s2 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+                font-size:20px; fill:#fff; }
+
+  footer { text-align:center; color:var(--muted); font-size:15px; padding:24px 16px 40px; }
+  footer a { margin:0 8px; }
+
+  @media (max-width: 560px) {
+    main { padding:28px 16px 32px; }
+    h1 { font-size:23px; }
+    .lede { font-size:17px; }
+    /* Departure Mono fringes below about 15px, and a long heading at 19px wraps
+       to three lines on a 375px screen. Both are fixed by stepping it down one
+       notch and letting the mark carry more of the row. */
+    details.sec > summary { gap:12px; padding:14px 16px; }
+    details.sec > summary h2 { font-size:16px; }
+    .logo { width:48px; height:48px; }  /* 1 unit per px -- the 48 grid's other crisp size */
+    .mk { width:24px; height:24px; }   /* the other crisp size; see above */
+    .count { display:none; }   /* the number is in the open section anyway */
+    .body { padding:4px 16px 16px; }
+  }
+
+  @media print {
+    body { background:#fff; color:#000; }
+    .controls, .chev, footer a { display:none; }
+    details.sec { border:1px solid #ddd; break-inside:avoid; }
+    .screen svg { max-width:200px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <a href="/" aria-label="Dot Dash home"><svg class="logo" viewBox="0 0 48 48" role="img"
+         aria-label="Dot Dash" shape-rendering="crispEdges" fill="currentColor"><rect x="6" y="10" width="36" height="1"/><rect x="5" y="11" width="38" height="1"/><rect x="4" y="12" width="2" height="1"/><rect x="42" y="12" width="2" height="1"/><rect x="3" y="13" width="2" height="1"/><rect x="43" y="13" width="2" height="1"/><rect x="2" y="14" width="2" height="19"/><rect x="44" y="14" width="2" height="19"/><rect x="13" y="19" width="3" height="1"/><rect x="12" y="20" width="5" height="1"/><rect x="26" y="20" width="12" height="5"/><rect x="11" y="21" width="7" height="3"/><rect x="12" y="24" width="5" height="1"/><rect x="13" y="25" width="3" height="1"/><rect x="22" y="30" width="1" height="1"/><rect x="25" y="30" width="1" height="1"/><rect x="23" y="31" width="2" height="1"/><rect x="3" y="33" width="2" height="1"/><rect x="43" y="33" width="2" height="1"/><rect x="4" y="34" width="2" height="1"/><rect x="42" y="34" width="2" height="1"/><rect x="5" y="35" width="38" height="1"/><rect x="6" y="36" width="36" height="1"/></svg></a>
+    <h1>Dot Dash FAQ</h1>
+    <p class="lede">Everything a new Dot Dash owner tends to ask, in roughly the order it comes up. Current as of 3 November 2026.</p>
+  </div>
+
+  <div class="controls">
+    <div class="search" id="search">
+      <input id="q" type="text" placeholder="Search the FAQ — try “Wi-Fi” or “points”" aria-label="Search the FAQ" autocomplete="off">
+      <button type="button" id="clear" aria-label="Clear search">&times;</button>
+    </div>
+    <button class="toggle" id="toggle" type="button">Expand all</button>
+  </div>
+
+  <div class="nohits" id="nohits">
+    No answers matched that. Try a shorter word — or email
+    <a href="mailto:support@dotdashdevice.com">support@dotdashdevice.com</a> and a real person will answer.
+  </div>
+
+  <details class="sec" id="what-it-is">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="3" y="8" width="3" height="7"/><rect x="2" y="9" width="1" height="5"/><rect x="6" y="9" width="1" height="5"/><rect x="11" y="9" width="12" height="5"/><rect x="1" y="10" width="1" height="3"/><rect x="7" y="10" width="1" height="3"/></svg><h2>What Dot Dash is</h2><span class="count">5 questions</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <h3>What is a Dot Dash?</h3>
+        <p>A pocket messaging device that sends and receives messages in Morse code. It has a small screen, two buttons, a buzzer and an LED. You tap out a message in Morse — or pick a ready-made phrase — and it arrives on another Dot Dash, or in your phone.</p>
+      </div>
+      <div class="qa">
+        <h3>What does it deliberately not have?</h3>
+        <p>No camera. No microphone. No web browser. No location tracking. There is nothing to scroll and nobody new to meet. A Dot Dash can only reach contacts you have approved.</p>
+      </div>
+      <div class="qa">
+        <h3>Do I need an app?</h3>
+        <p>Yes, and it is where the account side of things happens: pairing the device, approving contacts, reading the message Log and replying from your phone. Whoever carries the Dot Dash needs no phone and no account of their own.</p>
+      </div>
+      <div class="qa">
+        <h3>Do I need to know Morse already?</h3>
+        <p>No. The device teaches it. Train is a set of practice stages built into the device, and it adapts to how fast you actually tap rather than demanding textbook timing. Most people send their first real message using the ready-made phrases and pick up Morse alongside.</p>
+      </div>
+      <div class="qa">
+        <h3>How many Dot Dash devices are out there?</h3>
+        <p>Around 60 at the moment. Dot Dash is in a pilot, so you are early — expect the occasional rough edge, and expect us to answer email quickly.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="setup">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="2" y="4" width="20" height="2"/><rect x="2" y="6" width="2" height="13"/><rect x="20" y="6" width="2" height="13"/><rect x="15" y="7" width="3" height="1"/><rect x="14" y="8" width="3" height="1"/><rect x="13" y="9" width="3" height="1"/><rect x="12" y="10" width="3" height="1"/><rect x="5" y="11" width="2" height="2"/><rect x="11" y="11" width="3" height="1"/><rect x="7" y="12" width="1" height="3"/><rect x="10" y="12" width="3" height="1"/><rect x="6" y="13" width="1" height="1"/><rect x="8" y="13" width="4" height="1"/><rect x="8" y="14" width="3" height="1"/><rect x="8" y="15" width="2" height="1"/><rect x="4" y="17" width="16" height="2"/></svg><h2>Setting it up</h2><span class="count">5 steps</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <p class="note">Budget about fifteen minutes for the first device. The order below is the order the app walks you through.</p>
+      </div>
+      <div class="qa">
+        <h3>1. Put it on Wi-Fi</h3>
+        <p>A Dot Dash sends over your home Wi-Fi; it has no SIM. You can save <b>up to five networks</b> and the device will use whichever it finds, which is what makes a Dot Dash work at home, at work and anywhere else you go without being set up again each time.</p>
+      </div>
+      <div class="qa">
+        <h3>2. Make your account and your base call sign</h3>
+        <p>In the app, choose <i>I have a Dot Dash</i>, then register. You will pick a <b>base call sign</b> — your name plus a couple of digits, like <code>ALEX0101</code> or <code>SAM99</code>. This is what a Dot Dash shows when you message your own device(s) from the app. It has to be unique across Dot Dash.</p>
+      </div>
+      <div class="qa">
+        <h3>3. Pair the device</h3>
+        <p>On the Dot Dash, go to <b>TOOLS &rarr; PAIRING</b>. It shows a six-character code. Type that into the app.</p>
+        <div class="screen"><svg viewBox="0 0 128 32" width="128" height="32" role="img" aria-label="Device screen showing TOOLS, PAIRING"><rect width="128" height="32" fill="#000"/><text class="s1" x="3" y="8">TOOLS</text><text class="s2" x="3" y="29">PAIRING</text></svg></div>
+      </div>
+      <div class="qa">
+        <h3>4. Name the Dot Dash</h3>
+        <p>Each device gets its own call sign, the same shape as yours — <code>MAYA0101</code>, say. This is the name contacts see and the name they add to reach it.</p>
+      </div>
+      <div class="qa">
+        <h3>5. Add the first contacts</h3>
+        <p>In the app, open <b>Approved Friends</b>. Your base call sign will already be there, that is how you message between a Dot Dash and the app. If you have one, add a call sign for another Dot Dash. Each device holds <b>up to 20 contacts</b>.</p>
+        <p>For someone without a Dot Dash — a relative, a friend — use <b>Add someone by link</b> instead. See <a href="#everyday">Everyday use</a>.</p>
+      </div>
+      <div class="qa">
+        <h3>What if I am setting up two at once?</h3>
+        <p>Do one completely, then use <i>Add another device</i> in the app. Add each one to the other's contacts and the pair can start messaging straight away.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="everyday">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="2" y="5" width="20" height="2"/><rect x="2" y="7" width="2" height="12"/><rect x="20" y="7" width="2" height="12"/><rect x="4" y="8" width="2" height="1"/><rect x="18" y="8" width="2" height="1"/><rect x="5" y="9" width="2" height="1"/><rect x="17" y="9" width="2" height="1"/><rect x="6" y="10" width="2" height="1"/><rect x="16" y="10" width="2" height="1"/><rect x="7" y="11" width="2" height="1"/><rect x="15" y="11" width="2" height="1"/><rect x="8" y="12" width="2" height="1"/><rect x="14" y="12" width="2" height="1"/><rect x="9" y="13" width="2" height="1"/><rect x="13" y="13" width="2" height="1"/><rect x="10" y="14" width="4" height="1"/><rect x="4" y="17" width="16" height="2"/></svg><h2>Everyday use</h2><span class="count">9 questions</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <h3>How do the two buttons work?</h3>
+        <p>Everywhere on the device, the same two rules hold: <b>SELECT</b> moves to the next thing, <b>ENTER</b> chooses it. That is the whole grammar, and it is why anyone who can work one screen can work all of them.</p>
+        <p>One shortcut worth knowing: in a long list, <b>hold SELECT for about a second</b> to jump straight to BACK rather than cycling all the way round.</p>
+      </div>
+      <div class="qa">
+        <h3>How do you send a message?</h3>
+        <p>From the clock, press a button to wake the menu, then pick who it is going to. You get a choice of how to write it:</p>
+        <ul>
+          <li><b>DOT DASH</b> — tap it out in Morse yourself.</li>
+          <li><b>A ready-made phrase</b> — a short list you control from the app.</li>
+          <li><b>An emoji</b> — for when a phrase is more than you want to say.</li>
+        </ul>
+      </div>
+      <div class="qa">
+        <h3>How do you actually key Morse?</h3>
+        <p><b>Tap SELECT</b> for each mark: a short tap is a dot, a longer press is a dash. The letter appears as you build it and the dots and dashes show along the top of the screen. The device learns your own rhythm, so a slow tapper and a fast one both get read correctly.</p>
+        <ul>
+          <li><b>Tap ENTER</b> after keying a letter's code and the letter is accepted.</li>
+          <li><b>Tap ENTER</b> alone to add a space between words.</li>
+          <li><b>Double-tap ENTER</b> to delete the last character.</li>
+          <li><b>Hold ENTER</b> for about a second to send. The screen says <code>SENT!</code> while you are still holding, so there is no guessing whether it went.</li>
+        </ul>
+        <div class="screen"><svg viewBox="0 0 128 32" width="128" height="32" role="img" aria-label="Device screen showing DOT DASH, SENT!"><rect width="128" height="32" fill="#000"/><text class="s1" x="3" y="8">DOT DASH</text><text class="s2" x="3" y="29">SENT!</text></svg></div>
+      </div>
+      <div class="qa">
+        <h3>How does a message arrive?</h3>
+        <p>The device buzzes and the message appears. It also sits in <b>INBOX</b>, so nothing is missed because somebody was out of the room. Unread messages are marked, and the app shows an unread count per device.</p>
+      </div>
+      <div class="qa">
+        <h3>Can you reply to a message you received?</h3>
+        <p>Yes — open it in INBOX and reply from there. Replies are worth more points than a fresh message, deliberately: answering someone is the habit worth rewarding.</p>
+      </div>
+      <div class="qa">
+        <h3>Can I reply from my phone?</h3>
+        <p>You can message from your phone only using your base call sign, and only with the devices you own / have registered to your account.</p>
+      </div>
+      <div class="qa">
+        <h3>What about someone without a Dot Dash?</h3>
+        <p>Use <b>Add someone by link</b> in the app. You message or email them a private link; they open it in any browser and chat from that page, no account and no app needed. On that page they can choose to get an SMS notification when a message is waiting — see <a href="#privacy">Privacy and safety</a>.</p>
+        <p>The app shows you where each invite stands: <i>Link not opened yet</i>, or <i>Left the chat</i>, with the option to send a fresh one.</p>
+      </div>
+      <div class="qa">
+        <h3>Someone we don't know messaged the device. What happened?</h3>
+        <p>If an unrecognized call sign tries to reach a Dot Dash, the message is not delivered — you get a request in the app to approve or decline, and nothing reaches the device until you do.</p>
+      </div>
+      <div class="qa">
+        <h3>Is there anything else on the device?</h3>
+        <p><b>TIMER</b> — 5, 15 or 30 minutes, or a custom length. Useful for work sessions, turn-taking, or anything you would otherwise pick up a phone to time — the one feature with nothing to do with messaging.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="points">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="10" y="2" width="4" height="8"/><rect x="9" y="3" width="1" height="7"/><rect x="14" y="3" width="1" height="7"/><rect x="8" y="4" width="1" height="5"/><rect x="15" y="4" width="1" height="5"/><rect x="11" y="10" width="2" height="11"/><rect x="7" y="16" width="4" height="5"/><rect x="13" y="16" width="4" height="5"/><rect x="6" y="17" width="1" height="4"/><rect x="17" y="17" width="1" height="4"/><rect x="5" y="19" width="1" height="2"/><rect x="18" y="19" width="1" height="2"/></svg><h2>Points, Train and the Arcade</h2><span class="count">6 questions</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <p class="note">This is the part that surprises most people, so it is worth reading even if you have not come across it yet.</p>
+      </div>
+      <div class="qa">
+        <h3>What are points for?</h3>
+        <p>Points are the device's currency, and the games cost them. They are earned by messaging and by practising Morse, and spent on unlocking an arcade game for the day. Nothing else uses them — there is no leaderboard to climb and no score to beat.</p>
+      </div>
+      <div class="qa">
+        <h3>How are points earned?</h3>
+        <table>
+          <tr><th>Action</th><th>Points</th></tr>
+          <tr><td>Replying to a message you received</td><td>3</td></tr>
+          <tr><td>Sending a Morse message of real substance</td><td>2</td></tr>
+          <tr><td>Sending a ready-made phrase or emoji</td><td>1</td></tr>
+          <tr><td>Finishing a Train practice round</td><td>varies</td></tr>
+        </table>
+        <p>“Real substance” means at least three different characters — so <code>SOS</code> earns the two, and <code>EEEEE</code> does not.</p>
+      </div>
+      <div class="qa">
+        <h3>Can points be farmed by spamming?</h3>
+        <p>No, and the limits are deliberately quiet rather than scolding. Only five ordinary sends a day earn anything, and only two of those to any one contact. There is a cool-off between awards, and sending the same message twice in a row to the same person earns nothing the second time. Replies have their own separate daily allowance, so answering people is never crowded out by sending.</p>
+        <p>Train payouts sit outside those caps — practice is never the thing that runs out.</p>
+      </div>
+      <div class="qa">
+        <h3>What is in Train?</h3>
+        <p>Four stages, in order:</p>
+        <ol>
+          <li><b>LETTERS</b> — one letter at a time, with the code shown. Get one wrong and you try that letter again; progress already banked stays banked.</li>
+          <li><b>WORDS</b> — whole short words.</li>
+          <li><b>TRAIN</b> — a timed run, where keeping rhythm matters as much as accuracy.</li>
+          <li><b>TEST</b> — no prompts.</li>
+        </ol>
+        <p>Every stage feeds the same thing: the device's picture of your personal dot-and-dash timing. Practising makes real messages easier to send, which is the point of the whole arrangement.</p>
+      </div>
+      <div class="qa">
+        <h3>What games are there?</h3>
+        <ul>
+          <li><b>TICTACTOE</b> and <b>20 QS</b> are two-player — played against a contact, a move at a time, over the same connection as messages. <b>Both are free</b>; they cost no points at all, because they are really another way of talking to somebody.</li>
+          <li><b>COUNTER</b> (2 points), <b>BIRD</b> (4), <b>JUMPER</b> (6), <b>DASHER</b> (8) and <b>DEFENDER</b> (10) are single-player. The price buys the game for the day, not for one go.</li>
+          <li><b>LEADERS</b> shows standings and is free.</li>
+        </ul>
+      </div>
+      <div class="qa">
+        <h3>When is the arcade available?</h3>
+        <p>Out of the box, <b>the arcade closes from 8pm to 7am</b>. You can lift that, or turn off the points cost, or hide the games entirely — see <a href="#app">What you control from the app</a>.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="app">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="6" y="3" width="12" height="2"/><rect x="6" y="5" width="2" height="16"/><rect x="16" y="5" width="2" height="16"/><rect x="9" y="6" width="6" height="10"/><rect x="11" y="17" width="2" height="4"/><rect x="8" y="19" width="3" height="2"/><rect x="13" y="19" width="3" height="2"/></svg><h2>What you control from the app</h2><span class="count">9 settings</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <p class="note">Everything here is per device, so two Dot Dash devices on one account can have different rules. If you carry the Dot Dash yourself, treat these as your own preferences. If you set one up for somebody else, they are the limits you are choosing on their behalf.</p>
+      </div>
+      <div class="qa">
+        <h3>Approved Friends</h3>
+        <p>Who this Dot Dash can message, up to 20. Nobody reaches the device without being on this list, and a stranger's attempt becomes a request for you rather than a message on the device.</p>
+      </div>
+      <div class="qa">
+        <h3>Custom Messages</h3>
+        <p>The ready-made phrases on the device. These are yours to write, and they are worth setting up properly: while Morse is still new, this is how the first dozen messages get sent.</p>
+      </div>
+      <div class="qa">
+        <h3>Wi-Fi Networks</h3>
+        <p>Up to five. It's easier to add a new network before you leave, not after you arrive.</p>
+      </div>
+      <div class="qa">
+        <h3>Arcade</h3>
+        <p>One switch hides the games entirely, leaving Train and the messaging. Turned on, two further switches:</p>
+        <ul>
+          <li><b>Play without points</b> — games open immediately instead of costing points. Points already earned are kept.</li>
+          <li><b>Play after 8pm</b> — lifts the overnight close.</li>
+        </ul>
+        <p>Both are off by default, which is to say a Dot Dash out of the box charges points and shuts the arcade overnight. You are turning limits off, not on.</p>
+      </div>
+      <div class="qa">
+        <h3>Dot Dash Mode</h3>
+        <p>How an incoming Morse message appears. On, it plays out mark by mark like a telegraph, which makes reading it practice too. Off, it arrives whole, like any other message. Worth turning off if incoming Morse is more frustrating than fun, and back on later.</p>
+      </div>
+      <div class="qa">
+        <h3>Find My Dot Dash</h3>
+        <p>Makes the device ring and light up, for the usual sofa-cushion emergency. It rings loudly for the first ten minutes, then more quietly. There is a <i>Stop ringing</i> button in the app.</p>
+      </div>
+      <div class="qa">
+        <h3>The Log</h3>
+        <p>Every message this device sent or received. Not a notification feed you might miss: the full history, readable at any time.</p>
+      </div>
+      <div class="qa">
+        <h3>Points</h3>
+        <p>The app shows the device's current balance as the device last reported it.</p>
+      </div>
+      <div class="qa">
+        <h3>Advanced settings</h3>
+        <p>Unlinking, connection security and the things most people never open.</p>
+        <blockquote><p>One thing to know about changing settings: they reach the device the next time it connects. If a Dot Dash is asleep or out of Wi-Fi range, the app will say so and apply the change when it comes back.</p></blockquote>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="battery">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="3" y="3" width="5" height="2"/><rect x="8" y="4" width="3" height="2"/><rect x="7" y="5" width="1" height="1"/><rect x="11" y="5" width="2" height="2"/><rect x="10" y="6" width="1" height="1"/><rect x="13" y="6" width="1" height="3"/><rect x="12" y="7" width="1" height="1"/><rect x="14" y="7" width="1" height="3"/><rect x="15" y="8" width="1" height="3"/><rect x="16" y="9" width="1" height="3"/><rect x="17" y="10" width="1" height="4"/><rect x="3" y="11" width="4" height="2"/><rect x="18" y="11" width="1" height="6"/><rect x="7" y="12" width="2" height="2"/><rect x="6" y="13" width="1" height="1"/><rect x="9" y="13" width="1" height="3"/><rect x="19" y="13" width="1" height="8"/><rect x="8" y="14" width="1" height="1"/><rect x="10" y="14" width="1" height="4"/><rect x="11" y="15" width="1" height="6"/><rect x="20" y="16" width="1" height="5"/><rect x="12" y="17" width="1" height="4"/><rect x="2" y="18" width="3" height="5"/><rect x="1" y="19" width="1" height="3"/><rect x="5" y="19" width="1" height="3"/></svg><h2>Wi-Fi, Battery and staying connected</h2><span class="count">6 questions</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <h3>How is it charged?</h3>
+        <p>Over USB. The battery icon on screen shows roughly where it is, and the device notices when it is plugged in.</p>
+      </div>
+      <div class="qa">
+        <h3>The screen went blank. Is it broken or asleep?</h3>
+        <p>Almost certainly neither. The screen blanks after about a minute of no button presses to save the display — the device is wide awake and still receiving. Press a button and it comes straight back.</p>
+        <p>After about an hour untouched it does properly go to sleep, and either button wakes it. <b>A sleeping Dot Dash still collects messages</b>, so nothing is lost while it naps; they are waiting in INBOX.</p>
+      </div>
+      <div class="qa">
+        <h3>Does it need Wi-Fi to work?</h3>
+        <p>Yes, for sending and receiving — there is no SIM and no mobile data. Train, the games and the timer all work offline.</p>
+      </div>
+      <div class="qa">
+        <h3>What happens when it leaves the house?</h3>
+        <p>If it finds one of its five saved networks, it carries on. If not, it waits. Anything sent to it while it is away is delivered when it reconnects, so a Dot Dash in a bag for a weekend comes home with its messages.</p>
+        <p>This is why adding the networks in advance matters. A Dot Dash somewhere new, with no saved network there, cannot message home — and the app is the only way to add one remotely, which needs the device online. Add it before you travel.</p>
+      </div>
+      <div class="qa">
+        <h3>How do updates work?</h3>
+        <p>We push them. A Dot Dash checks for new firmware and tells you when there is one; you can also force a check with <b>TOOLS &rarr; UPDATE</b>. Updates are free and we would rather you were on the current one — several things in this FAQ only exist on recent firmware.</p>
+      </div>
+      <div class="qa">
+        <h3>Is there an off switch?</h3>
+        <p>Current devices have one, but it does less than you would expect: sleeping and being switched off draw nearly the same power. Leaving a Dot Dash on is fine, and it will put itself to sleep. We are moving towards no switch at all.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="privacy">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="9" y="3" width="6" height="2"/><rect x="8" y="4" width="1" height="8"/><rect x="15" y="4" width="1" height="8"/><rect x="9" y="5" width="1" height="7"/><rect x="14" y="5" width="1" height="7"/><rect x="4" y="10" width="4" height="2"/><rect x="10" y="10" width="4" height="2"/><rect x="16" y="10" width="4" height="2"/><rect x="4" y="12" width="2" height="8"/><rect x="18" y="12" width="2" height="8"/><rect x="10" y="13" width="4" height="2"/><rect x="11" y="15" width="2" height="2"/><rect x="6" y="18" width="12" height="2"/></svg><h2>Privacy and safety</h2><span class="count">6 questions</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <h3>What can the device see or hear?</h3>
+        <p>Nothing. There is no camera, no microphone and no location tracking, and there is no browser — so there is no way to reach the open internet from a Dot Dash, intentionally or otherwise.</p>
+      </div>
+      <div class="qa">
+        <h3>Who can message a Dot Dash?</h3>
+        <p>Only the contacts you have approved, and only up to 20 of them. There is no discovery, no friend suggestions and no way for a stranger to find a device. An unknown call sign that tries becomes a request in your app; nothing appears on the device unless you approve it.</p>
+      </div>
+      <div class="qa">
+        <h3>Who can see the messages?</h3>
+        <p>The account a device is linked to can see all of it, in the Log, including both sides of every conversation. If you have set a Dot Dash up for somebody else to carry, it is worth telling them that plainly.</p>
+      </div>
+      <div class="qa">
+        <h3>Who runs the service?</h3>
+        <p>We do. Every message a Dot Dash sends or receives is carried by Dot Dash's own servers, which also handle updates, contact approvals and the Log. There are no ads and no trackers, and we do not sell or share messages or numbers for marketing.</p>
+      </div>
+      <div class="qa">
+        <h3>How do SMS notifications work?</h3>
+        <p>This is optional and only applies to contacts using a chat link rather than a device. On their chat page, that person can enter their own mobile number and tick the box to be notified when a message is waiting.</p>
+        <ul>
+          <li>Notifications come from <span class="num">(866) 786-1245</span>.</li>
+          <li>They say only that a message is waiting, and link back to the chat. <b>They never contain what anyone wrote.</b></li>
+          <li>At most one notification until they have looked at the chat again.</li>
+          <li><b>STOP</b> at any time to stop; <b>HELP</b> for help.</li>
+          <li>Numbers are stored encrypted, never shared or sold for marketing, and turning notifications off deletes the number.</li>
+        </ul>
+        <p>We never message a number that was not signed up this way, and nobody has to receive SMS messages to use Dot Dash. Message and data rates may apply, and carriers are not liable for delayed or undelivered messages.</p>
+      </div>
+      <div class="qa">
+        <h3>What if I want everything deleted?</h3>
+        <p>Deleting your account releases every Dot Dash you have linked, erases your message history and removes your base call sign. It is permanent, and the app asks you to type DELETE to confirm.</p>
+        <p>Full details are in our <a href="/privacy.html">Privacy Policy</a> and <a href="/terms.html">Terms of Service</a>.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="troubleshooting">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="13" y="6" width="8" height="1"/><rect x="12" y="7" width="10" height="2"/><rect x="12" y="9" width="5" height="6"/><rect x="4" y="10" width="13" height="4"/><rect x="12" y="15" width="10" height="2"/><rect x="13" y="17" width="8" height="1"/></svg><h2>Troubleshooting</h2><span class="count">8 questions</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <h3>The app says the Dot Dash is offline.</h3>
+        <p>In order of likelihood: it is asleep (press a button), it is out of range of every saved network, or the Wi-Fi password changed. For the last one, add the network again in the app — or, if the device cannot get online at all to receive that, use <b>TOOLS &rarr; WIFI</b> on the device itself.</p>
+        <div class="screen"><svg viewBox="0 0 128 32" width="128" height="32" role="img" aria-label="Device screen showing TOOLS, WIFI"><rect width="128" height="32" fill="#000"/><text class="s1" x="3" y="8">TOOLS</text><text class="s2" x="3" y="29">WIFI</text></svg></div>
+      </div>
+      <div class="qa">
+        <h3>A message did not arrive.</h3>
+        <p>First check whether the destination is online — a Dot Dash that is away will collect it when it reconnects, which can look like a failure in the meantime. If it stays missing, and especially if messages go one way but not the other, email us: that specific pattern is usually something on our side and we can see it in the logs.</p>
+      </div>
+      <div class="qa">
+        <h3>It is sending dots when I mean dashes.</h3>
+        <p>The device learns rhythm from use, so the fix is usually Train rather than a setting: a few rounds of <b>LETTERS</b> teaches it your timing. All four Train stages feed the same picture, so any practice helps.</p>
+      </div>
+      <div class="qa">
+        <h3>A button feels unresponsive, or presses register as the wrong thing.</h3>
+        <p>Try a firmer, fully-seated press first — a half press can behave oddly. If it persists, get in touch with the device's call sign and what exactly misbehaves; this is one we have specific diagnostics for.</p>
+      </div>
+      <div class="qa">
+        <h3>We can't find the device.</h3>
+        <p>Use <b>Find My Dot Dash</b> in the app. It rings loudly and lights the screen for ten minutes, then more quietly. A Dot Dash that is flat or out of Wi-Fi range cannot ring, so this works best early.</p>
+      </div>
+      <div class="qa">
+        <h3>We forgot the pairing code / the screen does not show PAIRING.</h3>
+        <p>It is under <b>TOOLS &rarr; PAIRING</b>, and it is the same six characters every time — it does not expire. If that row is not there, run <b>TOOLS &rarr; UPDATE</b> first.</p>
+      </div>
+      <div class="qa">
+        <h3>The device won't turn on at all.</h3>
+        <p>Charge it over USB for a while first. If nothing, go to <b>Advanced settings &rarr; Device won't turn on? Replace or remove it</b> in the app, which lets you remove it from your account properly, then email us.</p>
+      </div>
+      <div class="qa">
+        <h3>Everything looks strange after an update.</h3>
+        <p>Try <b>TOOLS &rarr; RESTART</b>. If a screen seems wrong rather than just new, tell us — we are a small pilot and that kind of report is genuinely useful.</p>
+      </div>
+    </div>
+  </details>
+
+  <details class="sec" id="accounts">
+    <summary><svg class="mk" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="4" y="2" width="5" height="5"/><rect x="15" y="2" width="5" height="5"/><rect x="3" y="3" width="1" height="3"/><rect x="9" y="3" width="1" height="3"/><rect x="14" y="3" width="1" height="3"/><rect x="20" y="3" width="1" height="3"/><rect x="4" y="9" width="5" height="11"/><rect x="15" y="9" width="5" height="11"/><rect x="3" y="10" width="1" height="10"/><rect x="9" y="10" width="1" height="10"/><rect x="14" y="10" width="1" height="10"/><rect x="20" y="10" width="1" height="10"/><rect x="2" y="11" width="1" height="9"/><rect x="10" y="11" width="1" height="9"/><rect x="13" y="11" width="1" height="9"/><rect x="21" y="11" width="1" height="9"/></svg><h2>Accounts, extra devices and moving on</h2><span class="count">6 questions</span><span class="chev" aria-hidden="true">&#9654;</span></summary>
+    <div class="body">
+      <div class="qa">
+        <h3>Can I add a second Dot Dash to the same account?</h3>
+        <p>Yes — <i>Add another device</i> in the app, then pair it the same way. Each device keeps its own contacts, settings and arcade rules. One account can look after several devices.</p>
+      </div>
+      <div class="qa">
+        <h3>Can two people manage the same Dot Dash?</h3>
+        <p>A device is linked to one account. If you both need access, share the sign-in for now and tell us if that is awkward — it is the kind of thing we would build if enough people ask.</p>
+      </div>
+      <div class="qa">
+        <h3>Can my phone be a contact on someone else's Dot Dash?</h3>
+        <p>No, currently a base call sign on a phone can only be used to message devices registered to that account.</p>
+      </div>
+      <div class="qa">
+        <h3>How do I hand a Dot Dash to someone else?</h3>
+        <p>Unlink it first, in <b>Advanced settings &rarr; Unlink Device</b>, and have the new owner pair it afterwards. Doing it in that order matters — releasing before re-pairing is what keeps the two accounts from fighting over the same device. If you are handing one on, email us and we will make sure it is cleanly released.</p>
+      </div>
+      <div class="qa">
+        <h3>What happens if I delete my account?</h3>
+        <p>It releases every Dot Dash you have linked, erases your message history and removes your base call sign. Permanent, and the app asks you to type DELETE first. The devices themselves are fine and can be paired again by anyone.</p>
+      </div>
+      <div class="qa">
+        <h3>Where do I get help?</h3>
+        <p><b><a href="mailto:support@dotdashdevice.com">support@dotdashdevice.com</a></b> — a real person reads it, and during the pilot usually the person who built the thing.</p>
+        <p>We are also on Instagram at <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">@dotdashdevice</a>, which is the quickest way to see a Dot Dash actually being used.</p>
+      </div>
+    </div>
+  </details>
+</main>
+
+<footer>
+  <a href="/">Home</a> · <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">Instagram</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a> · <a href="mailto:support@dotdashdevice.com">Support</a>
+  <div>Dot Dash is made by Samuel Posner, a sole proprietor doing business as Dot Dash. 467 Van Buren St., Brooklyn, NY 11221.</div>
+  <div>© 2026 Dot Dash</div>
+</footer>
+
+<script>
+(function () {
+  var secs   = Array.prototype.slice.call(document.querySelectorAll('details.sec'));
+  var qas    = Array.prototype.slice.call(document.querySelectorAll('.qa'));
+  var input  = document.getElementById('q');
+  var wrap   = document.getElementById('search');
+  var clear  = document.getElementById('clear');
+  var toggle = document.getElementById('toggle');
+  var nohits = document.getElementById('nohits');
+
+  // Squashing to letters and digits is what makes "wifi" find "Wi-Fi" and
+  // "dotdash" find "Dot Dash". Each answer also carries its section's title, so
+  // searching "troubleshooting" surfaces that section rather than nothing.
+  function squash(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+  secs.forEach(function (s) {
+    var title = s.querySelector('h2').textContent;
+    Array.prototype.forEach.call(s.querySelectorAll('.qa'), function (qa) {
+      var copy = qa.cloneNode(true);
+      Array.prototype.forEach.call(copy.querySelectorAll('.screen'), function (n) {
+        n.parentNode.removeChild(n);
+      });
+      qa._hay = squash(title + ' ' + copy.textContent);
+    });
+  });
+
+  function syncToggle() {
+    var allOpen = secs.every(function (s) { return s.open; });
+    toggle.textContent = allOpen ? 'Collapse all' : 'Expand all';
+  }
+
+  toggle.addEventListener('click', function () {
+    var open = toggle.textContent === 'Expand all';
+    secs.forEach(function (s) { s.open = open; });
+    syncToggle();
+  });
+
+  secs.forEach(function (s) {
+    s.addEventListener('toggle', function () {
+      syncToggle();
+      // Opening a section makes it linkable without scrolling the page.
+      if (s.open && !input.value) history.replaceState(null, '', '#' + s.id);
+    });
+  });
+
+  // Filtering opens the sections that match and hides every answer that does
+  // not, because a closed <details> is invisible to find-in-page in Safari and
+  // Firefox -- without this the page would hide most of its own content.
+  var preFilterState = null;
+
+  function filter() {
+    var term = squash(input.value);
+    wrap.classList.toggle('has-text', !!input.value);
+
+    if (!term) {
+      qas.forEach(function (qa) { qa.style.display = ''; });
+      secs.forEach(function (s, i) {
+        s.style.display = '';
+        if (preFilterState) s.open = preFilterState[i];
+      });
+      preFilterState = null;
+      nohits.classList.remove('show');
+      syncToggle();
+      return;
+    }
+
+    if (!preFilterState) preFilterState = secs.map(function (s) { return s.open; });
+
+    var hits = 0;
+    secs.forEach(function (s) {
+      var found = 0;
+      Array.prototype.forEach.call(s.querySelectorAll('.qa'), function (qa) {
+        var match = qa._hay.indexOf(term) !== -1;
+        qa.style.display = match ? '' : 'none';
+        if (match) found++;
+      });
+      s.style.display = found ? '' : 'none';
+      s.open = !!found;
+      hits += found;
+    });
+    nohits.classList.toggle('show', hits === 0);
+    syncToggle();
+  }
+
+  input.addEventListener('input', filter);
+  clear.addEventListener('click', function () { input.value = ''; filter(); input.focus(); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { input.value = ''; filter(); }
+  });
+
+  // /faq#setup opens that section. Also handles a hash arriving later.
+  function openFromHash() {
+    var id = (location.hash || '').replace('#', '');
+    if (!id) return;
+    var el = document.getElementById(id);
+    if (el && el.tagName === 'DETAILS') {
+      el.open = true;
+      syncToggle();
+      el.scrollIntoView();
+    }
+  }
+  openFromHash();
+  window.addEventListener('hashchange', openFromHash);
+
+  // In-page links to a collapsed section need it open before the jump.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if (!a) return;
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el && el.tagName === 'DETAILS') el.open = true;
+  });
+
+  // Print the whole thing, not nine closed summaries.
+  var printed = null;
+  window.addEventListener('beforeprint', function () {
+    printed = secs.map(function (s) { return s.open; });
+    secs.forEach(function (s) { s.open = true; });
+  });
+  window.addEventListener('afterprint', function () {
+    if (printed) secs.forEach(function (s, i) { s.open = printed[i]; });
+    printed = null;
+    syncToggle();
+  });
+
+  // A reload can restore a typed query into the box without firing `input`,
+  // which would leave the page unfiltered under a filter it is still showing.
+  if (input.value) filter(); else syncToggle();
+})();
+</script>
+</body>
+</html>
