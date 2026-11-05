@@ -155,6 +155,9 @@
   .cta .primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
   .cta .secondary { background:var(--card); color:var(--ink); }
   .cta .secondary:hover { border-color:var(--accent); color:var(--accent); }
+  /* The same buttons away from the hero: they need their own breathing room
+     because no lede sits above them. */
+  .cta-mid { margin:24px 0 18px; }
   .cta a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 
   /* ---- Sections ---- */
@@ -280,9 +283,10 @@
       </picture>
     </figure>
 
+    <!-- One action, not two. "What it is" pointed at the next section on the
+         page, which the page already carries you to by scrolling. -->
     <div class="cta">
-      <a class="primary" href="#what">What it is</a>
-      <a class="secondary" href="/faq">Read the FAQ</a>
+      <a class="primary" href="https://tally.so/r/VLKMDM" rel="noopener">Want one?</a>
     </div>
   </div>
 
@@ -354,6 +358,13 @@
       <li><b>Fifteen minutes to set up the first one.</b> Wi-Fi, an account, a six-character pairing code, and a call sign for the device. The <a href="/faq#setup">FAQ walks through all five steps</a>.</li>
     </ul>
   </section>
+
+  <!-- The FAQ moved out of the hero when "Want one?" took the single primary
+       slot there, so it needs a door of its own before the last section asks
+       whether you are still deciding. -->
+  <div class="cta cta-mid">
+    <a class="secondary" href="/faq">Read the FAQ</a>
+  </div>
 
   <section id="more">
     <div class="head">
