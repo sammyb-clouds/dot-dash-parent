@@ -34,8 +34,9 @@
 
   ---- DESIGN ----
   Shares its whole system with /faq: same two self-hosted faces, same tokens,
-  same 24-unit pixel marks, same 128x32 screen treatment. Change one, change
-  both. The rules that are easy to break by accident:
+  same 24-unit pixel marks. Change one, change both. /faq still draws 128x32
+  device screens; this page no longer does. The rules that are easy to break
+  by accident:
 
   - The accent is a UI colour, not a brand colour, and it is a PAIR. Every
     device ships a different pair of button colours, so no single colour can
@@ -53,17 +54,23 @@
     rather than the mark.
   - Marks are drawn on a 24-unit grid and shown at 24px or 48px ONLY -- the
     sizes where one grid unit lands on whole device pixels at 1x, 2x and 3x.
-  - Screens are 128x32 at 4:1, white on black in BOTH themes, because that is
-    what the hardware does. The labels in them are real: INBOX, FRIENDS, TRAIN,
-    ARCADE, TIMER, TOOLS is the device's actual main menu, in its actual order.
+  - The HERO PHOTOGRAPH is the device itself, shot straight on, cropped and
+    resampled to 1600x1096 with sips; the uncropped original is kept out of
+    the deploy folder at ../media-src/hero-device-original.jpg so the crop can
+    be redone. It took the place of a drawn 128x32 screen reading
+    FROM MAYA0101 / HELLO, because a page selling a physical object should
+    open with the object. It is the ONLY <img> on the page -- everything else
+    is inline SVG -- and the page still loads nothing from a third party.
+  - 128x32 device screens used to be drawn on this page (white on black in
+    both themes, showing the real main menu). They are gone: the screen
+    gallery section went with the 2026-11-05 edit. /faq still has them, so the
+    treatment lives there now.
   - MOTION: there is none, and that is the point. No scroll-jacking, no
     parallax, no autoplaying video, no popups -- the pitch is calm technology
     and a restless page would contradict it in the first three seconds. The
-    hero screen was briefly animated (the Morse playing out letter by letter,
-    the way the device does); it was dropped because a page that argues for
-    nothing competing for a child's attention should not open with something
-    moving. If motion is ever reconsidered, the device screen is the ONLY
-    candidate, because it is the one thing that would be literally true.
+    hero screen that used to sit here was briefly animated (the Morse playing
+    out letter by letter, the way the device does); it was dropped, and then
+    the screen itself was replaced by the photograph.
 
   Deployed by hand: scp site/* and legal/* to /var/www/dotdashdevice/
   (videos and posters to /var/www/dotdashdevice/media/).
@@ -158,20 +165,15 @@
   p:last-child { margin-bottom:0; }
   .note { color:var(--muted); font-size:15px; }
 
-  /* ---- The device screen. 128x32, 1-bit, white on black in both themes. ---- */
-  .screen svg { display:block; width:100%; height:auto; background:#000;
-                border:1px solid var(--screen-edge); border-radius:3px; }
-  .screen .s1 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
-                font-size:10px; fill:#fff; }
-  .screen .s2 { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
-                font-size:20px; fill:#fff; }
-  .hero .screen { max-width:420px; margin:26px auto 10px; }
-  .cap { color:var(--muted); font-size:14px; text-align:center; margin:0; }
-
-  /* The screen gallery: real menu rows, at the device's own proportions. */
-  .screens { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px 18px; margin-top:4px; }
-  .screens figure { margin:0; }
-  .screens figcaption { color:var(--muted); font-size:15px; margin-top:8px; line-height:1.45; }
+  /* ---- The hero photograph. The ground it was shot on is nearly white, so
+     in dark mode it would be a slab of light; the brightness pull-back is
+     what keeps it sitting on the page instead of glowing off it. ---- */
+  .shot { max-width:640px; margin:26px auto 6px; }
+  .shot img { display:block; width:100%; height:auto;
+              border-radius:16px; border:1px solid var(--rule); }
+  @media (prefers-color-scheme: dark) {
+    .shot img { filter:brightness(.86) contrast(1.03); }
+  }
 
   /* ---- The "nothing on it" strip. Four absences, stated as plainly as the
      firmware states them. Type, not icons: these are words, not pictures. ---- */
@@ -259,18 +261,14 @@
     <h1>Dot Dash</h1>
     <p class="lede">A pocket messaging device that works in Morse code. Two buttons, one small screen, and only the people you have approved.</p>
 
-    <!-- A real message on the real 128x32 screen, at its real aspect. Static:
-         this was briefly animated letter-by-letter and the page is better
-         without it -- see the MOTION note at the top of this file. -->
-    <div class="screen">
-      <svg viewBox="0 0 128 32" role="img"
-           aria-label="The Dot Dash screen, showing a message from MAYA0101 reading HELLO.">
-        <rect width="128" height="32" fill="#000"/>
-        <text class="s1" x="3" y="9">FROM MAYA0101</text>
-        <text class="s2" x="3" y="29">HELLO</text>
-      </svg>
-    </div>
-    <p class="cap">A message on the screen, at its real size and aspect.</p>
+    <!-- The object itself, straight on. This took the place of a drawn 128x32
+         screen reading FROM MAYA0101 / HELLO; see the note at the top of the
+         file. It is the only <img> on the page. -->
+    <figure class="shot">
+      <img src="/media/device.jpg" width="1600" height="1096"
+           alt="A Dot Dash seen from the front: a small white box with a round blue button on the left, a narrow black screen on the right, and a smile cut into the case between them. A green button and a green indicator light sit along the top edge."
+           fetchpriority="high" decoding="async">
+    </figure>
 
     <div class="cta">
       <a class="primary" href="#what">What it is</a>
@@ -283,11 +281,10 @@
       <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="3" y="8" width="3" height="7"/><rect x="2" y="9" width="1" height="5"/><rect x="6" y="9" width="1" height="5"/><rect x="11" y="9" width="12" height="5"/><rect x="1" y="10" width="1" height="3"/><rect x="7" y="10" width="1" height="3"/></svg>
       <h2>What a Dot Dash is</h2>
     </div>
-    <p>A small, hand-built object with a 128&nbsp;&times;&nbsp;32 screen, two arcade buttons, a buzzer and an LED. You tap a message out in Morse — or pick one of your own ready-made phrases — and it arrives on another Dot Dash, or in the Dot Dash app on a phone.</p>
+    <p>A small, hand-built object with a tiny screen, two arcade buttons, a buzzer and an LED. You tap a message out in Morse Code, or pick one of your own ready-made phrases, and it arrives on another Dot Dash, or in the Dot Dash app on a phone.</p>
     <p>It is a messaging device and nothing else. That is the whole idea, and it is easier to show as a list of things it hasn't got:</p>
     <div class="nots">
       <div><b>No</b>camera</div>
-      <div><b>No</b>microphone</div>
       <div><b>No</b>web browser</div>
       <div><b>No</b>location tracking</div>
     </div>
@@ -304,32 +301,6 @@
       <li><div><b>It travels over Wi-Fi.</b><p>There is no SIM and no mobile data. A Dot Dash remembers up to five networks and uses whichever it finds, so it works at home, at a grandparent's and on holiday without being set up again. Messages go through Dot Dash's own servers, not anybody else's.</p></div></li>
       <li><div><b>It arrives.</b><p>On another Dot Dash, where it can play out mark by mark like a telegraph, or in the Dot Dash app on a phone. Someone with neither can be sent a private web link and reply from that.</p></div></li>
     </ol>
-  </section>
-
-  <section id="screen">
-    <div class="head">
-      <svg class="mk" viewBox="0 0 24 24" aria-hidden="true" focusable="false" shape-rendering="crispEdges" fill="currentColor"><rect x="6" y="3" width="12" height="2"/><rect x="6" y="5" width="2" height="16"/><rect x="16" y="5" width="2" height="16"/><rect x="9" y="6" width="6" height="10"/><rect x="11" y="17" width="2" height="4"/><rect x="8" y="19" width="3" height="2"/><rect x="13" y="19" width="3" height="2"/></svg>
-      <h2>Everything on it fits in 128 &times; 32 pixels</h2>
-    </div>
-    <p>One line of big type, or two of small. No colour, no greys, no animation beyond what the device is actually doing. Working inside that is the reason a Dot Dash feels calm: there is no room on the screen for anything that isn't the message. This is the whole menu.</p>
-    <div class="screens">
-      <figure>
-        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the INBOX menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="2" y="4" width="20" height="1"/><rect x="2" y="5" width="2" height="1"/><rect x="20" y="5" width="2" height="1"/><rect x="2" y="6" width="3" height="1"/><rect x="19" y="6" width="3" height="1"/><rect x="2" y="7" width="1" height="12"/><rect x="4" y="7" width="2" height="1"/><rect x="18" y="7" width="2" height="1"/><rect x="21" y="7" width="1" height="12"/><rect x="5" y="8" width="2" height="1"/><rect x="17" y="8" width="2" height="1"/><rect x="6" y="9" width="2" height="1"/><rect x="16" y="9" width="2" height="1"/><rect x="7" y="10" width="2" height="1"/><rect x="15" y="10" width="2" height="1"/><rect x="8" y="11" width="2" height="1"/><rect x="14" y="11" width="2" height="1"/><rect x="9" y="12" width="2" height="1"/><rect x="13" y="12" width="2" height="1"/><rect x="10" y="13" width="4" height="1"/><rect x="11" y="14" width="2" height="1"/><rect x="2" y="19" width="20" height="1"/></g><text class="s2" x="34" y="25">INBOX</text></svg></div>
-        <figcaption><b>Inbox and Friends.</b> Messages in, and the approved list they can come from.</figcaption>
-      </figure>
-      <figure>
-        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the TRAIN menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="14" y="2" width="7" height="2"/><rect x="1" y="3" width="11" height="2"/><rect x="15" y="4" width="5" height="5"/><rect x="2" y="5" width="9" height="1"/><rect x="2" y="6" width="2" height="3"/><rect x="9" y="6" width="2" height="3"/><rect x="2" y="9" width="20" height="7"/><rect x="5" y="16" width="5" height="1"/><rect x="14" y="16" width="5" height="1"/><rect x="4" y="17" width="7" height="1"/><rect x="13" y="17" width="7" height="1"/><rect x="4" y="18" width="3" height="1"/><rect x="8" y="18" width="3" height="1"/><rect x="13" y="18" width="3" height="1"/><rect x="17" y="18" width="3" height="1"/><rect x="4" y="19" width="7" height="1"/><rect x="13" y="19" width="7" height="1"/><rect x="5" y="20" width="5" height="1"/><rect x="14" y="20" width="5" height="1"/><rect x="6" y="21" width="3" height="1"/><rect x="15" y="21" width="3" height="1"/></g><text class="s2" x="34" y="25">TRAIN</text></svg></div>
-        <figcaption><b>Train.</b> Morse practice in stages — letters, then words, then a test.</figcaption>
-      </figure>
-      <figure>
-        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the ARCADE menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="10" y="2" width="4" height="8"/><rect x="9" y="3" width="1" height="7"/><rect x="14" y="3" width="1" height="7"/><rect x="8" y="4" width="1" height="5"/><rect x="15" y="4" width="1" height="5"/><rect x="11" y="10" width="2" height="11"/><rect x="7" y="16" width="4" height="5"/><rect x="13" y="16" width="4" height="5"/><rect x="6" y="17" width="1" height="4"/><rect x="17" y="17" width="1" height="4"/><rect x="5" y="19" width="1" height="2"/><rect x="18" y="19" width="1" height="2"/></g><text class="s2" x="34" y="25">ARCADE</text></svg></div>
-        <figcaption><b>Arcade.</b> Four games, unlocked for the day with points earned by messaging and practising.</figcaption>
-      </figure>
-      <figure>
-        <div class="screen"><svg viewBox="0 0 128 32" role="img" aria-label="Device screen: the TIMER menu row."><rect width="128" height="32" fill="#000"/><g fill="#fff" shape-rendering="crispEdges" transform="translate(4,4)"><rect x="3" y="2" width="18" height="2"/><rect x="4" y="4" width="1" height="1"/><rect x="19" y="4" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="8" y="5" width="8" height="1"/><rect x="18" y="5" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="9" y="6" width="6" height="1"/><rect x="17" y="6" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="10" y="7" width="4" height="1"/><rect x="16" y="7" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="11" y="8" width="2" height="1"/><rect x="15" y="8" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="14" y="9" width="1" height="1"/><rect x="10" y="10" width="1" height="1"/><rect x="13" y="10" width="1" height="1"/><rect x="11" y="11" width="2" height="2"/><rect x="10" y="13" width="1" height="1"/><rect x="13" y="13" width="1" height="1"/><rect x="9" y="14" width="1" height="1"/><rect x="14" y="14" width="1" height="1"/><rect x="8" y="15" width="1" height="1"/><rect x="15" y="15" width="1" height="1"/><rect x="7" y="16" width="1" height="1"/><rect x="16" y="16" width="1" height="1"/><rect x="6" y="17" width="1" height="1"/><rect x="17" y="17" width="1" height="1"/><rect x="5" y="18" width="1" height="1"/><rect x="18" y="18" width="1" height="1"/><rect x="4" y="19" width="1" height="1"/><rect x="19" y="19" width="1" height="1"/><rect x="3" y="20" width="18" height="2"/></g><text class="s2" x="34" y="25">TIMER</text></svg></div>
-        <figcaption><b>Timer.</b> The one feature with nothing to do with messaging. Train, the games and the timer all work offline.</figcaption>
-      </figure>
-    </div>
   </section>
 
   <section id="morse">
