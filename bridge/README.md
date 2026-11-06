@@ -221,7 +221,36 @@ already on file. A timestamped backup of `signups.jsonl` is taken first.
 The `opted_in_at` column is carried into the store's `t` field, so the record
 says when each person actually opted in rather than when the import ran.
 
-**Done 2026-11-06:** 48 addresses from the first giveaway export, taking the
-list from 2 to 50. Addresses only — the CSV also has names, and nothing needs
-them. Privacy policy section 5B was widened to say the list holds giveaway
-opt-ins too.
+### One list, not a sum of lists
+
+When addresses already live in another Resend audience, **move them into the
+Website audience** rather than making the counter add two audiences together.
+Summing looks cheaper and hides a trap: a known address that uses the form
+takes the `already` branch, which clears the unsubscribed flag with a PATCH
+*against the Website audience*. Verified against the live API — that PATCH on a
+non-member returns `404 Contact not found` and does **not** upsert. So anyone
+counted but not actually in the audience would be told "you're already signed
+up" and would never join the list they just asked for. Silent, and it only
+shows up months later as a list smaller than the number on the page.
+
+Two smaller things learned doing it:
+
+- A Resend contact's `created_at` is the **email identity's** first appearance
+  across the account, not when it joined this audience — so a freshly imported
+  contact can show a date from weeks before the audience existed. Don't read
+  it as "joined this list on".
+- Re-POSTing an existing address returns 201 and the audience does not grow.
+  Resend upserts by address, so overlaps between audiences need no special
+  handling.
+
+**Done 2026-11-06,** list 2 → 225 in two passes:
+
+- **+48** from the giveaway's "Mailing list CSV" export (the opt-in checkbox).
+- **+175** merged in from the **IG SURVEY** audience (187 contacts, 11 already
+  present, 1 dropped: `...@gmail.comw`, a typo that would only ever bounce).
+  Sam confirmed everyone on that list signed up to be told when Dot Dash would
+  be available — the same promise the box makes, which is what allows the two
+  to become one list.
+
+Addresses only; both sources carry names and nothing needs them. Privacy
+policy section 5B was widened to say the list holds these sign-ups too.
