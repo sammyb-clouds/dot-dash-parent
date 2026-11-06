@@ -152,7 +152,6 @@
   .cta a { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
            font-size:15px; text-transform:uppercase; text-decoration:none;
            border-radius:12px; padding:13px 18px 11px; border:1px solid var(--rule); }
-  .cta .primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
   .cta .secondary { background:var(--card); color:var(--ink); }
   .cta .secondary:hover { border-color:var(--accent); color:var(--accent); }
   /* The same buttons away from the hero: they need their own breathing room
@@ -162,7 +161,7 @@
   /* ---- Mailing-list signup, under the one call to action. Same tokens as
      everything else; the input is a card with a rule round it so it reads as
      part of the system rather than a browser default. ---- */
-  .signup { max-width:420px; margin:18px auto 0; text-align:center; }
+  .signup { max-width:420px; margin:22px auto 0; text-align:center; }
   .signup-line { margin:0 0 10px; font-size:16px; color:var(--ink); }
   .signup-row { display:flex; gap:8px; justify-content:center; }
   .signup-input { flex:1 1 auto; min-width:0; font:400 16px/1.2 inherit;
@@ -170,11 +169,12 @@
                   border:1px solid var(--rule); border-radius:12px; padding:13px 14px; }
   .signup-input::placeholder { color:var(--muted); opacity:1; }
   .signup-input:focus-visible, .signup-go:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  /* The accent fill moved here when the "Want one?" button came out: this is
+     now the only action in the hero, and the hero should have one. */
   .signup-go { flex:0 0 auto; font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
                font-size:15px; text-transform:uppercase; cursor:pointer;
-               background:var(--card); color:var(--ink);
-               border:1px solid var(--rule); border-radius:12px; padding:13px 16px 11px; }
-  .signup-go:hover { border-color:var(--accent); color:var(--accent); }
+               background:var(--accent); color:var(--accent-ink);
+               border:1px solid var(--accent); border-radius:12px; padding:13px 16px 11px; }
   .signup-go[disabled] { opacity:.6; cursor:default; }
   .signup-msg { margin:9px 0 0; font-size:15px; color:var(--muted); min-height:1.4em; }
   .signup-msg.bad { color:var(--ink); }
@@ -311,12 +311,6 @@
       </picture>
     </figure>
 
-    <!-- One action, not two. "What it is" pointed at the next section on the
-         page, which the page already carries you to by scrolling. -->
-    <div class="cta">
-      <a class="primary" href="https://tally.so/r/VLKMDM" rel="noopener">Want one?</a>
-    </div>
-
     <!-- Posts to our own origin, and works without JavaScript: action= and
          method= are real, and bridge/signup.mjs answers a non-JSON request
          with a plain page. "company" is a honeypot -- hidden from people,
@@ -408,9 +402,9 @@
     </ul>
   </section>
 
-  <!-- The FAQ moved out of the hero when "Want one?" took the single primary
-       slot there, so it needs a door of its own before the last section asks
-       whether you are still deciding. -->
+  <!-- The FAQ's own door, before the last section asks whether you are still
+       deciding. It left the hero when "Want one?" took the single slot there,
+       and stayed out when the signup box replaced that button in turn. -->
   <div class="cta cta-mid">
     <a class="secondary" href="/faq">Read the FAQ</a>
   </div>
