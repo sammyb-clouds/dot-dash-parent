@@ -158,6 +158,34 @@
   /* The same buttons away from the hero: they need their own breathing room
      because no lede sits above them. */
   .cta-mid { margin:24px 0 18px; }
+
+  /* ---- Mailing-list signup, under the one call to action. Same tokens as
+     everything else; the input is a card with a rule round it so it reads as
+     part of the system rather than a browser default. ---- */
+  .signup { max-width:420px; margin:18px auto 0; text-align:center; }
+  .signup-line { margin:0 0 10px; font-size:16px; color:var(--ink); }
+  .signup-row { display:flex; gap:8px; justify-content:center; }
+  .signup-input { flex:1 1 auto; min-width:0; font:400 16px/1.2 inherit;
+                  background:var(--card); color:var(--ink);
+                  border:1px solid var(--rule); border-radius:12px; padding:13px 14px; }
+  .signup-input::placeholder { color:var(--muted); opacity:1; }
+  .signup-input:focus-visible, .signup-go:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .signup-go { flex:0 0 auto; font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+               font-size:15px; text-transform:uppercase; cursor:pointer;
+               background:var(--card); color:var(--ink);
+               border:1px solid var(--rule); border-radius:12px; padding:13px 16px 11px; }
+  .signup-go:hover { border-color:var(--accent); color:var(--accent); }
+  .signup-go[disabled] { opacity:.6; cursor:default; }
+  .signup-msg { margin:9px 0 0; font-size:15px; color:var(--muted); min-height:1.4em; }
+  .signup-msg.bad { color:var(--ink); }
+  .signup-count { margin:6px 0 0; font-size:14px; color:var(--muted); }
+  /* The honeypot: off-screen rather than display:none, because some bots skip
+     fields they can see are hidden. Never reachable by tab or by a reader. */
+  .su-hp { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  /* Visually hidden, still read aloud -- the input's real label. */
+  .vh { position:absolute; width:1px; height:1px; margin:-1px; padding:0;
+        overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+
   .cta a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 
   /* ---- Sections ---- */
@@ -288,6 +316,27 @@
     <div class="cta">
       <a class="primary" href="https://tally.so/r/VLKMDM" rel="noopener">Want one?</a>
     </div>
+
+    <!-- Posts to our own origin, and works without JavaScript: action= and
+         method= are real, and bridge/signup.mjs answers a non-JSON request
+         with a plain page. "company" is a honeypot -- hidden from people,
+         irresistible to form bots, and a filled one is answered exactly like
+         success so a bot learns nothing. -->
+    <form class="signup" id="signup" action="/signup/api/subscribe" method="post">
+      <p class="signup-line">Let me know when I can get one!</p>
+      <div class="signup-row">
+        <label class="vh" for="su-email">Email address</label>
+        <input class="signup-input" id="su-email" name="email" type="email" required
+               maxlength="254" autocomplete="email" inputmode="email" spellcheck="false"
+               placeholder="you@example.com">
+        <button class="signup-go" type="submit">Join</button>
+      </div>
+      <p class="signup-msg" id="su-msg" role="status" aria-live="polite"></p>
+      <p class="signup-count" id="su-count" hidden></p>
+      <div class="su-hp" aria-hidden="true">
+        <label>Company<input name="company" type="text" tabindex="-1" autocomplete="off"></label>
+      </div>
+    </form>
   </div>
 
   <section id="what">
@@ -432,6 +481,60 @@
       if (++gone === figs.length) document.querySelector('#watch .videos').style.display = 'none';
     });
   });
+
+
+  // ---- Mailing-list signup. Posts to our own origin (bridge/signup.mjs via
+  // nginx), so the page still loads nothing from a third party. The form has
+  // a real action= and works with scripting off; this only makes it quieter.
+  var su = document.getElementById('signup');
+  if (su && window.fetch) {
+    var msg = document.getElementById('su-msg');
+    var cnt = document.getElementById('su-count');
+    var btn = su.querySelector('button');
+
+    var show = function (text, bad) {
+      msg.textContent = text;
+      msg.className = 'signup-msg' + (bad ? ' bad' : '');
+    };
+    var paint = function (d) {
+      // The server decides whether the number is worth showing, not the page:
+      // a count of three argues against the product.
+      if (d && d.show) { cnt.textContent = d.count + ' people waiting'; cnt.hidden = false; }
+    };
+
+    fetch('/signup/api/count', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); }).then(paint).catch(function () {});
+
+    // The browser's own validation blocks submit on a malformed address and
+    // shows its bubble, so our handler never runs -- which would leave the
+    // PREVIOUS message sitting there contradicting it. Clear on typing.
+    su.elements.email.addEventListener('input', function () { show(''); });
+
+    su.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = su.elements.email.value.trim();
+      if (!email) { show('An email address, please.', true); return; }
+      btn.disabled = true; show('Adding you\u2026');
+      fetch('/signup/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ email: email, company: su.elements.company.value })
+      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          btn.disabled = false;
+          if (!res.ok || !res.d.ok) {
+            show(res.d && res.d.error === 'invalid' ? 'That address does not look right.'
+               : res.d && res.d.error === 'rate'    ? 'Too many sign-ups from your network. Try again in an hour.'
+               : 'Something went wrong. Please try again shortly.', true);
+            return;
+          }
+          su.elements.email.value = '';
+          show(res.d.already ? "You are already on the list." : "Thanks \u2014 you are on the list. Check your email.");
+          paint(res.d);
+        })
+        .catch(function () { btn.disabled = false; show('Something went wrong. Please try again shortly.', true); });
+    });
+  }
 
 })();
 </script>

@@ -71,6 +71,7 @@
 <tr><td>Push notification tokens</td><td>Parent's phone</td><td>To notify the parent (for example, a message to them or a friend request)</td></tr>
 <tr><td>Link contact's name, the messages they exchange, and (if they turn notifications on) a browser notification address</td><td>Parent, link contact</td><td>Chat between a link contact and the child's device (section 5)</td></tr>
 <tr><td>Link contact's mobile number, only if they choose SMS notifications</td><td>Link contact</td><td>Telling them a new message is waiting (section 5A)</td></tr>
+<tr><td>Email address, only if you type it into the mailing-list box on our home page</td><td>Anyone who asks to be told when devices are available</td><td>Sending you occasional news about Dot Dash (section 5B)</td></tr>
 </table>
 <p>We don't use advertising trackers or third-party analytics in the app, and we don't collect precise location.</p>
 
@@ -95,12 +96,18 @@
 <li>Turning SMS notifications off on the chat page, leaving the chat, or the parent removing the contact deletes the number.</li>
 </ul>
 
+<h2>5B. Mailing list (optional)</h2>
+<p>The home page at <a href="https://dotdashdevice.com">dotdashdevice.com</a> has a box where you can leave an email address to be told when a Dot Dash can be had. This is entirely optional and has nothing to do with using a device: nobody needs to join it, and joining it gives you no account.</p>
+<p>We store the address with <b>Resend</b>, who send the mail for us, and we send you one short message confirming you are on the list. Our own server keeps only a one-way scrambled form of the address (so we can count the list and avoid writing to you twice) and never the address itself. We use it for occasional news about Dot Dash and nothing else &mdash; never for anyone else's advertising, and we never sell or rent it.</p>
+<p>Every email we send carries an unsubscribe link, and your mail app's own unsubscribe button works too. Either one removes you from the list straight away, with nothing to log in to. You can also email <a href="mailto:support@dotdashdevice.com">support@dotdashdevice.com</a> and we'll take you off.</p>
+
 <h2>6. Who we share information with</h2>
 <p>We share information only with the service providers that run Dot Dash, and only for that purpose:</p>
 <ul>
 <li><b>Google Firebase</b>: account sign-in, the database, and push notifications.</li>
 <li><b>Apple</b>: push notifications on iPhone.</li>
 <li><b>DigitalOcean</b>: the server that relays messages between devices and runs the parent app.</li>
+<li><b>Resend</b>: storing the mailing list and sending its email, for people who joined it on the home page (section 5B). Resend receives the email address and the message.</li>
 <li><b>Twilio</b>: sending SMS notifications to link contacts who sign up for them. Twilio receives their mobile number and the notification, which never contains message content.</li>
 <li><b>Browser notification services</b> (such as Apple, Google or Mozilla, depending on the link contact's browser): delivering notifications to link contacts who turn them on. Notifications are encrypted so only the contact's browser can read them.</li>
 </ul>
@@ -112,6 +119,7 @@
 <li><b>Wi-Fi passwords</b> are kept only until the device confirms it has the network.</li>
 <li><b>Device and child information</b> is kept while the device is paired. Unpairing removes the device from the parent's account.</li>
 <li><b>Link contacts</b>, and the mobile numbers of those who chose SMS notifications: as described in sections 5 and 5A.</li>
+<li><b>Mailing-list addresses</b> are kept until you unsubscribe or ask us to remove you.</li>
 <li><b>Everything else</b> is kept until the parent deletes their account.</li>
 </ul>
 

@@ -114,3 +114,75 @@ the family's own friend lists. Incoming entries carry the sender's id as sent.
 
 Cost: roughly one extra small write per child message, the same shape as the
 message writes already sized in the scaling note.
+
+## signup.mjs — the home page mailing list
+
+The box under "Want one?" on dotdashdevice.com. Adds the address to the
+**Website** audience in Resend and sends one welcome email.
+
+    /root/dotdash_bridge/signup.mjs
+    /root/dotdash_bridge/signup.env          0600, never in git
+    /var/lib/dotdash-signup/signups.jsonl    created by systemd (StateDirectory)
+    /etc/systemd/system/dotdash-signup.service
+
+    ./deploy-signup.sh          # idempotent; never touches signup.env or the list
+    journalctl -u dotdash-signup -f
+
+`signup.env` needs `RESEND_API_KEY`, `RESEND_AUDIENCE_ID`, `EMAIL_FROM` and
+optionally `SIGNUP_SHOW_FROM`. nginx proxies `^~ /signup/api/` to
+127.0.0.1:8794 (`ops/nginx-dotdashdevice-site.conf`).
+
+**Its own process, not a route in sms.mjs.** That service also serves the `/c/`
+chat pages for link contacts; restarting it to ship a copy change on a signup
+form would cut live conversations off. This one restarts freely.
+
+**It stores a hash, not the address.** `signups.jsonl` holds
+`sha256(lowercased, trimmed address)` and a timestamp. Resend is the system of
+record; the only two local questions are "how many" and "have we welcomed this
+one", and a hash answers both. Lowercase and trim BEFORE hashing or the same
+person hashes two ways — the same discipline as the MQTT topic keys.
+
+**One welcome per address, ever.** This is the control that makes a public
+single-opt-in form safe: a repeat signup is idempotent and silent, so the worst
+a scripted abuser can do to any given victim is one email. The per-IP limit
+(60/hour) is deliberately loose for the reason `raffle/src/lib/rate-limit.ts`
+spells out — carrier-grade NAT puts thousands of real people behind one IP.
+
+**`SIGNUP_SHOW_FROM` (default 25)** is the count below which the page shows no
+number at all. A public "3 people waiting" argues against the product. The
+server decides, not the page.
+
+**It works without JavaScript.** The form has a real `action`/`method`, and a
+request that doesn't ask for JSON gets a plain HTML page back.
+
+**The welcome email's HTML part is pure ASCII**, entities and all, with its own
+`<meta charset>`. An HTML part that travels without a charset of its own and
+contains raw UTF-8 renders as mojibake in some clients — which is exactly what
+the first draft did. `reply_to` is support@, because the email tells people
+they can reply to get off the list and hello@ is only a sending address.
+
+### Unsubscribe
+
+Every welcome email carries a link, and the message also sets
+`List-Unsubscribe` and `List-Unsubscribe-Post` so Gmail's and Apple Mail's own
+Unsubscribe buttons work (RFC 8058 one-click).
+
+The link has to carry the address, because this service stores only hashes
+and cannot look one up -- so it is **signed**: address plus a truncated HMAC,
+and an edited link is refused with a 400. The key is generated once into
+`/var/lib/dotdash-signup/secret` (0600), or set `SIGNUP_SECRET` to pin it.
+Wiping the state directory invalidates every link already sent; that is the
+price of not putting another secret in `signup.env`.
+
+**GET only asks; POST does it.** Mail clients and security scanners fetch
+every link in a message to check it, so a GET that unsubscribed would quietly
+remove people who never clicked. GET renders a confirm page with a button;
+the button and the mail client's one-click POST both hit the same route.
+
+**Subscribing an address we already know clears the unsubscribed flag.**
+Without that, somebody who left and came back would be told "you're already
+on the list" while Resend went on skipping them.
+
+Verified against the live API: subscribe -> `unsubscribed=false`, GET the link
+-> unchanged, one-click POST -> `unsubscribed=true`, subscribe again ->
+`unsubscribed=false`.

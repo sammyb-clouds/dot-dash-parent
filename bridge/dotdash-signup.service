@@ -1,0 +1,22 @@
+[Unit]
+Description=Dot Dash mailing-list signup (home page -> Resend)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/dotdash_bridge
+# RESEND_API_KEY, RESEND_AUDIENCE_ID, EMAIL_FROM, SIGNUP_SHOW_FROM.
+# 0600, root only, never in git.
+EnvironmentFile=/root/dotdash_bridge/signup.env
+# systemd creates and owns /var/lib/dotdash-signup. Holds signups.jsonl:
+# a SHA-256 per address and a timestamp, never the address itself.
+StateDirectory=dotdash-signup
+ExecStart=/usr/bin/node /root/dotdash_bridge/signup.mjs
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
