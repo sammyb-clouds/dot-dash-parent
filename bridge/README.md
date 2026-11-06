@@ -186,3 +186,42 @@ on the list" while Resend went on skipping them.
 Verified against the live API: subscribe -> `unsubscribed=false`, GET the link
 -> unchanged, one-click POST -> `unsubscribed=true`, subscribe again ->
 `unsubscribed=false`.
+
+### Importing a list collected elsewhere — `import-list.mjs`
+
+The giveaway app's admin page exports **Mailing list CSV**: everyone who ticked
+*"Do you want to receive messages about future Dot Dash news?"*, which is
+unchecked by default. That is the same promise the home-page box makes, so
+those addresses belong on the same list.
+
+```
+node import-list.mjs list.csv            # parse and validate, change nothing
+node import-list.mjs list.csv --live     # import
+```
+
+It does **two** things, and the second is the one that is easy to forget:
+
+1. **Resend** — one `POST /audiences/{id}/contacts` per address. Creating a
+   contact sends no mail; the script never calls `/emails`. People who signed
+   up somewhere else must not receive the home page's welcome message, which
+   thanks them for something they did not just do.
+2. **The hash store** — appends `sha256(lowercased address)` to
+   `signups.jsonl` and restarts the service. This is what makes the public
+   count true, and it also arms the welcome-once rule: an imported person who
+   later types their address into the form is told *"you are already on the
+   list"* and nothing is sent.
+
+Skip step 2 and you get both failures at once — a count that reads 2 while the
+list holds 250, and a welcome email waiting to fire at every one of them.
+
+Both halves are safe to re-run: Resend upserts by address (a repeat POST
+returns 201 and the audience does not grow), and the store merge skips hashes
+already on file. A timestamped backup of `signups.jsonl` is taken first.
+
+The `opted_in_at` column is carried into the store's `t` field, so the record
+says when each person actually opted in rather than when the import ran.
+
+**Done 2026-11-06:** 48 addresses from the first giveaway export, taking the
+list from 2 to 50. Addresses only — the CSV also has names, and nothing needs
+them. Privacy policy section 5B was widened to say the list holds giveaway
+opt-ins too.
