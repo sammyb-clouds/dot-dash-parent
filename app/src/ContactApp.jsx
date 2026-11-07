@@ -4,16 +4,35 @@
  *
  * Laid out like a simplified account-holder app (main.jsx): a Chat tab with
  * each Dot Dash as a pill across the top, as in ChatView, and a Settings tab
- * with a notifications switch and the list of chats -- same TabButton, same
- * icons, handed in by Root through `ui`.
+ * with a notifications switch and the list of chats -- the same icons, handed
+ * in by Root through `ui`.
  *
  * Underneath it is the native twin of site/c/index.html: same API (/chat/api/
  * on dotdashdevice.com, bridge/sms/service.mjs chatApi), same rules -- each link
  * is claimed by the first device to connect, and messages are cleaned to what a
  * Dot Dash can show. What the app adds: links open here directly (Universal
  * Links, handled in Root), and notifications are native Firebase pushes.
+ *
+ * ---------------------------------------------------------------------------
+ * This is the FIRST surface on the Dot Dash brand layer (brand/DESIGN-BRIEF.md).
+ * Every colour, radius and face here comes from a token in app/src/index.css
+ * via tailwind.config.js -- `bg-ground`, `text-ink`, `bg-sent`, `border-rule`
+ * and so on. There is not one hex value and not one Tailwind palette colour
+ * left in this file, and that is the property to preserve: when a token moves,
+ * this page moves with it, and when main.jsx is brought over in stage two it
+ * inherits the same names.
+ *
+ * Two consequences worth knowing:
+ *  - It now has a dark mode, which main.jsx does not. That is why the mark is
+ *    drawn as line art in currentColor (Mark.jsx) instead of icon.jpg, which
+ *    is an opaque photograph with no alpha.
+ *  - Its tab bar is a local component rather than main.jsx's TabButton, which
+ *    is still hard-coded to blue-500/gray-400. Until stage two the two halves
+ *    of the app therefore do NOT match. Deliberate, and the cost of staging.
+ * ---------------------------------------------------------------------------
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import Mark from './Mark.jsx';
 
 const API = 'https://dotdashdevice.com/chat/api/';
 const STORE = 'dotdash_contact_chats';
@@ -61,7 +80,28 @@ const msgKey = (m) => `${m.at}|${m.from}|${m.text}`;
 const shortName = (c) => String(c?.displayName || 'Dot Dash').replace(/['’]s Dot Dash$/i, '') || 'Dot Dash';
 const stamp = (at) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-const Logo = ({ size = 'w-24 h-24' }) => <img src="icon.jpg" alt="Dot Dash" className={`${size} rounded-3xl shadow-md object-cover mx-auto`} />;
+// The mark, as pixels, inheriting the surrounding ink so one asset serves both
+// themes. Sizes are whole multiples of the grid they are drawn on (96 = 48x2,
+// 48 = 24x2) so every edge lands on a device pixel -- brand/marks/README.md.
+const Logo = ({ grid = 48, px = 96 }) => <Mark grid={grid} px={px} className="mx-auto text-ink" />;
+
+// The device screen, drawn on the web. The brief reserves the pixel face
+// (Departure Mono) for exactly this: a 4:1 rectangle -- the real panel is
+// 128x32 -- carrying what a Dot Dash is actually showing, in its own uppercase.
+// It is a picture of the hardware, never a place to set prose.
+const Screen = ({ children, className = '' }) => (
+  // The hairline is --screen-edge, the site's token for the same job: the
+  // unlit panel is #0e0e0e and the dark ground is #131211, so without an edge
+  // the whole rectangle disappears at night.
+  <div className={`bg-screen text-screen-ink font-device uppercase leading-tight rounded-[3px] border border-screen-edge ${className}`}>
+    {children}
+  </div>
+);
+
+// One sentence, in the house voice, for a stranger who tapped a link in a
+// message and does not know what they have opened. Defined once so the join
+// screen, the empty state and Settings cannot drift apart.
+const WHAT_IT_IS = 'A Dot Dash is a small messaging device with a screen of its own. What you send here appears on that screen, and its replies come back here.';
 
 /**
  * incoming: { token?, chat?, n } -- a link or notification tap from Root; `n`
@@ -76,7 +116,10 @@ const Logo = ({ size = 'w-24 h-24' }) => <img src="icon.jpg" alt="Dot Dash" clas
  * drawn like the account-holder app's (BackBar).
  */
 export default function ContactApp({ incoming, ownerSignedIn, onExit, onWelcome, ui }) {
-  const { TabButton, MessageCircle, SettingsIcon, Send, Trash2, Plus, Bell, ArrowLeft } = ui;
+  // `ui` still arrives with main.jsx's TabButton; it is deliberately not taken
+  // here. Everything else is an icon drawn in currentColor, so the icons
+  // inherit the token layer for free -- only the tab bar needed replacing.
+  const { MessageCircle, SettingsIcon, Send, Trash2, Plus, Bell, ArrowLeft } = ui;
   const [chats, setChats] = useState(savedContactChats);
   const [msgs, setMsgs] = useState({});                  // token -> messages (render copy)
   const msgsRef = useRef({});                            // the same, read synchronously by the polls
@@ -252,6 +295,16 @@ export default function ContactApp({ incoming, ownerSignedIn, onExit, onWelcome,
     return true;
   }, [drop]);
 
+  // The one line that lets a single bundle hold a themed /c/ surface and an
+  // untouched parent app: `body.dd-contact` in index.css carries the ground,
+  // the ink, the face and `color-scheme: light dark`, overriding the
+  // `bg-[#f2f2f7] text-black` that app/index.html puts on <body>. Without it
+  // the safe-area strips and the overscroll behind a dark chat stay iOS grey.
+  useEffect(() => {
+    document.body.classList.add('dd-contact');
+    return () => document.body.classList.remove('dd-contact');
+  }, []);
+
   // ---------------------------------------------------------------- boot --
   useEffect(() => {
     live().forEach((c) => startPoll(c.token));
@@ -286,47 +339,76 @@ export default function ContactApp({ incoming, ownerSignedIn, onExit, onWelcome,
   }, [view, tab, active, chats]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // -------------------------------------------------------------- render --
+  // h-screen + overflow-y-auto, not min-h-screen: <body> is position:fixed
+  // with overflow:hidden, so anything taller than the viewport in a
+  // min-h-screen box is clipped and unreachable rather than scrolled. The join
+  // screen is now long enough for that to matter on a 320x568 phone, and it
+  // would matter on any phone at a large Dynamic Type setting.
   const center = (children, onBack) => (
-    <div className="min-h-screen bg-[#f2f2f7] flex flex-col" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
+    <div className="h-screen overflow-y-auto bg-ground text-ink flex flex-col" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
       {onBack && <BackBar onBack={onBack} ArrowLeft={ArrowLeft} />}
-      <div className="flex-1 flex flex-col justify-center items-center text-center px-6 py-10 space-y-4">{children}</div>
+      <div className="flex-1 flex flex-col justify-center items-center text-center px-6 py-10 space-y-4"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 40px)' }}>{children}</div>
     </div>
   );
-  const backButton = live().length > 0 && (
-    <button onClick={home} className="w-full max-w-sm bg-white border border-gray-200 text-blue-500 font-bold py-3 rounded-2xl">Back to your chats</button>
-  );
+  // The quiet action: a card with a rule round it, the accent carried by the
+  // label rather than by a fill, so only one button on a screen is filled.
+  const quiet = 'w-full max-w-sm bg-card border border-rule text-accent font-bold py-3 rounded-control';
 
-  if (view.name === 'boot' || view.name === 'loading') return center(<p className="text-gray-400">Loading…</p>);
+  if (view.name === 'boot' || view.name === 'loading') return center(<p className="text-muted">Loading…</p>);
 
   if (view.name === 'error') return center(<>
     <Logo /><h1 className="text-2xl font-bold">Can't connect right now</h1>
-    <p className="text-gray-500">Check your connection and try again.</p>
-    <button onClick={home} className="w-full max-w-sm bg-white border border-gray-200 text-blue-500 font-bold py-3 rounded-2xl">Try again</button>
+    <p className="text-muted">Check your connection and try again.</p>
+    <button onClick={home} className={quiet}>Try again</button>
   </>, home);
 
   if (view.name === 'gone' || view.name === 'left') return center(<>
     <Logo /><h1 className="text-2xl font-bold">{view.name === 'left' ? "You've left the chat" : 'This link has expired'}</h1>
-    <p className="text-gray-500">{view.name === 'left'
+    <p className="text-muted">{view.name === 'left'
       ? 'Nothing more will reach this phone. To message again, ask for a new link.'
       : 'It may have been replaced with a new one, or the chat was ended. Ask whoever sent it for a new link.'}</p>
-    {backButton || <button onClick={home} className="w-full max-w-sm bg-white border border-gray-200 text-blue-500 font-bold py-3 rounded-2xl">OK</button>}
+    <button onClick={home} className={quiet}>{live().length > 0 ? 'Back to your chats' : 'OK'}</button>
   </>, home);
 
   if (view.name === 'claimed') return center(<>
     <Logo /><h1 className="text-2xl font-bold">Already connected on another device</h1>
-    <p className="text-gray-500">Each link works on one device. If you opened it in Safari first, open it there and tap "Move this chat", or ask whoever sent it for a new link.</p>
-    {backButton || <button onClick={home} className="w-full max-w-sm bg-white border border-gray-200 text-blue-500 font-bold py-3 rounded-2xl">OK</button>}
+    <p className="text-muted">Each link works on one device. If you opened it in Safari first, open it there and tap "Move this chat", or ask whoever sent it for a new link.</p>
+    <button onClick={home} className={quiet}>{live().length > 0 ? 'Back to your chats' : 'OK'}</button>
   </>, home);
 
+  // The screen a stranger meets first, so it answers three questions in order:
+  // who sent this, what is a Dot Dash, and is this safe. The brief's note on
+  // this page: introduce the product in one sentence, visibly, before anything
+  // else, and carry the reassurance as part of the design rather than as a
+  // grey card at the bottom.
   if (view.name === 'join') {
     const { info, token } = view;
     return center(<>
       <Logo />
       <h1 className="text-2xl font-bold">Hi {info.contactName}!</h1>
-      <p className="text-gray-500">You're invited to message <b className="text-gray-700">{info.displayName}</b>, a Morse-code messaging device. Messages you send here show up on its screen, and its replies show up here.</p>
-      <p className="text-gray-400 text-sm">This link works on one device only.</p>
-      <button onClick={(e) => { e.currentTarget.disabled = true; claim(token); }} className="w-full max-w-sm bg-blue-500 text-white font-bold py-4 rounded-2xl disabled:bg-blue-300">Connect</button>
-      <p className="text-gray-400 text-sm">You can leave the chat at any time.</p>
+      <p className="text-[17px]">You've been invited to message <b>{info.displayName}</b>.</p>
+      <p className="text-muted text-[17px]">{WHAT_IT_IS}</p>
+      {/* What it looks like at the other end. 4:1, because the panel is. */}
+      <Screen className="w-full max-w-[232px] aspect-[4/1] shrink-0 flex flex-col items-center justify-center">
+        <span className="text-[9px] tracking-[.14em] opacity-70">Dot Dash</span>
+        <span className="text-[15px]">Hello</span>
+      </Screen>
+      {/* The reassurance. An unexpected link is a suspicious object, so this
+          sits ABOVE the button, in the page's own card idiom, with the
+          load-bearing half of each line in ink rather than in grey. */}
+      <ul className="w-full max-w-sm bg-card border border-rule rounded-card overflow-hidden text-left">
+        {[['No account, no password.', 'There is nothing to sign up for.'],
+          ['This link is yours alone.', 'It works on one device, and only you have it.'],
+          ['You can leave whenever you like.', 'Nothing more reaches this phone after that.']].map(([lead, rest], i) => (
+          <li key={lead} className={`px-4 py-3 text-[16px] ${i ? 'border-t border-rule' : ''}`}>
+            <b>{lead}</b> <span className="text-muted">{rest}</span>
+          </li>
+        ))}
+      </ul>
+      <button onClick={(e) => { e.currentTarget.disabled = true; claim(token); }}
+        className="w-full max-w-sm bg-accent text-accent-ink font-bold py-4 rounded-control disabled:bg-rule disabled:text-muted">Connect</button>
+      <p className="text-[16px]"><a className="text-accent underline" href="https://dotdashdevice.com/privacy.html">How Dot Dash handles your messages</a></p>
     </>, home);
   }
 
@@ -344,7 +426,7 @@ export default function ContactApp({ incoming, ownerSignedIn, onExit, onWelcome,
   const current = rows.find((c) => c.token === active) || null;
 
   return (
-    <div className="flex flex-col h-screen w-full bg-[#f2f2f7] text-black font-sans overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-ground text-ink font-body overflow-hidden">
       <div className="flex-1 flex flex-col px-4 overflow-hidden" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
         {tab === 'chat' && (rows.length
           ? <ChatTab rows={rows} current={current} messages={(current && msgs[current.token]) || []} unreadCount={unreadCount}
@@ -363,11 +445,33 @@ export default function ContactApp({ incoming, ownerSignedIn, onExit, onWelcome,
         )}
       </div>
 
-      <div className="shrink-0 w-full bg-[#f8f8f8]/90 backdrop-blur-md border-t border-gray-300 pt-2 px-4 flex justify-around items-center" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
-        <TabButton icon={<MessageCircle className="w-6 h-6" />} label="Chat" active={tab === 'chat'} onClick={() => setTab('chat')} badge={totalUnread} />
-        <TabButton icon={<SettingsIcon className="w-6 h-6" />} label="Settings" active={tab === 'settings'} onClick={() => setTab('settings')} />
+      {/* Opaque rather than the parent app's translucent bar: a bare var()
+          colour cannot take Tailwind's slash-opacity modifier, and a blurred
+          bar is not worth a second hard-coded value. */}
+      <div className="shrink-0 w-full bg-card border-t border-rule pt-2 px-4 flex justify-around items-center" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+        <Tab icon={<MessageCircle className="w-6 h-6" />} label="Chat" active={tab === 'chat'} onClick={() => setTab('chat')} badge={totalUnread} />
+        <Tab icon={<SettingsIcon className="w-6 h-6" />} label="Settings" active={tab === 'settings'} onClick={() => setTab('settings')} />
       </div>
     </div>
+  );
+}
+
+// The tab bar, local to this file. main.jsx's TabButton is still on blue-500
+// and gray-400, and repainting it would repaint the account holder's app --
+// stage two's job. Same geometry as that one, token colours, plus the selected
+// state said out loud for a screen reader rather than only in colour.
+function Tab({ icon, label, active, onClick, badge }) {
+  return (
+    <button onClick={onClick} aria-pressed={active}
+      className={`relative flex flex-col items-center justify-center w-[60px] space-y-1 transition-colors ${active ? 'text-accent' : 'text-muted'}`}>
+      <div className={`${active ? 'scale-110' : 'scale-100'} transition-transform duration-200`}>{icon}</div>
+      {badge > 0 && (
+        <span className="absolute top-[-4px] right-[8px] min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-alert text-alert-ink text-[11px] font-bold rounded-full">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+      <span className="text-[11px] font-bold">{label}</span>
+    </button>
   );
 }
 
@@ -375,17 +479,18 @@ export default function ContactApp({ incoming, ownerSignedIn, onExit, onWelcome,
 // arrived. Tell them what to wait for, so they don't go looking for an account.
 function Waiting({ onPaste, onBack, onOwner, ArrowLeft }) {
   return (
-    <div className="flex-1 flex flex-col">
+    // Scrolls rather than clips, for the same reason center() does.
+    <div className="flex-1 overflow-y-auto">
     {onBack && <BackBar onBack={onBack} ArrowLeft={ArrowLeft} flush />}
-    <div className="flex-1 flex flex-col justify-center items-center text-center px-2 space-y-4">
+    <div className="min-h-full flex flex-col justify-center items-center text-center px-2 py-4 space-y-4">
       <Logo />
-      <h1 className="text-2xl font-bold">Chat with a Dot Dash</h1>
-      <p className="text-gray-500">You need a link from the person whose Dot Dash you'll be chatting with. They can send it to you from their Dot Dash app.</p>
-      <div className="w-full max-w-sm bg-white border border-gray-100 rounded-2xl p-4 text-left text-sm text-gray-600">
-        <b className="text-gray-800">When your link arrives,</b> just tap it and it opens here. No account or sign-in needed.
+      <h1 className="text-2xl font-bold">Message a Dot Dash</h1>
+      <p className="text-muted text-[17px]">{WHAT_IT_IS}</p>
+      <div className="w-full max-w-sm bg-card border border-rule rounded-card p-4 text-left text-[16px]">
+        <b>When your link arrives,</b> <span className="text-muted">tap it and it opens here. You need a link from whoever has the Dot Dash — they send it from their Dot Dash app. No account or sign-in.</span>
       </div>
-      <button onClick={onPaste} className="w-full max-w-sm bg-white border border-gray-200 text-blue-500 font-bold py-3 rounded-2xl">I have a link to paste</button>
-      <button onClick={onOwner} className="text-sm text-gray-500 underline pt-2">I have a Dot Dash</button>
+      <button onClick={onPaste} className="w-full max-w-sm bg-card border border-rule text-accent font-bold py-3 rounded-control">I have a link to paste</button>
+      <button onClick={onOwner} className="text-[16px] text-accent underline pt-2">I have a Dot Dash</button>
     </div>
     </div>
   );
@@ -396,7 +501,7 @@ function Waiting({ onPaste, onBack, onOwner, ArrowLeft }) {
 function BackBar({ onBack, ArrowLeft, flush = false }) {
   return (
     <div className={flush ? '' : 'px-4'}>
-      <button onClick={onBack} className="p-2 -ml-2 text-gray-500 font-bold flex items-center active:text-gray-700">
+      <button onClick={onBack} className="p-2 -ml-2 text-accent font-bold flex items-center">
         {ArrowLeft ? <ArrowLeft className="w-5 h-5 mr-1" /> : '‹ '}Back
       </button>
     </div>
@@ -429,51 +534,69 @@ function ChatTab({ rows, current, messages, unreadCount, onPick, onAdd, onSent, 
 
   return (
     <div className="flex flex-col h-full relative">
-      <div className="shrink-0 flex space-x-3 overflow-x-auto pb-4 pt-2 mb-2 border-b border-gray-200" style={{ scrollbarWidth: 'none' }}>
+      <div className="shrink-0 flex space-x-3 overflow-x-auto pb-4 pt-2 mb-2 border-b border-rule" style={{ scrollbarWidth: 'none' }}>
         {rows.map((c) => {
           const isActive = current?.token === c.token;
           const n = isActive ? 0 : unreadCount(c);
           return (
-            <button key={c.token} onClick={() => onPick(c.token)}
-              className={`px-5 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center space-x-2 transition-all duration-200 shadow-sm ${isActive ? 'bg-blue-500 text-white' : 'bg-white text-gray-500 border border-gray-100'} ${c.ended ? 'opacity-50' : ''}`}>
+            // aria-pressed, because "which chat am I in" is carried by a fill
+            // and nothing else on screen says it.
+            <button key={c.token} onClick={() => onPick(c.token)} aria-pressed={isActive}
+              className={`px-5 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center space-x-2 transition-all duration-200 ${isActive ? 'bg-accent text-accent-ink' : 'bg-card text-ink border border-rule'} ${c.ended ? 'opacity-60' : ''}`}>
               <span>{shortName(c)}</span>
               {n > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold min-w-[20px] h-[20px] px-1.5 flex items-center justify-center rounded-full">{n > 99 ? '99+' : n}</span>
+                <span className="bg-alert text-alert-ink text-[12px] font-bold min-w-[20px] h-[20px] px-1.5 flex items-center justify-center rounded-full">{n > 99 ? '99+' : n}</span>
               )}
             </button>
           );
         })}
-        <button onClick={onAdd} aria-label="Add a chat" className="px-4 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center bg-white text-blue-500 border border-dashed border-blue-200 shadow-sm">
+        <button onClick={onAdd} aria-label="Add a chat" className="px-4 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center bg-card text-accent border border-dashed border-accent">
           <Plus className="w-5 h-5" />
         </button>
       </div>
 
       {!current
-        ? <p className="text-center text-gray-400 mt-10">Pick a Dot Dash above.</p>
+        ? <p className="text-center text-muted mt-10">Pick a Dot Dash above.</p>
         : <>
           <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-            {messages.length === 0 && <p className="text-center text-gray-400 mt-10">No messages yet with {shortName(current)}. Say hello! Your messages appear on its screen.</p>}
+            {messages.length === 0 && <p className="text-center text-muted mt-10 text-[17px]">No messages yet with {shortName(current)}. Say hello — what you send appears on its screen.</p>}
+            {/* The bubbles. Outgoing was the system's worst contrast failure
+                (white on #3b82f6, 3.68:1); --sent is the accent pair, so it
+                measures 5.17:1 in light and 10.38:1 in dark. Incoming gets
+                --card/--ink, the best numbers on the page, because those are
+                the words someone came here to read. 17px matches the site. */}
             {messages.map((m) => (
               <div key={msgKey(m)} className={`flex flex-col ${m.from === 'contact' ? 'items-end' : 'items-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-3 break-words ${m.from === 'contact' ? 'bg-blue-500 text-white' : 'bg-white text-black shadow-sm border border-gray-100'}`}>{m.text}</div>
-                <span className="text-xs text-gray-400 mt-1 px-1">{stamp(m.at)}</span>
+                <div className={`max-w-[80%] px-4 py-3 break-words text-[17px] rounded-bubble ${m.from === 'contact'
+                  ? 'bg-sent text-sent-ink rounded-br-[6px]'
+                  : 'bg-recv text-recv-ink border border-rule rounded-bl-[6px]'}`}>{m.text}</div>
+                <span className="text-[13px] text-muted mt-1 px-1">{stamp(m.at)}</span>
               </div>
             ))}
             <div ref={end} />
           </div>
 
-          <div className="shrink-0 bg-[#f2f2f7] pt-2 pb-2">
-            <div className="flex items-center space-x-2 bg-white rounded-full px-4 py-2 shadow-sm border border-gray-200">
-              <input type="text" placeholder="Message..." value={text} maxLength={400}
+          <div className="shrink-0 bg-ground pt-2 pb-2">
+            <div className="flex items-center space-x-2 bg-card rounded-full px-4 py-2 border border-rule">
+              <input type="text" placeholder="Message…" value={text} maxLength={400}
                 onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()}
-                className="flex-1 outline-none bg-transparent py-1 text-lg min-w-0" />
-              <button onClick={send} disabled={busy || !text.trim()} aria-label="Send" className="bg-blue-500 text-white p-2 rounded-full disabled:bg-blue-300 flex-shrink-0 transition-opacity">
+                className="flex-1 outline-none bg-transparent py-1 text-lg min-w-0 text-ink placeholder:text-muted" />
+              <button onClick={send} disabled={busy || !text.trim()} aria-label="Send"
+                className="bg-accent text-accent-ink p-2 rounded-full disabled:bg-rule disabled:text-muted flex-shrink-0 transition-colors">
                 <Send className="w-5 h-5 ml-0.5" />
               </button>
             </div>
-            <div className="text-xs text-gray-500 min-h-[16px] mt-1 px-3">
-              {text.trim() && preview !== text.trim() && <>Shows on the Dot Dash as: <b>{preview.slice(0, MAX)}</b></>}
-              {preview.length > MAX && <span className="text-amber-600"> (too long: it will be cut to {MAX} letters)</span>}
+            {/* What the device will actually show. The one reserved use of the
+                pixel face, so the preview looks like the panel it describes
+                instead of looking like a validation warning. */}
+            <div className="min-h-[22px] mt-1.5 px-2 text-[13px]">
+              {text.trim() && preview !== text.trim() && <>
+                <span className="text-muted">On the Dot Dash:</span>
+                {/* Wrapped, not truncated: cutting the preview short would
+                    hide exactly the part the person is checking. */}
+                <Screen className="mt-1 px-2 py-1 text-[12px] break-words">{preview.slice(0, MAX)}</Screen>
+              </>}
+              {preview.length > MAX && <p className="text-warn mt-1">Too long — it will be cut to {MAX} letters.</p>}
             </div>
           </div>
         </>}
@@ -488,65 +611,81 @@ function SettingsTab({ rows, pushOn, pushState, onPush, onLeave, onAdd, ownerSig
   const on = pushOn && pushState === 'granted';
   return (
     <div className="h-full overflow-y-auto pb-4 space-y-4">
-      <h1 className="text-2xl font-bold pt-2">Dot Dash Connect</h1>
-
-      <div className="bg-white rounded-2xl border border-gray-100 p-4">
-        <div className="flex items-center">
-          <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0"><Bell className="w-5 h-5" /></div>
-          <div className="flex-1 min-w-0 mx-3">
-            <div className="font-bold text-gray-800">Notifications</div>
-            <div className="text-xs text-gray-500">{on ? 'You\'ll be told when a Dot Dash messages you.' : pushState === 'denied' ? 'Turned off for Dot Dash in the iPhone Settings app.' : 'Off. Messages still arrive here.'}</div>
-          </div>
-          <button role="switch" aria-checked={on} aria-label="Notifications" disabled={pushState === 'denied' || pushState === 'unavailable'}
-            onClick={() => onPush(!on)}
-            className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 disabled:opacity-50 ${on ? 'bg-green-500' : 'bg-gray-300'}`}>
-            <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${on ? 'translate-x-6' : 'translate-x-0'}`} />
-          </button>
-        </div>
-        {pushState === 'denied' && <p className="text-xs text-gray-500 mt-3">To turn them back on, open the iPhone Settings app, then Notifications, then Dot Dash.</p>}
+      <div className="pt-2">
+        <h1 className="text-2xl font-bold">Dot Dash Connect</h1>
+        {/* The same one sentence as the join screen: someone can arrive back
+            here weeks later having forgotten what this app is. */}
+        <p className="text-muted text-[16px] mt-1">{WHAT_IT_IS}</p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 p-4">
-        <div className="flex items-center mb-3">
-          <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5" /></div>
+      <div className="bg-card rounded-card border border-rule p-4">
+        <div className="flex items-center">
+          <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><Bell className="w-5 h-5" /></div>
           <div className="flex-1 min-w-0 mx-3">
-            <div className="font-bold text-gray-800">Your chats</div>
-            <div className="text-xs text-gray-500">{rows.length === 1 ? '1 Dot Dash' : `${rows.length} Dot Dashes`}</div>
+            <div className="font-bold">Notifications</div>
+            <div className="text-[14px] text-muted">{on ? 'You\'ll be told when a Dot Dash messages you.' : pushState === 'denied' ? 'Turned off for Dot Dash in the iPhone Settings app.' : 'Off. Messages still arrive here.'}</div>
+          </div>
+          {/* The knob is a card with a rule-dark edge, so it reads on the green
+              track AND on the off track, in both themes -- a white knob on a
+              light-grey off track was invisible in the old version. */}
+          <button role="switch" aria-checked={on} aria-label="Notifications" disabled={pushState === 'denied' || pushState === 'unavailable'}
+            onClick={() => onPush(!on)}
+            className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 disabled:opacity-50 ${on ? 'bg-ok' : 'bg-sunken border border-rule'}`}>
+            <span className={`absolute top-1 left-1 w-6 h-6 bg-card border border-muted rounded-full transition-transform duration-200 ${on ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
+        </div>
+        {pushState === 'denied' && <p className="text-[14px] text-muted mt-3">To turn them back on, open the iPhone Settings app, then Notifications, then Dot Dash.</p>}
+      </div>
+
+      <div className="bg-card rounded-card border border-rule p-4">
+        <div className="flex items-center mb-3">
+          <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5" /></div>
+          <div className="flex-1 min-w-0 mx-3">
+            <div className="font-bold">Your chats</div>
+            <div className="text-[14px] text-muted">{rows.length === 1 ? '1 Dot Dash' : `${rows.length} Dot Dashes`}</div>
           </div>
         </div>
         <div className="space-y-2">
           {rows.map((c) => (
-            <div key={c.token} className="flex items-center bg-gray-50 rounded-xl px-3 py-2">
+            <div key={c.token} className="flex items-center bg-sunken rounded-control px-3 py-2">
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-gray-700 truncate">{c.displayName}</div>
-                <div className="text-xs text-gray-400">{c.ended ? 'This chat has ended' : 'Connected'}</div>
+                <div className="font-bold truncate">{c.displayName}</div>
+                <div className="text-[14px] text-muted">{c.ended ? 'This chat has ended' : 'Connected'}</div>
               </div>
-              <button onClick={() => onLeave(c)} aria-label={`Leave chat with ${c.displayName}`} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
+              <button onClick={() => onLeave(c)} aria-label={`Leave chat with ${c.displayName}`} className="text-danger p-1 ml-2 shrink-0 active:scale-95 transition-transform">
                 <Trash2 className="w-5 h-5" />
               </button>
             </div>
           ))}
-          {rows.length === 0 && <p className="text-sm text-gray-400">No chats yet. When someone sends you a link, tap it and it appears here.</p>}
+          {rows.length === 0 && <p className="text-[16px] text-muted">No chats yet. When someone sends you a link, tap it and it appears here.</p>}
         </div>
-        <button onClick={onAdd} className="w-full flex items-center justify-center space-x-2 text-blue-600 font-bold text-sm py-2 mt-3 rounded-xl border border-dashed border-blue-200 active:bg-blue-50">
+        <button onClick={onAdd} className="w-full flex items-center justify-center space-x-2 text-accent font-bold text-[16px] py-2 mt-3 rounded-control border border-dashed border-accent">
           <Plus className="w-4 h-4" /><span>Add a chat</span>
         </button>
       </div>
 
       {/* The way over to the account holder's side: for someone who started
           here only to chat, and has since got a Dot Dash of their own. */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-4">
-        <div className="font-bold text-gray-800">{ownerSignedIn ? 'Your Dot Dash' : 'Got your own Dot Dash?'}</div>
-        <div className="text-xs text-gray-500 mt-1">{ownerSignedIn
+      <div className="bg-card rounded-card border border-rule p-4">
+        <div className="font-bold">{ownerSignedIn ? 'Your Dot Dash' : 'Got your own Dot Dash?'}</div>
+        <div className="text-[14px] text-muted mt-1">{ownerSignedIn
           ? 'Switch to the side of the app where you manage your Dot Dash. Your chats here stay as they are.'
           : 'Set it up and manage it from this app. Your chats here stay as they are, and you can come back to them any time.'}</div>
-        <button onClick={onExit} className="w-full mt-3 bg-blue-500 text-white font-bold py-3 rounded-xl active:bg-blue-600">
+        <button onClick={onExit} className="w-full mt-3 bg-accent text-accent-ink font-bold py-3 rounded-control">
           {ownerSignedIn ? 'Go to My Dot Dash' : 'Set it up or sign in'}
         </button>
       </div>
 
-      <div className="text-center text-sm text-gray-500 pt-2">
-        <a href="https://dotdashdevice.com/privacy.html" className="underline">Privacy</a> · <a href="https://dotdashdevice.com/terms.html" className="underline">Terms</a>
+      {/* The reassurance, stated rather than linked to. It was a row of two
+          grey links; the brief asks for it to be part of the design. */}
+      <div className="bg-card rounded-card border border-rule p-4 text-[16px]">
+        <b>Your messages stay between you and this Dot Dash.</b>
+        <span className="text-muted"> There is no account here, no feed and no strangers — only the chats whose links you were sent.</span>
+        <div className="mt-2">
+          <a href="https://dotdashdevice.com/privacy.html" className="text-accent underline">Privacy</a>
+          <span className="text-muted"> · </span>
+          <a href="https://dotdashdevice.com/terms.html" className="text-accent underline">Terms</a>
+        </div>
       </div>
     </div>
   );
@@ -565,16 +704,16 @@ function AddChat({ onBack, onToken, ArrowLeft }) {
     onToken(t);
   };
   return (
-    <div className="min-h-screen bg-[#f2f2f7] flex flex-col" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
+    <div className="h-screen overflow-y-auto bg-ground text-ink flex flex-col" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
       <BackBar onBack={onBack} ArrowLeft={ArrowLeft} />
       <div className="px-6 py-4 space-y-3">
         <h1 className="text-2xl font-bold">Add a chat</h1>
-        <p className="text-gray-500">Paste the Dot Dash link you were sent.</p>
+        <p className="text-muted text-[17px]">Paste the Dot Dash link you were sent.</p>
         <input value={text} onChange={(e) => { setText(e.target.value); setNote(''); }} placeholder="https://dotdashdevice.com/c/…" autoCapitalize="off" autoCorrect="off" spellCheck="false"
-          className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 outline-none" />
-        <button onClick={paste} className="w-full bg-white border border-gray-200 text-blue-500 font-bold py-3 rounded-2xl">Paste</button>
-        <button onClick={go} className="w-full bg-blue-500 text-white font-bold py-4 rounded-2xl">Connect</button>
-        {note && <p className="text-sm text-gray-500">{note}</p>}
+          className="w-full bg-card text-ink placeholder:text-muted border border-rule rounded-control px-4 py-3 outline-none text-[17px]" />
+        <button onClick={paste} className="w-full bg-card border border-rule text-accent font-bold py-3 rounded-control">Paste</button>
+        <button onClick={go} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">Connect</button>
+        {note && <p className="text-[16px] text-warn">{note}</p>}
       </div>
     </div>
   );
