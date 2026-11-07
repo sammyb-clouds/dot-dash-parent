@@ -6,15 +6,16 @@
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run sync:legal && vite build",
     "preview": "vite preview",
     "deploy:test": "npm run build:links && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
     "ios:sync": "npm run build:links && npx cap sync ios",
     "ios:open": "npx cap open ios",
     "deploy:prod": "npm run build:links && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/index.html && scp dist/manifest.json dist/firebase-messaging-sw.js dist/icon.jpg root@45.55.47.32:/var/www/dotdash/html/",
-    "build:phones": "VITE_PHONE_CONTACTS=1 VITE_LINK_CONTACTS=1 vite build",
-    "build:links": "VITE_LINK_CONTACTS=1 vite build",
-    "deploy:test:phones": "npm run build:phones && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html"
+    "build:phones": "npm run sync:legal && VITE_PHONE_CONTACTS=1 VITE_LINK_CONTACTS=1 vite build",
+    "build:links": "npm run sync:legal && VITE_LINK_CONTACTS=1 vite build",
+    "deploy:test:phones": "npm run build:phones && scp dist/index.html root@45.55.47.32:/var/www/dotdash/html/test.html",
+    "sync:legal": "cp legal/privacy.html app/public/privacy.html"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",

@@ -9,7 +9,19 @@
   used by children). Every factual claim here was checked against the code on
   2026-09-25; if the product changes what it collects, stores or shares, this
   page must change with it.
-  Deployed by hand: scp to /var/www/dotdash/html/privacy.html.
+  THIS FILE IS THE ONLY SOURCE. The same document is served from three
+  places, and `npm run sync:legal` copies it into app/public/ so the bundled
+  copy cannot drift again -- it did, silently, from early October until
+  2026-11-07, leaving the iOS bundle describing a two-way SMS relay that had
+  been retired on 2026-11-01.
+
+    public site  scp -> /var/www/dotdashdevice/privacy.html  (dotdashdevice.com/privacy.html)
+    app host     scp -> /var/www/dotdash/html/privacy.html   (app.dotdashdevice.com/privacy.html)
+    iOS bundle   app/public/ -> vite build -> cap sync; reaches phones only
+                 on the next archive, so it lags until then.
+
+  Section 10 promises the effective date always shows the latest version, so
+  changing anything here means changing that date too.
 -->
 <style>
   :root { color-scheme: light dark; --bg:#fff; --ink:#1f2937; --muted:#6b7280; --rule:#e5e7eb; --accent:#2563eb; --box:#f3f4f6; }
@@ -33,7 +45,7 @@
 <body>
 <main>
 <h1>Dot Dash Privacy Policy</h1>
-<p class="meta">Effective October 9, 2026 · Dot Dash is operated by Samuel Posner, a sole proprietor, doing business as Dot Dash.</p>
+<p class="meta">Effective November 7, 2026 · Dot Dash is operated by Samuel Posner, a sole proprietor, doing business as Dot Dash.</p>
 
 <div class="box">
 <p><b>The short version.</b> Dot Dash is a messaging device for children, set up and controlled by a parent. We collect only what the device and the parent app need to work. We don't sell personal information, show ads, or use anyone's information for marketing. A parent can see their child's messages, remove contacts, and delete everything at any time.</p>
