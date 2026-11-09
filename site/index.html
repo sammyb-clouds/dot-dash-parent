@@ -34,7 +34,9 @@
   and finds no program description. Nothing about the wording changed -- it was
   copied across verbatim and is still not tidied for rhythm.
 
-  The contact details and the policy links stay ON THIS PAGE.
+  The contact details and the policy links are now carried by the FOOTER of
+  this page only -- the repeated Contact block above it went on 2026-11-08.
+  Business name, address and support email are all still on the apex.
 
   Videos are SELF-HOSTED in /media rather than embedded from Instagram: an
   Instagram embed loads Meta's scripts and cookies, which the privacy policy
@@ -137,7 +139,6 @@
          -webkit-text-size-adjust:100%; }
   main { max-width:860px; margin:0 auto; padding:40px 16px 8px; }
   a { color:var(--accent); }
-  .mono { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace; }
 
   /* Skip link: this page is long and the first thing after the hero is the
      explanation, which is what a screen-reader user is here for. */
@@ -250,30 +251,6 @@
                   background:#000; border-radius:14px; border:1px solid var(--rule); }
   .videos figcaption { font-size:15px; color:var(--muted); margin-top:8px; line-height:1.45; }
   .videos figcaption b { color:var(--ink); display:block; }
-
-  /* ---- The quiet block. Program details, SMS and contact live here: present
-     and findable (Twilio reads this page -- see the note at the top) but out of
-     the way of someone trying to work out what the product is. ---- */
-  .fine { max-width:860px; margin:26px auto 0; padding:0 16px; }
-  .fine hr { border:0; border-top:1px solid var(--rule); margin:0 0 20px; }
-  .fine h2 { font-size:16px; margin:0 0 8px; }
-  .fine .blk { margin:0 0 22px; font-size:15px; line-height:1.55; color:var(--muted); }
-  .fine .blk p { margin:0 0 8px; }
-  .fine .blk b, .fine .blk strong { color:var(--ink); }
-  .fine ul { padding-left:20px; margin:8px 0 0; }
-  .fine li { margin:0 0 7px; }
-  .stats { display:flex; gap:12px; flex-wrap:wrap; margin:10px 0 0; }
-  .stats div { flex:1 1 220px; border:1px solid var(--rule); border-radius:12px; padding:10px 13px; }
-  .stats b { display:block; font-size:19px;
-             font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace; font-weight:400; }
-  /* The consent statement. Kept visually distinct because it is the thing a
-     reviewer is looking for, even though the block around it is quiet. */
-  .consent { border:1px solid var(--accent); border-radius:12px; padding:12px 14px; margin:12px 0; }
-  .consent p:last-child { margin-bottom:0; }
-  code { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
-         font-size:.95em; color:var(--accent); }
-  .num { font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
-         font-size:1.05em; white-space:nowrap; color:var(--ink); }
 
   footer { text-align:center; color:var(--muted); font-size:15px; padding:16px 16px 40px; }
   footer a { margin:0 8px; }
@@ -404,19 +381,6 @@
   </div>
 
 </main>
-
-<!-- Contact details. Quiet on purpose, and ON THIS PAGE on purpose -- see the
-     compliance note at the top of the file. Program details and SMS moved to
-     /sms-notifications.html on 2026-11-08. -->
-<div class="fine">
-  <hr>
-
-  <div class="blk" id="contact">
-    <h2 class="mono">Contact</h2>
-    <p>Dot Dash is made by Samuel Posner, a sole proprietor, doing business as Dot Dash.</p>
-    <p>Email <a href="mailto:support@dotdashdevice.com">support@dotdashdevice.com</a><br>467 Van Buren St., Brooklyn, NY 11221</p>
-  </div>
-</div>
 
 <footer>
   <a href="/faq">FAQ</a> · <a href="https://www.instagram.com/dotdashdevice/" rel="noopener">Instagram</a> · <a href="/sms-notifications.html">SMS Notifications</a> · <a href="/privacy.html">Privacy Policy</a> · <a href="/terms.html">Terms of Service</a> · <a href="mailto:support@dotdashdevice.com">Support</a>
