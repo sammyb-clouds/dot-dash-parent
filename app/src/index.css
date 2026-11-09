@@ -17,9 +17,12 @@
    name (bg-ground, text-ink, border-rule, bg-sent, text-sent-ink, ...), so
    JSX never writes a hex value and never writes var() either.
 
-   Stage one is ContactApp.jsx only. main.jsx still uses Tailwind's default
-   palette; nothing here changes it, because nothing in it references these
-   names. Stage two is a rename pass in main.jsx, not a redesign.
+   Stage one was ContactApp.jsx only. Stage two brought main.jsx over: the
+   account holder's app has no Tailwind palette colour and no hex value left in
+   it either, so both halves of the bundle now move when a token moves. The one
+   asymmetry is deliberate -- the contact surface has a dark mode and the
+   account holder's app does not, which is what the scoping of the dark block
+   below is about.
 
    Why the accent is a pair rather than a colour: brand/DESIGN-BRIEF.md §6.
    Short version — a saturated mid-tone blue cannot pass AA on white and on
@@ -125,6 +128,19 @@
   --alert:     #b42318;   /* unread badge fill */
   --alert-ink: #ffffff;   /* 6.57:1 on --alert */
 
+  /* Stage two needed ink FOR those three, because main.jsx fills buttons with
+     them -- "Hang up", "Confirm unlink", an ON pill, the beta-firmware badge --
+     and a filled button needs a foreground that travels with its fill. Without
+     these the only way to write that was `text-white`, which is a palette
+     colour that would not follow the token if it moved. Measured, light:
+       #ffffff on --ok      5.01:1
+       #ffffff on --warn    6.33:1
+       #ffffff on --danger  6.57:1
+     The dark siblings below invert for the same reason --accent-ink does. */
+  --ok-ink:     #ffffff;
+  --warn-ink:   #ffffff;
+  --danger-ink: #ffffff;
+
   /* Radii. The brief counted three radius systems across the product; these
      are the site's two, plus the one shape the site does not have. */
   --r-card:    20px;
@@ -132,8 +148,21 @@
   --r-bubble:  18px;
 }
 
+/* ---- Dark, and read this before you widen the selector ----
+
+   These are on `body.dd-contact`, NOT on `:root`, and that is load-bearing.
+   In stage one the dark values could sit on :root harmlessly, because main.jsx
+   referenced none of these names and so could not see them. Stage two put
+   main.jsx on the same tokens -- so on :root these values would have silently
+   given the account holder's whole app a dark mode it has never been designed,
+   measured or looked at in. Scoping them to the surface that opted in
+   (ContactApp adds `dd-contact` to <body>) keeps one set of names, one set of
+   values, and exactly one surface that flips.
+
+   Consequence to know: a future surface that wants dark has to opt in the same
+   way, by carrying the `dd-contact` class, or by being added here by name. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  body.dd-contact {
     --bg:      #131211;
     --card:    #1c1b19;   /* ink 14.44:1, muted 6.87:1 */
     --ink:     #ecebe8;   /* 15.70:1 on --bg */
@@ -156,9 +185,39 @@
     --danger:    #fca5a5;   /* 9.07:1 on --card */
     --alert:     #c1352a;   /* white 5.51:1, 3.12:1 on --card so the badge reads */
     --alert-ink: #ffffff;
+
+    /* The state fills lighten here, so their ink darkens -- the same rule, and
+       the same value, as --accent-ink. White would be 3.50:1 on this --ok.
+         #0b1220 on --ok       5.35:1
+         #0b1220 on --warn    11.21:1
+         #0b1220 on --danger   9.87:1
+       Nothing on the contact surface fills with these today; they are declared
+       so that the day something does, it cannot fail quietly. */
+    --ok-ink:     #0b1220;
+    --warn-ink:   #0b1220;
+    --danger-ink: #0b1220;
   }
 }
 
+/* The brand face on both surfaces. It sits on `body` rather than on each
+   screen's root div so nothing can inherit the system stack by being mounted
+   somewhere new -- and so the one `font-sans` left in main.jsx (the app shell)
+   could simply become `font-body`. Atkinson Hyperlegible Next, per the brief:
+   the two readers it is chosen for are a seven-year-old and a grandparent. */
+body {
+  font-family: "Atkinson Hyperlegible Next", ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  /* 17px, the size site/index.html, /faq and /c/ all set, and iOS's own body
+     size. It only moves text that carries no explicit size class, which in
+     main.jsx is most of the prose; every Tailwind text-* size is absolute and
+     unaffected. The floor anywhere in the bundle is 13px. */
+  font-size: 17px;
+  /* The account holder's app has no dark mode, so the UA canvas, scrollbars
+     and form controls are pinned light rather than left to follow the system
+     and land half-dark against a light page. An element selector on purpose:
+     `body.dd-contact` below is more specific and takes it back to `light dark`
+     for the one surface that is designed for both. This is NOT `:root`. */
+  color-scheme: light;
+}
 /* ---- Lifted verbatim from the two inline <style> blocks in the old single file. ---- */
 body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; }
 #root { height: 100%; width: 100%; }
@@ -179,12 +238,24 @@ body.dd-contact {
   color-scheme: light dark;          /* scrollbars, form controls, the UA canvas */
   background: var(--bg);
   color: var(--ink);
-  font-family: "Atkinson Hyperlegible Next", ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* A visible keyboard focus ring, in the accent, on every control on the page.
-   Scoped to contact mode so it does not appear in main.jsx unannounced. */
-body.dd-contact :focus-visible {
+/* Placeholders are text, and the UA default (a translucent black that lands
+   near 4:1 on --sunken) is not ours. --muted is 6.72:1 on --sunken and 7.88:1
+   on --card. `opacity: 1` because Firefox dims placeholders by default. The
+   same rule /c/ carries. */
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
+/* A visible keyboard focus ring, in the accent, on every control in the
+   bundle. Stage one scoped this to contact mode so it would not appear in
+   main.jsx unannounced; stage two is where it was announced, so the selector
+   is now the whole document. It matters most to the 25 controls in
+   main.jsx, every one of which carries Tailwind's `outline-none` with nothing
+   put back -- a field you cannot see the focus on is a keyboard and
+   switch-control failure (WCAG 2.4.7), and this rule beats `outline-none`
+   because it is declared after the utilities. :focus-visible, so a pointer
+   tap never shows it. */
+:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;

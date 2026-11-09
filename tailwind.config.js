@@ -8,8 +8,9 @@
 // turn mirrors the `:root` blocks in site/index.html and site/faq/index.html.
 // Nothing here REPLACES a Tailwind default, so main.jsx keeps working untouched
 // -- these are additional names, available to any file that wants them. Stage
-// one (ContactApp.jsx) uses them; stage two is renaming main.jsx's classes onto
-// them.
+// one (ContactApp.jsx) used them; stage two renamed main.jsx's classes onto
+// them, so every surface in the bundle is now on this list and nothing in
+// app/src/ reaches for Tailwind's own palette.
 //
 // One caveat worth knowing before stage two: a colour defined as a bare var()
 // cannot take Tailwind's slash-opacity modifier (`bg-card/70` will not work).
@@ -42,9 +43,11 @@ export default {
           DEFAULT: 'var(--alert)',
           ink:     'var(--alert-ink)',
         },
-        ok:     'var(--ok)',          // a switch that is on
-        warn:   'var(--warn)',        // a caution that is not an error
-        danger: 'var(--danger)',      // a destructive action
+        // Each state colour is a pair, like the accent: main.jsx fills buttons
+        // and badges with these, and a fill needs ink that travels with it.
+        ok:     { DEFAULT: 'var(--ok)',     ink: 'var(--ok-ink)' },      // a switch that is on
+        warn:   { DEFAULT: 'var(--warn)',   ink: 'var(--warn-ink)' },    // a caution that is not an error
+        danger: { DEFAULT: 'var(--danger)', ink: 'var(--danger-ink)' },  // a destructive action
         screen: {                     // the 128x32 device screen, drawn on the web
           DEFAULT: 'var(--screen)',   // the unlit panel -- no dark sibling, ever
           ink:     'var(--screen-ink)',
@@ -52,8 +55,10 @@ export default {
         },
       },
       fontFamily: {
-        // Deliberately NOT overriding `sans`: that would restyle every
-        // font-sans in main.jsx, which is out of scope for stage one.
+        // Deliberately NOT overriding `sans`: `font-sans` means "whatever
+        // Tailwind's default stack is" and should keep meaning that. The brand
+        // face reaches every screen from `body` in index.css instead, and
+        // `font-body` is here for anything that has to re-assert it.
         body:   ['"Atkinson Hyperlegible Next"', 'ui-sans-serif', '-apple-system', '"Helvetica Neue"', 'Arial', 'sans-serif'],
         // Reserved role, per the brief: anything on screen that represents what
         // a Dot Dash itself is showing. Never paragraphs.

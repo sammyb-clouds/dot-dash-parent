@@ -10,6 +10,13 @@
     import { registerPlugin, CapacitorHttp } from '@capacitor/core';
     import { Share as NativeShare } from '@capacitor/share';
     import ContactApp, { savedContactChats } from './ContactApp.jsx';
+// The mark as line art. It replaces three <img src="raw.githubusercontent.com/
+// .../icon.jpg"> on the entry screens: the only thing in the bundle that
+// fetched a brand asset over the network at runtime, so the first screen of a
+// device with no connection yet -- which is every Dot Dash before setup -- had
+// a broken image where the logo goes. icon.jpg is untouched and is still the
+// favicon, the manifest icon and the Home Screen icon.
+import Mark from './Mark.jsx';
 import { walkieCall } from './walkieCall.js';
 import { isVoicePayload } from './walkieAudio.js';
 
@@ -502,39 +509,39 @@ import { isVoicePayload } from './walkieAudio.js';
       const [open, setOpen] = useState(false);
       if (isNativeApp()) return null;
       if (open) return (
-        <div className="fixed inset-0 z-50 bg-[#f2f2f7] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-ground overflow-y-auto">
           <div className="flex flex-col items-center min-h-full p-6 text-center">
-            <button onClick={() => setOpen(false)} className="self-start p-2 -ml-2 mt-10 text-gray-500 font-bold flex items-center active:text-gray-700">
+            <button onClick={() => setOpen(false)} className="self-start p-2 -ml-2 mt-10 text-muted font-bold flex items-center active:text-ink">
               <ArrowLeft className="w-5 h-5 mr-1"/> Back
             </button>
-            <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-20 h-20 rounded-2xl shadow-lg mt-6 object-cover" />
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-6">Get the iOS app</h1>
-            <p className="text-gray-500 mt-2 max-w-sm">The Dot Dash app is in beta, so it is installed through Apple's {TESTFLIGHT_APP_NAME} app rather than the App Store.</p>
+            <Mark grid={24} px={48} className="text-ink mt-6" />
+            <h1 className="font-device text-[22px] text-ink mt-6">Get the iOS app</h1>
+            <p className="text-muted mt-2 max-w-sm">The Dot Dash app is in beta, so it is installed through Apple's {TESTFLIGHT_APP_NAME} app rather than the App Store.</p>
 
             <div className="w-full max-w-sm text-left space-y-5 mt-8">
               <div className="flex">
-                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">1</span>
-                <p className="pt-1 text-gray-800">Download <span className="font-bold">“{TESTFLIGHT_APP_NAME}”</span> from the App Store.</p>
+                <span className="shrink-0 w-8 h-8 rounded-full bg-accent text-accent-ink font-bold flex items-center justify-center mr-3">1</span>
+                <p className="pt-1 text-ink">Download <span className="font-bold">“{TESTFLIGHT_APP_NAME}”</span> from the App Store.</p>
               </div>
               <div className="flex">
-                <span className="shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white font-bold flex items-center justify-center mr-3">2</span>
-                <p className="pt-1 text-gray-800">Afterwards, tap the link below to download the beta iOS app.</p>
+                <span className="shrink-0 w-8 h-8 rounded-full bg-accent text-accent-ink font-bold flex items-center justify-center mr-3">2</span>
+                <p className="pt-1 text-ink">Afterwards, tap the link below to download the beta iOS app.</p>
               </div>
             </div>
 
             <a href={TESTFLIGHT_JOIN_URL} target="_blank" rel="noopener noreferrer"
-              className="w-full max-w-sm bg-blue-500 text-white font-bold py-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors mt-8">
+              className="w-full max-w-sm bg-accent text-accent-ink font-bold py-5 rounded-control active:opacity-90 transition-colors mt-8">
               Download the beta iOS app
             </a>
-            <p className="text-xs text-gray-400 mt-4 mb-10 max-w-sm break-all">{TESTFLIGHT_JOIN_URL}</p>
+            <p className="text-[13px] text-muted mt-4 mb-10 max-w-sm break-all">{TESTFLIGHT_JOIN_URL}</p>
           </div>
         </div>
       );
       return (
         <div className={`w-full max-w-sm ${className}`}>
-          <p className="text-sm text-gray-500 mb-3">On an iPhone?</p>
+          <p className="text-sm text-muted mb-3">On an iPhone?</p>
           <button onClick={() => setOpen(true)} aria-label="Get the iOS app"
-            className="inline-block rounded-xl active:opacity-70 transition-opacity">
+            className="inline-block rounded-control active:opacity-70 transition-opacity">
             <AppStoreBadge className="h-14 w-auto" />
           </button>
         </div>
@@ -851,11 +858,11 @@ import { isVoicePayload } from './walkieAudio.js';
                     transition: drag && !dragging ? 'transform 150ms ease' : 'none',
                     position: 'relative', zIndex: dragging ? 10 : 'auto',
                   }}
-                  className={`flex items-center p-3 pl-1 rounded-xl border select-none ${dragging ? 'bg-white border-gray-300 shadow-lg' : 'bg-gray-50 border-gray-100'}`}>
+                  className={`flex items-center p-3 pl-1 rounded-control border select-none ${dragging ? 'bg-card border-rule' : 'bg-sunken border-rule'}`}>
                 <span
                   onPointerDown={(e) => onDown(e, i)} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
                   style={{ touchAction: 'none', WebkitTouchCallout: 'none' }}
-                  className="shrink-0 px-2 py-1 text-gray-400 cursor-grab active:cursor-grabbing"
+                  className="shrink-0 px-2 py-1 text-muted cursor-grab active:cursor-grabbing"
                   aria-label="Drag to reorder">
                   <GripVertical className="w-4 h-5" />
                 </span>
@@ -1832,7 +1839,7 @@ import { isVoicePayload } from './walkieAudio.js';
         return () => clearTimeout(t);
       }, [loading, user, isWizardActive]);
 
-      if (loading || (user && !devicesLoaded)) return <div className="flex h-screen items-center justify-center"><Activity className="w-12 h-12 text-blue-500 animate-pulse" /></div>;
+      if (loading || (user && !devicesLoaded)) return <div className="flex h-screen items-center justify-center"><Activity className="w-12 h-12 text-accent animate-pulse" /></div>;
 
       if (!user) return <AuthScreen onContactMode={onContactMode} ownerEntry={ownerEntry} />;
 
@@ -1858,7 +1865,7 @@ import { isVoicePayload } from './walkieAudio.js';
       const activeChildLabel = activeDevice ? `${activeDevice.identity.name}${activeDevice.identity.pin}` : '';
 
       return (
-        <div className="flex flex-col h-full w-full bg-[#f2f2f7] text-black font-sans selection:bg-blue-200 overflow-hidden">
+        <div className="flex flex-col h-full w-full bg-ground text-ink font-body overflow-hidden">
           <div className="flex-1 flex flex-col px-4 overflow-hidden" style={{ paddingTop: 'max(env(safe-area-inset-top), 1rem)' }}>
             
             {activeTab === 'chat' && <ChatView unreadByChild={unreadByChild} mqttClient={mqttClient} messages={messages} setMessages={setMessages} parentProfile={parentProfile} devices={devices} activeChildId={activeChildId} setActiveChildId={setActiveChildId} childOnlineStatus={childOnlineStatus} activeChildLabel={activeChildLabel} user={user} deviceVoice={deviceVoice} />}
@@ -1869,7 +1876,14 @@ import { isVoicePayload } from './walkieAudio.js';
             </div>}
           </div>
 
-          <div className="shrink-0 w-full bg-[#f8f8f8]/90 backdrop-blur-md border-t border-gray-300 pt-2 px-4 flex justify-between items-center" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+          {/* The tab bar is OPAQUE now. It was bg-[#f8f8f8]/90 with a
+              backdrop-blur, and a Tailwind slash-opacity cannot be applied to
+              a var() colour at all -- `bg-card/90` compiles to nothing. The
+              choice was a --card-soft token for one element or no
+              translucency; the contact surface's tab bar is already opaque
+              --card with a hairline, so this matches it instead of inventing
+              a token to keep an effect nobody asked for. */}
+          <div className="shrink-0 w-full bg-card border-t border-rule pt-2 px-4 flex justify-between items-center" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
             <TabButton icon={<MessageCircle className="w-6 h-6"/>} label="Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} badge={totalUnreadChats} />
             {/* Count only alerts for devices still linked -- an unlinked device
                 leaves a stale key behind, and a badge you cannot clear is worse
@@ -1922,21 +1936,21 @@ import { isVoicePayload } from './walkieAudio.js';
         const chatChoice = (
           <>
             <span className="block text-lg">Someone invited me to chat</span>
-            <span className="block text-sm font-normal text-gray-500 mt-1">I was sent a link, or I'm waiting for one. No account needed.</span>
+            <span className="block text-sm font-normal text-muted mt-1">I was sent a link, or I'm waiting for one. No account needed.</span>
           </>
         );
-        const chatClass = "block w-full bg-white text-gray-900 border border-gray-200 font-bold py-5 px-5 rounded-2xl shadow-sm active:bg-gray-50 transition-colors text-left";
+        const chatClass = "block w-full bg-card text-ink border border-rule font-bold py-5 px-5 rounded-control active:bg-sunken transition-colors text-left";
         return (
           <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center space-y-8 pb-12">
-            <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-28 h-28 rounded-3xl shadow-lg mt-8 object-cover" />
+            <Mark grid={48} px={96} className="text-ink mt-8" />
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Welcome to Dot Dash</h1>
-              <p className="text-gray-500 mt-2">How will you use the app?</p>
+              <h1 className="font-device text-[26px] text-ink">Welcome to Dot Dash</h1>
+              <p className="text-muted mt-2">How will you use the app?</p>
             </div>
             <div className="w-full max-w-sm space-y-4">
-              <button onClick={() => setView('LANDING')} className="w-full bg-blue-500 text-white font-bold py-5 px-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors text-left">
+              <button onClick={() => setView('LANDING')} className="w-full bg-accent text-accent-ink font-bold py-5 px-5 rounded-control active:opacity-90 transition-colors text-left">
                 <span className="block text-lg">I have a Dot Dash</span>
-                <span className="block text-sm font-normal text-blue-100 mt-1">Set it up, or sign in to manage it.</span>
+                <span className="block text-sm font-normal text-accent-ink mt-1">Set it up, or sign in to manage it.</span>
               </button>
               {/* In the iOS app this is contact mode; on the web, the chat page. */}
               {onContactMode
@@ -1951,16 +1965,16 @@ import { isVoicePayload } from './walkieAudio.js';
         return (
           <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center space-y-8 pb-12">
             {/* Came over from Connect ("I have a Dot Dash"): Back goes back there. */}
-            <button onClick={() => (ownerEntry && onContactMode ? onContactMode() : setView('WELCOME'))} className="absolute top-12 left-4 p-2 text-gray-500 font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
-            <img src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg" alt="Dot Dash Logo" className="w-28 h-28 rounded-3xl shadow-lg mt-8 object-cover" />
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dot Dash</h1>
+            <button onClick={() => (ownerEntry && onContactMode ? onContactMode() : setView('WELCOME'))} className="absolute top-12 left-4 p-2 text-muted font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
+            <Mark grid={48} px={96} className="text-ink mt-8" />
+            <h1 className="font-device text-[26px] text-ink">Dot Dash</h1>
             
             <div className="w-full max-w-sm space-y-4">
-              <button onClick={() => setView('REGISTER')} className="w-full bg-blue-500 text-white font-bold py-5 rounded-2xl shadow-sm active:bg-blue-600 transition-colors">
+              <button onClick={() => setView('REGISTER')} className="w-full bg-accent text-accent-ink font-bold py-5 rounded-control active:opacity-90 transition-colors">
                 Register
               </button>
 
-              <button onClick={() => setView('LOGIN')} className="w-full bg-white text-blue-500 border border-blue-500 font-bold py-5 rounded-2xl shadow-sm active:bg-gray-50 transition-colors">
+              <button onClick={() => setView('LOGIN')} className="w-full bg-card text-accent border border-accent font-bold py-5 rounded-control active:bg-sunken transition-colors">
                 Sign In
               </button>
             </div>
@@ -1973,33 +1987,35 @@ import { isVoicePayload } from './walkieAudio.js';
 
 return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
-          <button onClick={() => setView('LANDING')} className="absolute top-12 left-4 p-2 text-gray-500 font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
+          <button onClick={() => setView('LANDING')} className="absolute top-12 left-4 p-2 text-muted font-bold flex items-center"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
           
-          <div className="w-20 h-20 bg-blue-500 text-white rounded-3xl flex items-center justify-center shadow-lg mb-8 mt-12">
-             <Shield className="w-10 h-10" />
-          </div>
-          <h1 className="text-3xl font-bold mb-8">{view === 'LOGIN' ? 'Sign In' : view === 'REGISTER' ? 'Create Account' : 'Reset Password'}</h1>
+          {/* The mark, not a shield in a blue square. A padlock-adjacent glyph
+              is the single fastest way to make a family product read as a
+              child-monitoring one (brief section 4, item 4), and this was the
+              first thing anyone saw on the sign-in screen. */}
+          <Mark grid={48} px={96} className="text-ink mb-6 mt-12" />
+          <h1 className="font-device text-[26px] mb-8">{view === 'LOGIN' ? 'Sign In' : view === 'REGISTER' ? 'Create Account' : 'Reset Password'}</h1>
 
-          <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
-            {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
+          <form onSubmit={handleSubmit} className="w-full max-w-sm bg-card p-6 rounded-card border border-rule space-y-4">
+            {error && <div className="text-danger text-sm bg-sunken p-3 rounded-control">{error}</div>}
             
             <input type="email" placeholder="Email Address" required
-              className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-100 focus:border-blue-300"
+              className="w-full bg-sunken px-4 py-3 rounded-control outline-none border border-rule focus:border-accent"
               value={email} onChange={e => setEmail(e.target.value)} disabled={isLoading} />
             
             {view !== 'FORGOT' && (
               <input type="password" placeholder="Password" required
-                className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-100 focus:border-blue-300"
+                className="w-full bg-sunken px-4 py-3 rounded-control outline-none border border-rule focus:border-accent"
                 value={password} onChange={e => setPassword(e.target.value)} disabled={isLoading} />
             )}
             
-            <button type="submit" disabled={isLoading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl active:bg-blue-600 transition-colors mt-2 disabled:bg-blue-300 disabled:shadow-none">
+            <button type="submit" disabled={isLoading} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control active:opacity-90 transition-colors mt-2 disabled:bg-rule disabled:text-muted disabled:shadow-none">
               {isLoading ? "Please wait..." : (view === 'LOGIN' ? "Sign In" : view === 'REGISTER' ? "Create Account" : "Send Reset Email")}
             </button>
           </form>
 
           {view === 'LOGIN' && (
-            <button onClick={() => setView('FORGOT')} className="mt-6 text-blue-500 font-medium active:text-blue-700">Forgot password?</button>
+            <button onClick={() => setView('FORGOT')} className="mt-6 text-accent font-medium active:text-accent">Forgot password?</button>
           )}
         </div>
       );
@@ -2028,17 +2044,17 @@ return (
 
       return (
         <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
-          <h1 className="text-3xl font-bold mb-4">Create Your ID</h1>
-          <p className="text-gray-500 mb-8 max-w-sm leading-relaxed">Your base call sign is what a Dot Dash shows when you message it (e.g. MOM0101, DAD99).</p>
+          <h1 className="font-device text-[26px] mb-4">Create Your ID</h1>
+          <p className="text-muted mb-8 max-w-sm leading-relaxed">Your base call sign is what a Dot Dash shows when you message it (e.g. MOM0101, DAD99).</p>
 
-          <div className="w-full max-w-sm bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+          <div className="w-full max-w-sm bg-card p-6 rounded-card border border-rule space-y-4">
             <input type="text" placeholder="Dad, Mama or Your Name" required maxLength="10"
-              className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-100 focus:border-blue-300"
+              className="w-full bg-sunken px-4 py-4 rounded-control outline-none font-device placeholder:normal-case uppercase text-lg border border-rule focus:border-accent"
               value={parentName} onChange={e => setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
             <input type="text" placeholder="Birthday (MMDD)" required maxLength="4"
-              className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-100 focus:border-blue-300"
+              className="w-full bg-sunken px-4 py-4 rounded-control outline-none font-device placeholder:normal-case uppercase text-lg border border-rule focus:border-accent"
               value={parentPin} onChange={e => setParentPin(e.target.value.replace(/\D/g, ''))} />
-            <button onClick={handleSave} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl active:bg-blue-600 transition-colors mt-2">
+            <button onClick={handleSave} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control active:opacity-90 transition-colors mt-2">
               Save and Continue
             </button>
           </div>
@@ -2336,8 +2352,8 @@ return (
 
       const Step = ({ n, children }) => (
         <div className="flex items-start">
-          <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">{n}</div>
-          <p className="ml-3 text-gray-700">{children}</p>
+          <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">{n}</div>
+          <p className="ml-3 text-ink">{children}</p>
         </div>
       );
 
@@ -2346,7 +2362,7 @@ return (
           {phase === 'INTRO' && (
             <>
               <h2 className="text-2xl font-bold text-center">{isNew ? 'Connect to Wi-Fi' : 'Wi-Fi Setup'}</h2>
-              <p className="text-gray-500 text-center">
+              <p className="text-muted text-center">
                 {isNew
                   ? 'First, let’s get your Dot Dash onto your home Wi-Fi.'
                   : 'Set up your Dot Dash’s Wi-Fi, or reconnect it if it’s not online.'}
@@ -2357,25 +2373,25 @@ return (
                 <Step n={isNew ? 3 : 2}>Press <strong>ENTER</strong> on <strong>WIFI</strong>. When the screen says <strong>WI-FI SETUP</strong>, tap Next.</Step>
               </div>
               {error && (
-                <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">
+                <div className="text-danger text-sm bg-sunken p-3 rounded-control">
                   {error}
-                  {errorDetail && <div className="mt-2 text-xs text-red-400 font-mono break-words">{errorDetail}</div>}
+                  {errorDetail && <div className="mt-2 text-[13px] text-danger font-device break-words">{errorDetail}</div>}
                 </div>
               )}
               {trouble && (
-                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700 space-y-2">
-                  <div className="font-bold text-gray-800">If it doesn’t work, try this</div>
+                <div className="bg-sunken border border-rule rounded-control p-4 text-sm text-ink space-y-2">
+                  <div className="font-bold text-ink">If it doesn’t work, try this</div>
                   <ul className="list-disc list-outside pl-5 space-y-1.5 leading-relaxed">
                     <li>Check your Dot Dash still says <strong>WI-FI SETUP</strong>. If not, open <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &rarr; WIFI</strong> again.</li>
                     <li>Hold your phone next to your Dot Dash.</li>
                     <li>On your iPhone, open Settings &rarr; Wi-Fi and turn Wi-Fi <strong>off, then on</strong>. Come back and tap Next.</li>
                     <li>Still stuck? Turn your Dot Dash off and on, then open <strong>TOOLS &rarr; WIFI</strong> again.</li>
                   </ul>
-                  <button onClick={() => setShowManual((v) => !v)} className="text-blue-500 font-bold pt-1">
+                  <button onClick={() => setShowManual((v) => !v)} className="text-accent font-bold pt-1">
                     {showManual ? 'Hide' : 'Set it up without the app'}
                   </button>
                   {showManual && (
-                    <ol className="list-decimal list-outside pl-5 space-y-1.5 leading-relaxed border-t border-gray-200 pt-2">
+                    <ol className="list-decimal list-outside pl-5 space-y-1.5 leading-relaxed border-t border-rule pt-2">
                       <li>Open your iPhone’s Settings &rarr; Wi-Fi.</li>
                       <li>Join <strong>Dot Dash Setup</strong>.</li>
                       <li>A setup page opens by itself. If it doesn’t, open Safari and go to <strong>192.168.4.1</strong>.</li>
@@ -2384,83 +2400,83 @@ return (
                   )}
                 </div>
               )}
-              <button onClick={joinAndScan} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4">{trouble ? 'Try again' : 'Next'}</button>
-              <p className="text-xs text-gray-400 leading-relaxed text-center">
+              <button onClick={joinAndScan} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-4">{trouble ? 'Try again' : 'Next'}</button>
+              <p className="text-[13px] text-muted leading-relaxed text-center">
                 Your phone will briefly join your Dot Dash’s own network. iOS asks first — tap <strong>Join</strong>, and <strong>Allow</strong> if it asks about devices on your local network. If a Dot Dash setup page opens on top, tap <strong>Cancel</strong> — setup carries on here.
               </p>
               {isNew && onSkip && (
-                <button onClick={onSkip} className="w-full text-blue-500 text-sm font-bold py-2">My Dot Dash is already on Wi-Fi</button>
+                <button onClick={onSkip} className="w-full text-accent text-sm font-bold py-2">My Dot Dash is already on Wi-Fi</button>
               )}
             </>
           )}
 
           {phase === 'WORKING' && (
             <div className="flex flex-col items-center text-center space-y-5 py-10">
-              <Activity className="w-12 h-12 text-blue-500 animate-pulse" />
-              <p className="text-gray-700 font-bold">{status}</p>
+              <Activity className="w-12 h-12 text-accent animate-pulse" />
+              <p className="text-ink font-bold">{status}</p>
             </div>
           )}
 
           {phase === 'CHOOSE' && (
             <>
               <h2 className="text-2xl font-bold text-center">Choose a network</h2>
-              <p className="text-gray-500 text-center">These are the networks your Dot Dash can see from where it is.</p>
-              {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
-              <div className="bg-gray-50 border border-gray-200 rounded-xl divide-y divide-gray-200 max-h-64 overflow-y-auto">
+              <p className="text-muted text-center">These are the networks your Dot Dash can see from where it is.</p>
+              {error && <div className="text-danger text-sm bg-sunken p-3 rounded-control">{error}</div>}
+              <div className="bg-sunken border border-rule rounded-control divide-y divide-rule max-h-64 overflow-y-auto">
                 {networks.map((n) => (
                   <button key={n} onClick={() => setSsid(n)} className="w-full flex items-center justify-between px-4 py-3 text-left">
-                    <span className={`truncate ${ssid === n ? 'font-bold text-gray-900' : 'text-gray-700'}`}>{n}</span>
-                    {ssid === n && <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0 ml-3" />}
+                    <span className={`truncate ${ssid === n ? 'font-bold text-ink' : 'text-ink'}`}>{n}</span>
+                    {ssid === n && <span className="w-3 h-3 rounded-full bg-accent shrink-0 ml-3" />}
                   </button>
                 ))}
                 <button onClick={() => setSsid('__other__')} className="w-full flex items-center justify-between px-4 py-3 text-left">
-                  <span className={ssid === '__other__' ? 'font-bold text-gray-900' : 'text-gray-500'}>Other network…</span>
-                  {ssid === '__other__' && <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0 ml-3" />}
+                  <span className={ssid === '__other__' ? 'font-bold text-ink' : 'text-muted'}>Other network…</span>
+                  {ssid === '__other__' && <span className="w-3 h-3 rounded-full bg-accent shrink-0 ml-3" />}
                 </button>
               </div>
               {ssid === '__other__' && (
                 <input type="text" placeholder="Network name" autoCapitalize="none" autoCorrect="off"
-                  className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-200 focus:border-blue-400"
+                  className="w-full bg-sunken px-4 py-3 rounded-control outline-none border border-rule focus:border-accent"
                   value={manualSsid} onChange={(e) => setManualSsid(e.target.value)} />
               )}
               <div className="relative">
                 <input type={showPass ? 'text' : 'password'} placeholder="Password (leave blank if none)" autoComplete="off" autoCapitalize="none" autoCorrect="off"
-                  className="w-full bg-gray-50 pl-4 pr-12 py-3 rounded-xl outline-none border border-gray-200 focus:border-blue-400"
+                  className="w-full bg-sunken pl-4 pr-12 py-3 rounded-control outline-none border border-rule focus:border-accent"
                   value={pass} onChange={(e) => setPass(e.target.value)} />
                 <button type="button" onClick={() => setShowPass((v) => !v)} aria-label={showPass ? 'Hide password' : 'Show password'}
-                  className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 active:text-gray-600">
+                  className="absolute inset-y-0 right-0 px-3 flex items-center text-muted active:text-muted">
                   {showPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
               {isNew && (
                 <div>
-                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Timezone</div>
+                  <div className="text-[13px] font-bold text-muted uppercase tracking-wider mb-1">Timezone</div>
                   <select value={tz} onChange={(e) => setTz(e.target.value)}
-                    className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none border border-gray-200">
+                    className="w-full bg-sunken px-4 py-3 rounded-control outline-none border border-rule">
                     {DEVICE_TZ_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                   </select>
                 </div>
               )}
-              <button onClick={connect} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Connect</button>
+              <button onClick={connect} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">Connect</button>
             </>
           )}
 
           {phase === 'OFFLINE' && (
             <>
               <h2 className="text-2xl font-bold text-center">Not online yet</h2>
-              <p className="text-gray-600 text-center">Your Dot Dash hasn’t come online. It can take a minute after restarting.</p>
-              <p className="text-gray-500 text-sm text-center">If its screen says <strong>WI-FI SETUP</strong> again, the network didn’t take — start over and check the password.</p>
-              <button onClick={comeHome} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Keep waiting</button>
-              <button onClick={() => { setError(''); setPhase('INTRO'); }} className="w-full bg-white text-gray-700 font-bold py-4 rounded-xl border border-gray-200">Start over</button>
+              <p className="text-muted text-center">Your Dot Dash hasn’t come online. It can take a minute after restarting.</p>
+              <p className="text-muted text-sm text-center">If its screen says <strong>WI-FI SETUP</strong> again, the network didn’t take — start over and check the password.</p>
+              <button onClick={comeHome} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">Keep waiting</button>
+              <button onClick={() => { setError(''); setPhase('INTRO'); }} className="w-full bg-card text-ink font-bold py-4 rounded-control border border-rule">Start over</button>
             </>
           )}
 
           {phase === 'DONE' && (
             <div className="text-center space-y-4 py-6">
-              <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto"><Wifi className="w-8 h-8" /></div>
+              <div className="w-16 h-16 rounded-full bg-sunken text-ok flex items-center justify-center mx-auto"><Wifi className="w-8 h-8" /></div>
               <h2 className="text-2xl font-bold">Connected</h2>
-              <p className="text-gray-600">{childName ? `${childName}’s Dot Dash` : 'Your Dot Dash'} is back online.</p>
-              <button onClick={() => onDone(codeRef.current)} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl shadow-sm">Back to Settings</button>
+              <p className="text-muted">{childName ? `${childName}’s Dot Dash` : 'Your Dot Dash'} is back online.</p>
+              <button onClick={() => onDone(codeRef.current)} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">Back to Settings</button>
             </div>
           )}
         </div>
@@ -2643,12 +2659,15 @@ return (
       const displayFriends = [...new Set([parentProfile?.virtualId, ...friends].filter(Boolean))];
 
       return (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto flex flex-col min-h-screen">
+        <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col min-h-screen">
            <div className="p-4 shrink-0 relative flex items-center justify-center" style={{ paddingTop: 'max(3rem, calc(env(safe-area-inset-top) + 1rem))' }}>
-               <button onClick={onCancel} className="absolute left-4 p-2 text-gray-500 hover:text-gray-700 font-bold flex items-center transition-colors">
+               <button onClick={onCancel} className="absolute left-4 p-2 text-muted hover:text-ink font-bold flex items-center transition-colors">
                   <ArrowLeft className="w-5 h-5 mr-1"/> Back
                </button>
-               <h1 className="text-3xl font-bold text-center">Setup Dot Dash</h1>
+               {/* The Back button is absolutely positioned over this row, so the
+                   title has to keep clear of it on both sides -- at 375px the
+                   centred title and the button were overlapping. */}
+               <h1 className="font-device text-[20px] text-center px-16 leading-tight">Setup Dot Dash</h1>
            </div>
            
            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -2670,8 +2689,8 @@ return (
              {step === 'WIFI_CHECK' && (
                 <div className="w-full max-w-sm my-auto space-y-6">
                    <h2 className="text-xl font-bold mb-8">Have you connected your Dot Dash to your home Wi-Fi?</h2>
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm">Yes, it's connected</button>
-                   <button onClick={()=>setStep('WIFI_INSTRUCT')} className="w-full bg-white text-gray-700 font-bold py-4 rounded-xl border border-gray-200 shadow-sm">No, I need to do that</button>
+                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">Yes, it's connected</button>
+                   <button onClick={()=>setStep('WIFI_INSTRUCT')} className="w-full bg-card text-ink font-bold py-4 rounded-control border border-rule">No, I need to do that</button>
                 </div>
              )}
 
@@ -2681,37 +2700,37 @@ return (
                    
                    <div className="space-y-3">
                      <div className="flex items-start">
-                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">1</div>
-                       <p className="ml-3 text-gray-700">Turn on your Dot Dash. It will say <strong>HELLO!</strong> — press any button to begin.</p>
+                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">1</div>
+                       <p className="ml-3 text-ink">Turn on your Dot Dash. It will say <strong>HELLO!</strong> — press any button to begin.</p>
                      </div>
                      <div className="flex items-start">
-                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">2</div>
-                       <p className="ml-3 text-gray-700">Press <strong>SELECT</strong> (front arcade button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong> on the screen.</p>
+                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">2</div>
+                       <p className="ml-3 text-ink">Press <strong>SELECT</strong> (front arcade button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong> on the screen.</p>
                      </div>
                      <div className="flex items-start">
-                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">3</div>
-                       <p className="ml-3 text-gray-700">Press <strong>ENTER</strong> (top arcade button) to open Tools, then <strong>ENTER</strong> again on <strong>WIFI</strong> <span className="text-gray-500">(shown as <strong>DOT DASH SETUP</strong> on devices that haven't updated yet)</span>.</p>
+                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">3</div>
+                       <p className="ml-3 text-ink">Press <strong>ENTER</strong> (top arcade button) to open Tools, then <strong>ENTER</strong> again on <strong>WIFI</strong> <span className="text-muted">(shown as <strong>DOT DASH SETUP</strong> on devices that haven't updated yet)</span>.</p>
                      </div>
                      <div className="flex items-start">
-                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">4</div>
-                       <p className="ml-3 text-gray-700">Get your phone or computer and open Wi-Fi settings. Join the network named <strong>Dot Dash Setup</strong>.</p>
+                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">4</div>
+                       <p className="ml-3 text-ink">Get your phone or computer and open Wi-Fi settings. Join the network named <strong>Dot Dash Setup</strong>.</p>
                      </div>
                      <div className="flex items-start">
-                       <div className="bg-blue-100 text-blue-600 font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">5</div>
-                       <p className="ml-3 text-gray-700">Wait a few seconds for a window to pop up, follow the setup instructions, then come back here!</p>
+                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">5</div>
+                       <p className="ml-3 text-ink">Wait a few seconds for a window to pop up, follow the setup instructions, then come back here!</p>
                      </div>
                    </div>
 
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-8 mb-4">Done, let's continue</button>
+                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-8 mb-4">Done, let's continue</button>
 
-                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left shadow-sm">
+                   <div className="bg-sunken border border-warn rounded-control p-4 text-left">
                      <div className="flex items-start">
                         <div className="shrink-0 mt-0.5">
-                           <Info className="w-5 h-5 text-amber-500" />
+                           <Info className="w-5 h-5 text-warn" />
                         </div>
                         <div className="ml-3">
-                           <h3 className="text-sm font-bold text-amber-800">Don't see the Dot Dash Setup network?</h3>
-                           <p className="text-sm text-amber-700 mt-1 leading-relaxed">
+                           <h3 className="text-sm font-bold text-warn">Don't see the Dot Dash Setup network?</h3>
+                           <p className="text-sm text-warn mt-1 leading-relaxed">
                              Sometimes phones hold onto old network lists. Try turning your phone's Wi-Fi <strong>off and back on</strong> to force it to rescan!
                            </p>
                         </div>
@@ -2722,13 +2741,13 @@ return (
 
              {step === 'CHILD_ID' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
-                   {autoCode && <div className="text-green-700 text-sm bg-green-50 p-3 rounded-xl font-bold">Your Dot Dash is online.</div>}
+                   {autoCode && <div className="text-ok text-sm bg-sunken p-3 rounded-control font-bold">Your Dot Dash is online.</div>}
                    <h2 className="text-xl font-bold mb-2">Create a Dot Dash call sign</h2>
-                   <p className="text-gray-500 mb-6">Choose a name and a birthday (MMDD) for this Dot Dash. Together they make the call sign for this Dot Dash.</p>
-                   {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
-                   <input type="text" placeholder="Name (e.g. ARTHUR)" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childName} onChange={e=>setChildName(e.target.value)} />
-                   <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={childPin} onChange={e=>setChildPin(e.target.value.replace(/\D/g, ''))} />
-                   <button onClick={handleChildIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
+                   <p className="text-muted mb-6">Choose a name and a birthday (MMDD) for this Dot Dash. Together they make the call sign for this Dot Dash.</p>
+                   {error && <div className="text-danger text-sm bg-sunken p-3 rounded-control">{error}</div>}
+                   <input type="text" placeholder="Name (e.g. ARTHUR)" className="w-full bg-sunken px-4 py-4 rounded-control outline-none font-device placeholder:normal-case uppercase text-lg border border-rule focus:border-accent" value={childName} onChange={e=>setChildName(e.target.value)} />
+                   <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-sunken px-4 py-4 rounded-control outline-none font-device placeholder:normal-case uppercase text-lg border border-rule focus:border-accent" value={childPin} onChange={e=>setChildPin(e.target.value.replace(/\D/g, ''))} />
+                   <button onClick={handleChildIdSubmit} disabled={loading} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-4 disabled:bg-rule disabled:text-muted">
                      {loading ? (autoCode ? 'Linking your Dot Dash...' : 'Checking...') : 'Next'}
                    </button>
                 </div>
@@ -2737,21 +2756,21 @@ return (
              {step === 'PAIRING' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Link Your Device</h2>
-                   <p className="text-gray-500 mb-6 text-left">On your Dot Dash, go to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> and enter the 6-character code it shows below.</p>
-                   {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
-                   <input type="text" placeholder="AB-12-CD" maxLength="8" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-2xl tracking-widest border border-gray-200 focus:border-blue-400" value={pairingCode} onChange={e=>setPairingCode(e.target.value.toUpperCase())} />
-                   <button onClick={handlePairingSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
+                   <p className="text-muted mb-6 text-left">On your Dot Dash, go to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> and enter the 6-character code it shows below.</p>
+                   {error && <div className="text-danger text-sm bg-sunken p-3 rounded-control">{error}</div>}
+                   <input type="text" placeholder="AB-12-CD" maxLength="8" className="w-full bg-sunken px-4 py-4 rounded-control outline-none font-device placeholder:normal-case text-center uppercase text-2xl tracking-widest border border-rule focus:border-accent" value={pairingCode} onChange={e=>setPairingCode(e.target.value.toUpperCase())} />
+                   <button onClick={handlePairingSubmit} disabled={loading} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-4 disabled:bg-rule disabled:text-muted">
                      {loading ? 'Searching for device...' : 'Link Device'}
                    </button>
                    
-                   <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 text-left shadow-sm">
+                   <div className="mt-6 bg-sunken border border-rule rounded-control p-4 text-left">
                      <div className="flex items-start">
                         <div className="shrink-0 mt-0.5">
-                           <Info className="w-5 h-5 text-blue-500" />
+                           <Info className="w-5 h-5 text-accent" />
                         </div>
                         <div className="ml-3">
-                           <h3 className="text-sm font-bold text-blue-800">Can't find the Pairing code?</h3>
-                           <p className="text-sm text-blue-700 mt-1 leading-relaxed">
+                           <h3 className="text-sm font-bold text-accent">Can't find the Pairing code?</h3>
+                           <p className="text-sm text-accent mt-1 leading-relaxed">
                              Make sure your device is up to date. Go to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &rarr; UPDATE</strong> to download the latest firmware.
                            </p>
                         </div>
@@ -2763,11 +2782,11 @@ return (
              {step === 'PARENT_ID' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Set up your base call sign</h2>
-                   <p className="text-gray-500 mb-6">This is what a Dot Dash shows when you message it (e.g. MOM0101).</p>
-                   {error && <div className="text-red-500 text-sm bg-red-50 p-3 rounded-xl">{error}</div>}
-                   <input type="text" placeholder="Dad, Mama or Your Name" maxLength="10" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentName} onChange={e=>setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
-                   <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-gray-50 px-4 py-4 rounded-xl outline-none font-bold uppercase text-lg border border-gray-200 focus:border-blue-400" value={parentPin} onChange={e=>setParentPin(e.target.value.replace(/\D/g, ''))} />
-                   <button onClick={handleParentIdSubmit} disabled={loading} className="w-full bg-blue-500 text-white font-bold py-4 rounded-xl shadow-sm mt-4 disabled:bg-blue-300">
+                   <p className="text-muted mb-6">This is what a Dot Dash shows when you message it (e.g. MOM0101).</p>
+                   {error && <div className="text-danger text-sm bg-sunken p-3 rounded-control">{error}</div>}
+                   <input type="text" placeholder="Dad, Mama or Your Name" maxLength="10" className="w-full bg-sunken px-4 py-4 rounded-control outline-none font-device placeholder:normal-case uppercase text-lg border border-rule focus:border-accent" value={parentName} onChange={e=>setParentName(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                   <input type="text" placeholder="Birthday (MMDD)" maxLength="4" className="w-full bg-sunken px-4 py-4 rounded-control outline-none font-device placeholder:normal-case uppercase text-lg border border-rule focus:border-accent" value={parentPin} onChange={e=>setParentPin(e.target.value.replace(/\D/g, ''))} />
+                   <button onClick={handleParentIdSubmit} disabled={loading} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-4 disabled:bg-rule disabled:text-muted">
                      {loading ? 'Checking...' : 'Save base call sign'}
                    </button>
                 </div>
@@ -2776,22 +2795,22 @@ return (
              {step === 'ADD_FRIENDS' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
                    <h2 className="text-xl font-bold mb-2">Add contacts</h2>
-                   <p className="text-gray-500 mb-6">Enter a call sign — another Dot Dash{SHOW_PHONE_CONTACTS ? ', a base, or a phone patch' : ' or a base'} — to add it to this Dot Dash’s contacts.</p>
+                   <p className="text-muted mb-6">Enter a call sign — another Dot Dash{SHOW_PHONE_CONTACTS ? ', a base, or a phone patch' : ' or a base'} — to add it to this Dot Dash’s contacts.</p>
                    
                    <ul className="space-y-2 mb-4 text-left">
                      {displayFriends.map((f, i) => (
-                       <li key={i} className="font-bold text-gray-700 bg-gray-100 p-3 rounded-xl">
-                          {f} {f === parentProfile?.virtualId && <span className="text-xs text-blue-500 font-normal ml-1">(You)</span>}
+                       <li key={i} className="font-bold text-ink bg-sunken p-3 rounded-control">
+                          {f} {f === parentProfile?.virtualId && <span className="text-[13px] text-accent font-normal ml-1">(You)</span>}
                        </li>
                      ))}
                    </ul>
 
                    <div className="flex space-x-2">
-                     <input type="text" placeholder="Call sign" className="flex-1 bg-gray-50 px-4 py-3 rounded-xl outline-none font-bold uppercase border border-gray-200" value={friendId} onChange={e=>setFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
-                     <button onClick={handleAddFriend} className="bg-blue-500 text-white font-bold px-6 rounded-xl">Add</button>
+                     <input type="text" placeholder="Call sign" className="flex-1 bg-sunken px-4 py-3 rounded-control outline-none font-device placeholder:normal-case uppercase border border-rule" value={friendId} onChange={e=>setFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                     <button onClick={handleAddFriend} className="bg-accent text-accent-ink font-bold px-6 rounded-control">Add</button>
                    </div>
                    
-                   <button onClick={onComplete} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl shadow-sm mt-8">Finish Setup</button>
+                   <button onClick={onComplete} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-8">Finish Setup</button>
                 </div>
              )}
 
@@ -3779,57 +3798,57 @@ return (
           const childName = displayName(childId);
           const busy = brokenStatus.busy;
           const status = brokenStatus.msg ? (
-            <p className={`text-sm mt-3 leading-relaxed ${brokenStatus.error ? 'text-red-600' : brokenStatus.done ? 'text-green-700 font-bold' : 'text-gray-600'}`}>{brokenStatus.msg}</p>
+            <p className={`text-sm mt-3 leading-relaxed ${brokenStatus.error ? 'text-danger' : brokenStatus.done ? 'text-ok font-bold' : 'text-muted'}`}>{brokenStatus.msg}</p>
           ) : null;
           const card = (key, title, body, tone, children) => (
-            <div className={`w-full shrink-0 text-left bg-white border ${tone} rounded-2xl mb-3 overflow-hidden`}>
+            <div className={`w-full shrink-0 text-left bg-card border ${tone} rounded-card mb-3 overflow-hidden`}>
               <button disabled={busy} onClick={() => { setBrokenStep(k => k === key ? null : key); setBrokenStatus({ busy: false, msg: '', error: false }); }}
-                className="w-full text-left p-4 active:bg-gray-50 disabled:opacity-60">
+                className="w-full text-left p-4 active:bg-sunken disabled:opacity-60">
                 <div className="flex items-center justify-between">
-                  <div className="font-bold text-gray-800">{title}</div>
-                  <ChevronRight className={`w-5 h-5 text-gray-400 shrink-0 transition-transform ${brokenStep === key ? 'rotate-90' : ''}`} />
+                  <div className="font-bold text-ink">{title}</div>
+                  <ChevronRight className={`w-5 h-5 text-muted shrink-0 transition-transform ${brokenStep === key ? 'rotate-90' : ''}`} />
                 </div>
-                <p className="text-sm text-gray-500 mt-1 leading-relaxed">{body}</p>
+                <p className="text-sm text-muted mt-1 leading-relaxed">{body}</p>
               </button>
-              {brokenStep === key && <div className="px-4 pb-4 pt-4 border-t border-gray-100">{children}</div>}
+              {brokenStep === key && <div className="px-4 pb-4 pt-4 border-t border-rule">{children}</div>}
             </div>
           );
           return (
              <div className="p-6 pb-10">
-                <button disabled={busy} onClick={closeBroken} className="flex items-center text-gray-500 font-bold mb-6 disabled:opacity-40"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
+                <button disabled={busy} onClick={closeBroken} className="flex items-center text-muted font-bold mb-6 disabled:opacity-40"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
                 <h2 className="text-2xl font-bold mb-2">Device won't turn on?</h2>
-                <p className="text-gray-600 mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
+                <p className="text-muted mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
 
                 {card('replace', 'Replace with a new Dot Dash',
                   `Keep ${childId}, with its contacts, quick messages, points and settings, and move it to new hardware.`,
-                  'border-blue-100',
+                  'border-rule',
                   <>
-                    <ol className="list-decimal list-inside text-sm text-gray-600 space-y-1 mb-3 leading-relaxed">
+                    <ol className="list-decimal list-inside text-sm text-muted space-y-1 mb-3 leading-relaxed">
                       <li>Turn on the new Dot Dash and connect it to Wi-Fi.</li>
                       <li>On it, open <strong>TOOLS &gt; PAIRING</strong>.</li>
                       <li>Enter the code it shows.</li>
                     </ol>
                     <input type="text" placeholder="New device's code" maxLength={6} disabled={busy || brokenStatus.done}
-                      className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none font-bold text-center uppercase text-lg tracking-widest border border-gray-200 focus:border-blue-400 mb-3"
+                      className="w-full bg-sunken px-4 py-3 rounded-control outline-none font-device placeholder:normal-case text-center uppercase text-lg tracking-widest border border-rule focus:border-accent mb-3"
                       value={replaceCode} onChange={e => setReplaceCode(e.target.value.toUpperCase().replace(/[^0-9A-F]/g, ''))} />
                     <button onClick={brokenStatus.done ? closeBroken : handleReplace} disabled={busy}
-                      className="w-full py-3 text-white font-bold bg-blue-500 rounded-xl active:bg-blue-600 disabled:opacity-50">
+                      className="w-full py-3 text-accent-ink font-bold bg-accent rounded-control active:opacity-90 disabled:opacity-50">
                       {brokenStatus.done ? 'Done' : busy ? 'Working…' : `Move ${childId} to the new device`}
                     </button>
-                    <p className="text-xs text-gray-400 mt-2 leading-relaxed">Wi-Fi stays with each device: the new one keeps the network it was set up on.</p>
+                    <p className="text-[13px] text-muted mt-2 leading-relaxed">Wi-Fi stays with each device: the new one keeps the network it was set up on.</p>
                     {status}
                   </>)}
 
                 {card('remove', 'Remove it without replacing',
                   `Release the broken device from your account. ${childId} becomes free to use again.`,
-                  'border-red-100',
+                  'border-danger',
                   <>
-                    <p className="text-sm text-gray-600 mb-3 leading-relaxed">This can't be undone. Type <strong>{childId}</strong> to confirm.</p>
+                    <p className="text-sm text-muted mb-3 leading-relaxed">This can't be undone. Type <strong>{childId}</strong> to confirm.</p>
                     <input type="text" placeholder={childId} disabled={busy}
-                      className="w-full bg-gray-50 px-4 py-3 rounded-xl outline-none font-bold text-center uppercase text-lg tracking-wider border border-gray-200 focus:border-red-400 mb-3"
+                      className="w-full bg-sunken px-4 py-3 rounded-control outline-none font-device text-center uppercase text-lg tracking-wider border border-rule focus:border-accent mb-3"
                       value={brokenConfirm} onChange={e => setBrokenConfirm(e.target.value.toUpperCase())} />
                     <button onClick={handleRemoveBroken} disabled={busy}
-                      className="w-full py-3 text-white font-bold bg-red-500 rounded-xl active:bg-red-600 disabled:opacity-50">
+                      className="w-full py-3 text-danger-ink font-bold bg-danger rounded-control active:opacity-90 disabled:opacity-50">
                       {busy ? 'Removing…' : `Remove ${childId}'s device`}
                     </button>
                     {status}
@@ -3841,20 +3860,20 @@ return (
        if (unlinkMode) {
           return (
              <div className="p-6 h-full flex flex-col">
-                <button onClick={()=>setUnlinkMode(false)} className="flex items-center text-gray-500 font-bold mb-6"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
+                <button onClick={()=>setUnlinkMode(false)} className="flex items-center text-muted font-bold mb-6"><ArrowLeft className="w-5 h-5 mr-1"/> Back</button>
                 <h2 className="text-2xl font-bold mb-4">Unlink Device</h2>
-                <p className="text-gray-600 mb-6">Navigate to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> on the Dot Dash and enter the code below to confirm unlinking.</p>
-                <input type="text" placeholder="Pairing Code" className="w-full bg-white px-4 py-4 rounded-xl outline-none font-bold text-center uppercase text-xl tracking-widest border border-gray-200 focus:border-red-400 mb-6" value={unlinkCode} onChange={e=>setUnlinkCode(e.target.value)} />
-                <button onClick={handleUnlink} className="w-full py-4 text-white font-bold bg-red-500 rounded-xl shadow-sm active:bg-red-600">Confirm Unlink</button>
+                <p className="text-muted mb-6">Navigate to <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS &gt; PAIRING</strong> on the Dot Dash and enter the code below to confirm unlinking.</p>
+                <input type="text" placeholder="Pairing Code" className="w-full bg-card px-4 py-4 rounded-control outline-none font-device placeholder:normal-case text-center uppercase text-xl tracking-widest border border-rule focus:border-accent mb-6" value={unlinkCode} onChange={e=>setUnlinkCode(e.target.value)} />
+                <button onClick={handleUnlink} className="w-full py-4 text-danger-ink font-bold bg-danger rounded-control active:opacity-90">Confirm Unlink</button>
                 
                 <button onClick={() => { setUnlinkMode(false); setBrokenMode(true); }}
-                  className="mt-6 w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-left shadow-sm active:bg-gray-100 flex items-start">
-                  <div className="shrink-0 mt-0.5"><AlertTriangle className="w-5 h-5 text-gray-500" /></div>
+                  className="mt-6 w-full bg-sunken border border-rule rounded-control p-4 text-left active:bg-rule flex items-start">
+                  <div className="shrink-0 mt-0.5"><AlertTriangle className="w-5 h-5 text-muted" /></div>
                   <div className="ml-3 flex-1">
-                    <h3 className="text-sm font-bold text-gray-800">Device won't turn on?</h3>
-                    <p className="text-sm text-gray-600 mt-1 leading-relaxed">Replace it or remove it without the code.</p>
+                    <h3 className="text-sm font-bold text-ink">Device won't turn on?</h3>
+                    <p className="text-sm text-muted mt-1 leading-relaxed">Replace it or remove it without the code.</p>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
+                  <ChevronRight className="w-5 h-5 text-muted shrink-0 mt-0.5" />
                 </button>
              </div>
           );
@@ -3865,8 +3884,8 @@ return (
        return (
          <div className="p-6">
             <div className="flex justify-between items-center mb-6">
-               <h1 className="text-3xl font-bold">Settings</h1>
-               <button onClick={handleLogout} className="flex items-center px-4 py-2 bg-white text-gray-700 font-bold rounded-full shadow-sm active:bg-gray-100 border border-gray-200">
+               <h1 className="font-device text-[26px]">Settings</h1>
+               <button onClick={handleLogout} className="flex items-center px-4 py-2 bg-card text-ink font-bold rounded-full active:bg-sunken border border-rule">
                   <LogOut className="w-4 h-4 mr-2"/> Logout
                </button>
             </div>
@@ -3875,27 +3894,27 @@ return (
                 Connect). The way over, since links and notifications are
                 otherwise the only doors in once someone is signed in. */}
             {onContactMode && savedContactChats().some((c) => c.claim) && (
-              <button onClick={onContactMode} className="w-full flex items-center justify-between p-4 mb-3 bg-white border border-gray-100 rounded-2xl active:bg-gray-50 text-left">
+              <button onClick={onContactMode} className="w-full flex items-center justify-between p-4 mb-3 bg-card border border-rule rounded-card active:bg-sunken text-left">
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
+                  <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
                   <div className="min-w-0">
-                    <div className="font-bold text-gray-800 text-base">Dot Dash Connect</div>
-                    <div className="text-xs text-gray-500">Your chats with other people's Dot Dashes</div>
+                    <div className="font-bold text-ink text-base leading-tight">Dot Dash Connect</div>
+                    <div className="text-[13px] text-muted">Your chats with other people's Dot Dashes</div>
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 ml-2"/>
+                <ChevronRight className="w-5 h-5 text-muted shrink-0 ml-2"/>
               </button>
             )}
 
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
-              <label className="text-xs text-gray-500 font-bold uppercase">Your base call sign</label>
-              <div className="text-xl font-bold text-blue-600">{parentProfile.virtualId}</div>
+            <div className="bg-card rounded-card p-5 border border-rule mb-4">
+              <label className="text-[13px] text-muted font-bold uppercase">Your base call sign</label>
+              <div className="text-xl font-device text-ink">{parentProfile.virtualId}</div>
             </div>
 
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6">
-              <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
-                 <label className="text-xs text-gray-500 font-bold uppercase">Active Dot Dash</label>
-                 <select className="bg-gray-50 rounded-lg px-3 py-1 font-bold outline-none border border-gray-200 text-sm" value={activeChildId || ''} onChange={e => setActiveChildId(e.target.value)}>
+            <div className="bg-card rounded-card p-5 border border-rule mb-6">
+              <div className="flex justify-between items-center mb-4 border-b border-rule pb-4">
+                 <label className="text-[13px] text-muted font-bold uppercase">Active Dot Dash</label>
+                 <select className="bg-sunken rounded-control px-3 py-1 font-bold outline-none border border-rule text-sm" value={activeChildId || ''} onChange={e => setActiveChildId(e.target.value)}>
                    {devices.map(d => <option key={d.id} value={d.id}>{d.identity.name}{d.identity.pin}</option>)}
                  </select>
               </div>
@@ -3905,12 +3924,12 @@ return (
                   figure is there whether or not the device is awake. */}
               {activeDevice && (devicePoints[activeDevice.id] ?? activeDevice.points) !== undefined && (
                 <div className="flex items-center justify-between mb-4 -mt-1">
-                  <div className="flex items-center text-gray-700">
-                    <Star className="w-4 h-4 text-amber-500 mr-2" />
+                  <div className="flex items-center text-ink">
+                    <Star className="w-4 h-4 text-warn mr-2" />
                     <span className="font-bold">{devicePoints[activeDevice.id] ?? activeDevice.points}</span>
-                    <span className="text-gray-500 text-sm ml-1">points</span>
+                    <span className="text-muted text-sm ml-1">points</span>
                   </div>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-[13px] text-muted">
                     {devicePoints[activeDevice.id] !== undefined ? 'now' : 'last reported'}
                   </span>
                 </div>
@@ -3922,86 +3941,85 @@ return (
                 <div className="mb-3">
                   {findRinging ? (
                     <button onClick={handleFindStop}
-                      className="w-full flex items-center justify-center space-x-2 bg-red-500 text-white font-bold py-3 rounded-2xl active:bg-red-600">
+                      className="w-full flex items-center justify-center space-x-2 bg-danger text-danger-ink font-bold py-3 rounded-control active:opacity-90">
                       <Volume2 className="w-5 h-5"/><span>Stop ringing</span>
                     </button>
                   ) : (
                     <button onClick={handleFind} disabled={findWaiting}
-                      className="w-full flex items-center justify-center space-x-2 bg-white border border-gray-200 text-gray-800 font-bold py-3 rounded-2xl active:bg-gray-50 disabled:text-gray-400">
-                      <Volume2 className="w-5 h-5 text-blue-500"/>
+                      className="w-full flex items-center justify-center space-x-2 bg-card border border-rule text-ink font-bold py-3 rounded-control active:bg-sunken disabled:text-muted">
+                      <Volume2 className="w-5 h-5 text-accent"/>
                       <span>{findWaiting ? 'Waiting for your Dot Dash…' : 'Find my Dot Dash'}</span>
                     </button>
                   )}
-                  <p className="text-xs text-gray-500 mt-2 px-1 leading-snug">{findHint()}</p>
+                  <p className="text-[13px] text-muted mt-2 px-1 leading-snug">{findHint()}</p>
                   {findWaiting && !findRinging && (
-                    <button onClick={handleFindStop} className="w-full text-xs text-gray-400 mt-1 py-1 active:text-gray-600">Cancel</button>
+                    <button onClick={handleFindStop} className="w-full text-[13px] text-muted mt-1 py-1 active:text-muted">Cancel</button>
                   )}
                 </div>
               )}
 
               {/* Approved Friends (collapsible) */}
-              <button onClick={() => setOpenFriends(o => !o)} className={`w-full flex items-center justify-between p-4 bg-blue-50 border border-blue-100 active:bg-blue-100 transition-colors ${openFriends ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+              <button onClick={() => setOpenFriends(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openFriends ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0"><Users className="w-5 h-5"/></div>
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><Users className="w-5 h-5"/></div>
                     <div className="text-left min-w-0">
-                       <div className="font-bold text-gray-800 text-base">Contacts</div>
-                       <div className="text-xs text-gray-500">{displayFriends.length === 1 ? '1 contact' : `${displayFriends.length} contacts`}</div>
+                       <div className="font-bold text-ink text-base leading-tight">Contacts</div>
+                       <div className="text-[13px] text-muted">{displayFriends.length === 1 ? '1 contact' : `${displayFriends.length} contacts`}</div>
                     </div>
                  </div>
                  <div className="flex items-center space-x-2 shrink-0 ml-2">
-                    <span className="bg-blue-500 text-white text-xs font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">{displayFriends.length}</span>
-                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-blue-400 transition-transform duration-200 ${openFriends ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-muted transition-transform duration-200 ${openFriends ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                  </div>
               </button>
               {openFriends && (
-                <div className="border border-t-0 border-blue-100 rounded-b-2xl bg-white p-4 mb-3">
+                <div className="border border-t-0 border-rule rounded-b-card bg-card p-4 mb-3">
                   <div className="flex space-x-2 mb-4">
-                     <input type="text" placeholder="Call sign" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newFriendId} onChange={e=>setNewFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} onKeyDown={e => { if (e.key === 'Enter') handleAddFriend(); }}/>
-                     <button onClick={handleAddFriend} className="shrink-0 bg-blue-500 text-white px-5 py-2 font-bold rounded-xl active:bg-blue-600">Add</button>
+                     <input type="text" placeholder="Call sign" className="flex-1 min-w-0 bg-sunken px-4 py-2 rounded-control outline-none uppercase font-device placeholder:normal-case border border-rule" value={newFriendId} onChange={e=>setNewFriendId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} onKeyDown={e => { if (e.key === 'Enter') handleAddFriend(); }}/>
+                     <button onClick={handleAddFriend} className="shrink-0 bg-accent text-accent-ink px-5 py-2 font-bold rounded-control active:opacity-90">Add</button>
                   </div>
                   {SHOW_PHONE_CONTACTS && (phoneForm ? (
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 space-y-2">
-                      <div className="font-bold text-gray-800 text-sm flex items-center"><Phone className="w-4 h-4 text-blue-500 mr-1.5"/>Add a phone number</div>
-                      <input type="text" placeholder="Their name, like Grandma" maxLength="30" autoComplete="off" className="w-full bg-white px-3 py-2 rounded-lg outline-none border border-gray-200" value={phoneForm.name} onChange={e => setPhoneForm(f => ({ ...f, name: e.target.value, error: '' }))}/>
-                      <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Mobile number" className="w-full bg-white px-3 py-2 rounded-lg outline-none border border-gray-200" value={phoneForm.phone} onChange={e => setPhoneForm(f => ({ ...f, phone: e.target.value, error: '' }))} onKeyDown={e => { if (e.key === 'Enter' && phoneForm.name.trim() && phoneForm.phone.trim()) handleAddPhone(); }}/>
-                      <p className="text-xs text-gray-500 leading-snug">{deviceName} will be able to message this number, and they can message back. Next you'll ask them to send START to our number; nothing goes through until they do. Their number is stored encrypted and deleted if you remove them.</p>
-                      {phoneForm.error && <p className="text-xs text-red-600 font-medium">{phoneForm.error}</p>}
+                    <div className="bg-sunken border border-rule rounded-control p-3 mb-4 space-y-2">
+                      <div className="font-bold text-ink text-sm flex items-center"><Phone className="w-4 h-4 text-accent mr-1.5"/>Add a phone number</div>
+                      <input type="text" placeholder="Their name, like Grandma" maxLength="30" autoComplete="off" className="w-full bg-card px-3 py-2 rounded-control outline-none border border-rule" value={phoneForm.name} onChange={e => setPhoneForm(f => ({ ...f, name: e.target.value, error: '' }))}/>
+                      <input type="tel" inputMode="tel" autoComplete="tel" placeholder="Mobile number" className="w-full bg-card px-3 py-2 rounded-control outline-none border border-rule" value={phoneForm.phone} onChange={e => setPhoneForm(f => ({ ...f, phone: e.target.value, error: '' }))} onKeyDown={e => { if (e.key === 'Enter' && phoneForm.name.trim() && phoneForm.phone.trim()) handleAddPhone(); }}/>
+                      <p className="text-[13px] text-muted leading-snug">{deviceName} will be able to message this number, and they can message back. Next you'll ask them to send START to our number; nothing goes through until they do. Their number is stored encrypted and deleted if you remove them.</p>
+                      {phoneForm.error && <p className="text-[13px] text-danger font-medium">{phoneForm.error}</p>}
                       <div className="flex space-x-2 pt-1">
-                        <button onClick={() => setPhoneForm(null)} disabled={phoneForm.busy} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2 font-bold rounded-xl active:bg-gray-100">Cancel</button>
-                        <button onClick={handleAddPhone} disabled={phoneForm.busy || !phoneForm.name.trim() || !phoneForm.phone.trim()} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600 disabled:bg-blue-300">{phoneForm.busy ? 'Adding…' : 'Add'}</button>
+                        <button onClick={() => setPhoneForm(null)} disabled={phoneForm.busy} className="flex-1 bg-card border border-rule text-muted py-2 font-bold rounded-control active:bg-sunken">Cancel</button>
+                        <button onClick={handleAddPhone} disabled={phoneForm.busy || !phoneForm.name.trim() || !phoneForm.phone.trim()} className="flex-1 bg-accent text-accent-ink py-2 font-bold rounded-control active:opacity-90 disabled:bg-rule disabled:text-muted">{phoneForm.busy ? 'Adding…' : 'Add'}</button>
                       </div>
                     </div>
                   ) : (
-                    <button onClick={() => { setSmsNote(''); setPhoneForm({ name: '', phone: '', busy: false, error: '' }); }} className="w-full flex items-center justify-center space-x-2 text-blue-600 font-bold text-sm py-2 mb-4 rounded-xl border border-dashed border-blue-200 active:bg-blue-50">
+                    <button onClick={() => { setSmsNote(''); setPhoneForm({ name: '', phone: '', busy: false, error: '' }); }} className="w-full flex items-center justify-center space-x-2 text-accent font-bold text-sm py-2 mb-4 rounded-control border border-dashed border-rule active:bg-sunken">
                       <Phone className="w-4 h-4"/><span>Add a phone number</span>
                     </button>
                   ))}
                   {SHOW_LINK_CONTACTS && (linkForm ? (
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 space-y-2">
-                      <div className="font-bold text-gray-800 text-sm flex items-center"><LinkIcon className="w-4 h-4 text-blue-500 mr-1.5"/>Add someone by link</div>
-                      <input type="text" placeholder="Their name, like Grandma" maxLength="30" autoComplete="off" className="w-full bg-white px-3 py-2 rounded-lg outline-none border border-gray-200" value={linkForm.name} onChange={e => setLinkForm(f => ({ ...f, name: e.target.value.toUpperCase(), error: '' }))} onKeyDown={e => { if (e.key === 'Enter' && linkForm.name.trim()) handleAddLink(); }}/>
-                      <p className="text-xs text-gray-500 leading-snug">You'll get a private link to send them. It opens a chat with {deviceName} in their browser, with no app or account needed, and works on one device only. You can remove them at any time.</p>
-                      {linkForm.error && <p className="text-xs text-red-600 font-medium">{linkForm.error}</p>}
+                    <div className="bg-sunken border border-rule rounded-control p-3 mb-4 space-y-2">
+                      <div className="font-bold text-ink text-sm flex items-center"><LinkIcon className="w-4 h-4 text-accent mr-1.5"/>Add someone by link</div>
+                      <input type="text" placeholder="Their name, like Grandma" maxLength="30" autoComplete="off" className="w-full bg-card px-3 py-2 rounded-control outline-none border border-rule" value={linkForm.name} onChange={e => setLinkForm(f => ({ ...f, name: e.target.value.toUpperCase(), error: '' }))} onKeyDown={e => { if (e.key === 'Enter' && linkForm.name.trim()) handleAddLink(); }}/>
+                      <p className="text-[13px] text-muted leading-snug">You'll get a private link to send them. It opens a chat with {deviceName} in their browser, with no app or account needed, and works on one device only. You can remove them at any time.</p>
+                      {linkForm.error && <p className="text-[13px] text-danger font-medium">{linkForm.error}</p>}
                       <div className="flex space-x-2 pt-1">
-                        <button onClick={() => setLinkForm(null)} disabled={linkForm.busy} className="flex-1 bg-white border border-gray-200 text-gray-600 py-2 font-bold rounded-xl active:bg-gray-100">Cancel</button>
-                        <button onClick={handleAddLink} disabled={linkForm.busy || !linkForm.name.trim()} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600 disabled:bg-blue-300">{linkForm.busy ? 'Adding…' : 'Add'}</button>
+                        <button onClick={() => setLinkForm(null)} disabled={linkForm.busy} className="flex-1 bg-card border border-rule text-muted py-2 font-bold rounded-control active:bg-sunken">Cancel</button>
+                        <button onClick={handleAddLink} disabled={linkForm.busy || !linkForm.name.trim()} className="flex-1 bg-accent text-accent-ink py-2 font-bold rounded-control active:opacity-90 disabled:bg-rule disabled:text-muted">{linkForm.busy ? 'Adding…' : 'Add'}</button>
                       </div>
                     </div>
                   ) : (
-                    <button onClick={() => { setSmsNote(''); setPhoneForm(null); setLinkForm({ name: '', busy: false, error: '' }); }} className="w-full flex items-center justify-center space-x-2 text-blue-600 font-bold text-sm py-2 mb-4 rounded-xl border border-dashed border-blue-200 active:bg-blue-50">
+                    <button onClick={() => { setSmsNote(''); setPhoneForm(null); setLinkForm({ name: '', busy: false, error: '' }); }} className="w-full flex items-center justify-center space-x-2 text-accent font-bold text-sm py-2 mb-4 rounded-control border border-dashed border-rule active:bg-sunken">
                       <LinkIcon className="w-4 h-4"/><span>Add someone by link</span>
                     </button>
                   ))}
                   {SHOW_BRIDGE_CONTACTS && smsNote && (
-                    <div className="text-sm text-blue-800 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2 mb-3">
+                    <div className="text-sm text-ink bg-sunken border border-rule rounded-control px-3 py-2 mb-3">
                       <div className="flex items-start">
                         <span className="flex-1">{smsNote}</span>
-                        <button onClick={() => { setSmsNote(''); setInviteFor(null); }} className="ml-2 text-blue-400 font-bold" aria-label="Dismiss">×</button>
+                        <button onClick={() => { setSmsNote(''); setInviteFor(null); }} className="ml-2 text-accent font-bold" aria-label="Dismiss">×</button>
                       </div>
                       {inviteFor && (
                         <div className="flex space-x-2 mt-2">
-                          <button onClick={() => handleShareInvite(inviteFor)} className="flex-1 bg-blue-500 text-white py-2 font-bold rounded-xl active:bg-blue-600">Send {inviteFor.contactName} {inviteFor.channel === 'web' ? 'their link' : 'the invite'}</button>
-                          <button onClick={() => handleCopyInvite(inviteFor)} className="shrink-0 bg-white border border-blue-200 text-blue-600 px-4 py-2 font-bold rounded-xl active:bg-blue-50">{inviteCopied ? 'Copied' : 'Copy'}</button>
+                          <button onClick={() => handleShareInvite(inviteFor)} className="flex-1 bg-accent text-accent-ink py-2 font-bold rounded-control active:opacity-90">Send {inviteFor.contactName} {inviteFor.channel === 'web' ? 'their link' : 'the invite'}</button>
+                          <button onClick={() => handleCopyInvite(inviteFor)} className="shrink-0 bg-card border border-rule text-accent px-4 py-2 font-bold rounded-control active:bg-sunken">{inviteCopied ? 'Copied' : 'Copy'}</button>
                         </div>
                       )}
                     </div>
@@ -4010,42 +4028,42 @@ return (
                     <>
                       {smsByFriend[f]?.channel === 'web' ? (() => { const c = smsByFriend[f]; return (
                         <span className="flex-1 min-w-0">
-                          <span className="flex items-center font-bold text-gray-700 min-w-0">
-                            <LinkIcon className="w-4 h-4 text-blue-500 mr-1.5 shrink-0"/>
+                          <span className="flex items-center font-bold text-ink min-w-0">
+                            <LinkIcon className="w-4 h-4 text-accent mr-1.5 shrink-0"/>
                             <span className="truncate">{c.contactName}</span>
                           </span>
                           {c.status === 'pending' && (
-                            <span className="block text-xs text-amber-600">Link not opened yet · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>
+                            <span className="block text-[13px] text-warn">Link not opened yet · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>
                           )}
                           {c.status === 'active' && (
-                            <span className="block text-xs text-green-600">
-                              Connected by link · {{ sms: 'SMS notifications', app: 'app notifications', browser: 'browser notifications' }[c.notifyBy] || 'no notifications'} · <button onClick={() => handleNewLink(c)} className="underline font-medium text-gray-500">New link</button>
+                            <span className="block text-[13px] text-ok">
+                              Connected by link · {{ sms: 'SMS notifications', app: 'app notifications', browser: 'browser notifications' }[c.notifyBy] || 'no notifications'} · <button onClick={() => handleNewLink(c)} className="underline font-medium text-muted">New link</button>
                             </span>
                           )}
                           {c.status === 'stopped' && (
-                            <span className="block text-xs text-gray-500">Left the chat · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>
+                            <span className="block text-[13px] text-muted">Left the chat · <button onClick={() => handleNewLink(c)} className="underline font-medium">Send a new link</button></span>
                           )}
                         </span>
                       ); })() : smsByFriend[f] ? (() => { const c = smsByFriend[f]; return (
                         <span className="flex-1 min-w-0">
-                          <span className="flex items-center font-bold text-gray-700 min-w-0">
-                            <Phone className="w-4 h-4 text-blue-500 mr-1.5 shrink-0"/>
+                          <span className="flex items-center font-bold text-ink min-w-0">
+                            <Phone className="w-4 h-4 text-accent mr-1.5 shrink-0"/>
                             <span className="truncate">{c.contactName}</span>
-                            <span className="text-xs text-gray-400 font-normal ml-2 shrink-0">{c.hint}</span>
+                            <span className="text-[13px] text-muted font-normal ml-2 shrink-0">{c.hint}</span>
                           </span>
                           {c.status === 'pending' && (
-                            <span className="block text-xs text-amber-600">Waiting for them to send START to {formatPhone(c.poolNumber)} · <button onClick={() => handleShareInvite(c)} className="underline font-medium">Send invite</button></span>
+                            <span className="block text-[13px] text-warn">Waiting for them to send START to {formatPhone(c.poolNumber)} · <button onClick={() => handleShareInvite(c)} className="underline font-medium">Send invite</button></span>
                           )}
-                          {c.status === 'active' && <span className="block text-xs text-green-600">Connected · messages from {formatPhone(c.poolNumber)}</span>}
-                          {c.status === 'stopped' && <span className="block text-xs text-gray-500">Messages turned off. They can send START to {formatPhone(c.poolNumber)}.</span>}
+                          {c.status === 'active' && <span className="block text-[13px] text-ok">Connected · messages from {formatPhone(c.poolNumber)}</span>}
+                          {c.status === 'stopped' && <span className="block text-[13px] text-muted">Messages turned off. They can send START to {formatPhone(c.poolNumber)}.</span>}
                         </span>
                       ); })() : (
-                        <span className="flex-1 font-bold text-gray-700 min-w-0 truncate">
-                           {f} {f === parentProfile.virtualId && <span className="text-xs text-blue-500 font-normal ml-2">(You)</span>}
+                        <span className="flex-1 font-bold text-ink min-w-0 truncate">
+                           {f} {f === parentProfile.virtualId && <span className="text-[13px] text-muted font-normal ml-2">(You)</span>}
                         </span>
                       )}
                       {f !== parentProfile.virtualId && (
-                          <button onClick={() => handleRemoveFriend(f)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
+                          <button onClick={() => handleRemoveFriend(f)} className="text-danger hover:text-danger p-1 ml-2 shrink-0 active:scale-95 transition-transform">
                             <Trash2 className="w-5 h-5"/>
                           </button>
                       )}
@@ -4055,29 +4073,28 @@ return (
               )}
 
               {/* Custom Messages (collapsible) */}
-              <button onClick={() => setOpenMessages(o => !o)} className={`w-full flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 active:bg-indigo-100 transition-colors ${openMessages ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+              <button onClick={() => setOpenMessages(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openMessages ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
                     <div className="text-left min-w-0">
-                       <div className="font-bold text-gray-800 text-base">Quick Messages</div>
-                       <div className="text-xs text-gray-500">{currentPhrases.length === 1 ? '1 saved phrase' : `${currentPhrases.length} saved phrases`}</div>
+                       <div className="font-bold text-ink text-base leading-tight">Quick Messages</div>
+                       <div className="text-[13px] text-muted">{currentPhrases.length === 1 ? '1 saved phrase' : `${currentPhrases.length} saved phrases`}</div>
                     </div>
                  </div>
                  <div className="flex items-center space-x-2 shrink-0 ml-2">
-                    <span className="bg-indigo-500 text-white text-xs font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">{currentPhrases.length}</span>
-                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-indigo-400 transition-transform duration-200 ${openMessages ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-muted transition-transform duration-200 ${openMessages ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                  </div>
               </button>
               {openMessages && (
-                <div className="border border-t-0 border-indigo-100 rounded-b-2xl bg-white p-4 mb-3">
+                <div className="border border-t-0 border-rule rounded-b-card bg-card p-4 mb-3">
                   <div className="flex space-x-2 mb-4">
-                     <input type="text" placeholder="New message..." maxLength="20" className="flex-1 min-w-0 bg-gray-50 px-4 py-2 rounded-xl outline-none uppercase font-bold border border-gray-200" value={newPhrase} onChange={e=>setNewPhrase(wireSafe(e.target.value).toUpperCase())} onKeyDown={e => { if (e.key === 'Enter') handleAddPhrase(); }}/>
-                     <button onClick={handleAddPhrase} disabled={currentPhrases.length >= MAX_PHRASES} className="shrink-0 bg-indigo-500 text-white px-5 py-2 font-bold rounded-xl active:bg-indigo-600 disabled:bg-indigo-300">Add</button>
+                     <input type="text" placeholder="New message..." maxLength="20" className="flex-1 min-w-0 bg-sunken px-4 py-2 rounded-control outline-none uppercase font-device placeholder:normal-case border border-rule" value={newPhrase} onChange={e=>setNewPhrase(wireSafe(e.target.value).toUpperCase())} onKeyDown={e => { if (e.key === 'Enter') handleAddPhrase(); }}/>
+                     <button onClick={handleAddPhrase} disabled={currentPhrases.length >= MAX_PHRASES} className="shrink-0 bg-accent text-accent-ink px-5 py-2 font-bold rounded-control active:opacity-90 disabled:bg-rule disabled:text-muted">Add</button>
                   </div>
                   <ReorderList className="space-y-2" items={currentPhrases} onReorder={savePhrases} renderItem={(p) => (
                     <>
-                      <span className="flex-1 font-bold text-gray-700 text-sm min-w-0 truncate">{p}</span>
-                      <button onClick={() => handleRemovePhrase(p)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
+                      <span className="flex-1 font-bold text-ink text-sm min-w-0 truncate">{p}</span>
+                      <button onClick={() => handleRemovePhrase(p)} className="text-danger hover:text-danger p-1 ml-2 shrink-0 active:scale-95 transition-transform">
                         <Trash2 className="w-5 h-5"/>
                       </button>
                     </>
@@ -4086,39 +4103,38 @@ return (
               )}
 
               {/* Wi-Fi networks (collapsible) */}
-              <button onClick={() => setOpenWifi(o => !o)} className={`w-full flex items-center justify-between p-4 bg-teal-50 border border-teal-100 active:bg-teal-100 transition-colors ${openWifi ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+              <button onClick={() => setOpenWifi(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openWifi ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-teal-500 text-white flex items-center justify-center shrink-0"><Wifi className="w-5 h-5"/></div>
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><Wifi className="w-5 h-5"/></div>
                     <div className="text-left min-w-0">
-                       <div className="font-bold text-gray-800 text-base">Wi-Fi Networks</div>
-                       <div className="text-xs text-gray-500">{wifiNets.length === 1 ? '1 network saved' : `${wifiNets.length} networks saved`}</div>
+                       <div className="font-bold text-ink text-base leading-tight">Wi-Fi Networks</div>
+                       <div className="text-[13px] text-muted">{wifiNets.length === 1 ? '1 network saved' : `${wifiNets.length} networks saved`}</div>
                     </div>
                  </div>
                  <div className="flex items-center space-x-2 shrink-0 ml-2">
-                    <span className="bg-teal-500 text-white text-xs font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">{wifiNets.length}</span>
-                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-teal-400 transition-transform duration-200 ${openWifi ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-muted transition-transform duration-200 ${openWifi ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                  </div>
               </button>
               {openWifi && (
-                <div className="border border-t-0 border-teal-100 rounded-b-2xl bg-white p-4 mb-3">
+                <div className="border border-t-0 border-rule rounded-b-card bg-card p-4 mb-3">
                   <div className="mb-4">
                     {/* iOS app only: in-app setup joins the device's own network,
                         which the web app cannot do. */}
                     {isNativeApp() && (
                       <button onClick={() => setWifiSetupOpen(true)}
-                        className="mb-2 text-sm font-bold text-white bg-green-600 rounded-full px-4 py-2 shadow-sm active:bg-green-700">
+                        className="mb-2 text-sm font-bold text-accent-ink bg-accent rounded-full px-4 py-2 active:opacity-90">
                         WiFi Disconnected?
                       </button>
                     )}
-                    <p className="text-xs text-gray-500 leading-relaxed">
+                    <p className="text-[13px] text-muted leading-relaxed">
                       Save up to 5 networks. The device picks whichever it finds.
                     </p>
                   </div>
                   <ul className="space-y-2 mb-4">
                     {wifiNets.map((n) => (
-                       <li key={n.ssid} className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                       <li key={n.ssid} className="flex justify-between items-center bg-sunken p-3 rounded-control border border-rule">
                          <div className="min-w-0 flex-1">
-                           <div className="font-bold text-gray-700 text-sm truncate">{n.ssid}</div>
+                           <div className="font-bold text-ink text-sm truncate">{n.ssid}</div>
                            <div className="flex items-center gap-2 mt-0.5">
                              {/* Show/Hide only exists for a row saved before the
                                  app stopped keeping passwords. Every other row
@@ -4126,59 +4142,59 @@ return (
                                  the device and never comes back here. */}
                              {n.pass && n.pass !== WIFI_KEEP ? (
                                <>
-                                 <span className="text-xs text-gray-400 font-mono truncate">
+                                 <span className="text-[13px] text-muted font-device truncate">
                                    {revealed[n.ssid] ? n.pass : '\u2022'.repeat(Math.min(n.pass.length, 12) || 4)}
                                  </span>
                                  <button onClick={() => setRevealed(r => ({ ...r, [n.ssid]: !r[n.ssid] }))}
-                                   className="text-xs text-teal-600 font-bold shrink-0">
+                                   className="text-[13px] text-accent font-bold shrink-0">
                                    {revealed[n.ssid] ? 'Hide' : 'Show'}
                                  </button>
                                </>
                              ) : (
-                               <span className="text-xs text-gray-400 italic truncate">Password saved on the device</span>
+                               <span className="text-[13px] text-muted italic truncate">Password saved on the device</span>
                              )}
                            </div>
                          </div>
-                         <button onClick={() => handleRemoveWifi(n.ssid)} className="text-red-400 hover:text-red-600 p-1 ml-2 shrink-0 active:scale-95 transition-transform">
+                         <button onClick={() => handleRemoveWifi(n.ssid)} className="text-danger hover:text-danger p-1 ml-2 shrink-0 active:scale-95 transition-transform">
                            <Trash2 className="w-5 h-5"/>
                          </button>
                        </li>
                     ))}
                     {wifiNets.length === 0 && (
-                      <li className="text-sm text-gray-400 text-center py-2">No networks saved yet.</li>
+                      <li className="text-sm text-muted text-center py-2">No networks saved yet.</li>
                     )}
                   </ul>
                   <div className="space-y-2">
-                     <input type="text" placeholder="Network name (SSID)" className="w-full bg-gray-50 px-4 py-2 rounded-xl outline-none font-bold border border-gray-200" value={newSsid} onChange={e=>setNewSsid(e.target.value)}/>
+                     <input type="text" placeholder="Network name (SSID)" className="w-full bg-sunken px-4 py-2 rounded-control outline-none font-bold border border-rule" value={newSsid} onChange={e=>setNewSsid(e.target.value)}/>
                      <div className="flex space-x-2">
                        <div className="flex-1 min-w-0 relative">
                          <input type={showNewPass ? 'text' : 'password'} placeholder="Password" autoComplete="new-password" autoCapitalize="none" autoCorrect="off"
-                           className="w-full bg-gray-50 pl-4 pr-11 py-2 rounded-xl outline-none border border-gray-200"
+                           className="w-full bg-sunken pl-4 pr-11 py-2 rounded-control outline-none border border-rule"
                            value={newWifiPass} onChange={e=>setNewWifiPass(e.target.value)}/>
                          <button type="button" onClick={() => setShowNewPass(v => !v)} aria-label={showNewPass ? 'Hide password' : 'Show password'}
-                           className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 active:text-gray-600">
+                           className="absolute inset-y-0 right-0 px-3 flex items-center text-muted active:text-muted">
                            {showNewPass ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                          </button>
                        </div>
-                       <button onClick={handleAddWifi} disabled={wifiNets.length >= 5 || !newSsid.trim()} className="shrink-0 bg-teal-500 text-white px-5 py-2 font-bold rounded-xl active:bg-teal-600 disabled:bg-teal-300">Add</button>
+                       <button onClick={handleAddWifi} disabled={wifiNets.length >= 5 || !newSsid.trim()} className="shrink-0 bg-accent text-accent-ink px-5 py-2 font-bold rounded-control active:opacity-90 disabled:bg-rule disabled:text-muted">Add</button>
                      </div>
                   </div>
                   {wifiWhen && (
-                    <div className="mt-3 bg-teal-50 border border-teal-200 rounded-2xl p-4">
-                      <div className="font-bold text-gray-800 text-sm">Connect to “{wifiWhen.ssid}” now?</div>
-                      <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                    <div className="mt-3 bg-sunken border border-rule rounded-control p-4">
+                      <div className="font-bold text-ink text-sm">Connect to “{wifiWhen.ssid}” now?</div>
+                      <p className="text-[13px] text-muted mt-1 leading-relaxed">
                         It is saved either way. A saved network reaches the device the next time it is online — so if it is offline now, walk it onto this network instead.
                       </p>
                       <div className="flex gap-2 mt-3">
                         <button onClick={() => setWifiWhen(null)}
-                          className="flex-1 py-2 text-sm font-bold rounded-xl bg-white border border-gray-200 text-gray-700 active:bg-gray-50">Save for later</button>
+                          className="flex-1 py-2 text-sm font-bold rounded-control bg-card border border-rule text-ink active:bg-sunken">Save for later</button>
                         <button onClick={() => { setWifiPreset(wifiWhen); setWifiWhen(null); setWifiSetupOpen(true); }}
-                          className="flex-1 py-2 text-sm font-bold rounded-xl bg-teal-500 text-white active:bg-teal-600">Connect now</button>
+                          className="flex-1 py-2 text-sm font-bold rounded-control bg-accent text-accent-ink active:opacity-90">Connect now</button>
                       </div>
                     </div>
                   )}
-                  {wifiNets.length >= 5 && <p className="text-xs text-gray-400 mt-2">The device holds 5 networks. Remove one to add another.</p>}
-                  {wifiSyncMsg && <p className="text-xs text-gray-600 mt-2">{wifiSyncMsg}</p>}
+                  {wifiNets.length >= 5 && <p className="text-[13px] text-muted mt-2">The device holds 5 networks. Remove one to add another.</p>}
+                  {wifiSyncMsg && <p className="text-[13px] text-muted mt-2">{wifiSyncMsg}</p>}
                 </div>
               )}
 
@@ -4186,25 +4202,25 @@ return (
               {/* Arcade (collapsible) */}
               {activeDevice && (
                 <>
-                  <button onClick={() => setOpenArcade(o => !o)} className={`w-full flex items-center justify-between p-4 bg-amber-50 border border-amber-100 active:bg-amber-100 transition-colors ${openArcade ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                  <button onClick={() => setOpenArcade(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openArcade ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
                      <div className="flex items-center space-x-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0">
                           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
                         </div>
                         <div className="text-left min-w-0">
-                           <div className="font-bold text-gray-800 text-base">Arcade</div>
-                           <div className="text-xs text-gray-500">{arcadeWanted ? 'Games shown on this device' : 'Only Train shown'}</div>
+                           <div className="font-bold text-ink text-base leading-tight">Arcade</div>
+                           <div className="text-[13px] text-muted">{arcadeWanted ? 'Games shown on this device' : 'Only Train shown'}</div>
                         </div>
                      </div>
                      <div className="flex items-center space-x-2 shrink-0 ml-2">
-                        <span className={`text-white text-xs font-bold h-[22px] px-2 flex items-center justify-center rounded-full ${arcadeWanted ? 'bg-amber-500' : 'bg-gray-400'}`}>{arcadeWanted ? 'ON' : 'OFF'}</span>
-                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-amber-400 transition-transform duration-200 ${openArcade ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        <span className={`text-[13px] font-bold h-[22px] px-2 flex items-center justify-center rounded-full ${arcadeWanted ? 'bg-ok text-ok-ink' : 'bg-sunken text-muted border border-rule'}`}>{arcadeWanted ? 'ON' : 'OFF'}</span>
+                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-muted transition-transform duration-200 ${openArcade ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                      </div>
                   </button>
                   {openArcade && (
-                    <div className="border border-t-0 border-amber-100 rounded-b-2xl bg-white p-4 mb-3">
+                    <div className="border border-t-0 border-rule rounded-b-card bg-card p-4 mb-3">
                       <div className="flex items-center justify-between gap-4">
-                        <p className="text-gray-500 text-sm leading-relaxed flex-1">
+                        <p className="text-muted text-sm leading-relaxed flex-1">
                           Show the arcade games on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device.
                           Turned off, only Train stays &mdash; the Morse practice.
                         </p>
@@ -4213,17 +4229,17 @@ return (
                           aria-checked={arcadeWanted}
                           aria-label="Arcade games"
                           onClick={handleToggleArcade}
-                          className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${arcadeWanted ? 'bg-green-500' : 'bg-gray-300'}`}>
-                          <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${arcadeWanted ? 'translate-x-6' : 'translate-x-0'}`} />
+                          className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${arcadeWanted ? 'bg-ok' : 'bg-sunken border border-rule'}`}>
+                          <span className={`absolute top-1 left-1 w-6 h-6 bg-card border border-muted rounded-full transition-transform duration-200 ${arcadeWanted ? 'translate-x-6' : 'translate-x-0'}`} />
                         </button>
                       </div>
-                      <p className="mt-3 text-xs text-gray-400 leading-snug">{arcadeStatus}</p>
+                      <p className="mt-3 text-[13px] text-muted leading-snug">{arcadeStatus}</p>
 
                       {/* The limits the arcade normally keeps. Both off by default:
                           a Dot Dash out of the box still charges points and still
                           closes at 8pm. */}
                       {arcadeWanted && (
-                        <div className="mt-4 pt-4 border-t border-gray-100 space-y-4">
+                        <div className="mt-4 pt-4 border-t border-rule space-y-4">
                           {[
                             { key: 'free', label: 'Play without points',
                               hint: 'Games open straight away instead of costing points. Points already earned are kept.' },
@@ -4232,22 +4248,22 @@ return (
                           ].map(({ key, label, hint }) => (
                             <div key={key} className="flex items-center justify-between gap-4">
                               <div className="flex-1">
-                                <div className="font-bold text-gray-700 text-sm">{label}</div>
-                                <p className="text-gray-500 text-xs leading-relaxed mt-0.5">{hint}</p>
+                                <div className="font-bold text-ink text-sm">{label}</div>
+                                <p className="text-muted text-[13px] leading-relaxed mt-0.5">{hint}</p>
                               </div>
                               <button role="switch" aria-checked={rulesWanted[key]} aria-label={label}
                                 onClick={() => handleToggleRule(key)}
-                                className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${rulesWanted[key] ? 'bg-green-500' : 'bg-gray-300'}`}>
-                                <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${rulesWanted[key] ? 'translate-x-6' : 'translate-x-0'}`} />
+                                className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${rulesWanted[key] ? 'bg-ok' : 'bg-sunken border border-rule'}`}>
+                                <span className={`absolute top-1 left-1 w-6 h-6 bg-card border border-muted rounded-full transition-transform duration-200 ${rulesWanted[key] ? 'translate-x-6' : 'translate-x-0'}`} />
                               </button>
                             </div>
                           ))}
                           {rulesReported !== undefined
                             && (rulesReported.free !== rulesWanted.free || rulesReported.late !== rulesWanted.late) && (
-                            <p className="text-xs text-gray-400 leading-snug">Sending to the Dot Dash…</p>
+                            <p className="text-[13px] text-muted leading-snug">Sending to the Dot Dash…</p>
                           )}
                           {rulesReported === undefined && (rulesWanted.free || rulesWanted.late) && (
-                            <p className="text-xs text-gray-400 leading-snug">Applies the next time the Dot Dash connects. A Dot Dash on older firmware ignores these.</p>
+                            <p className="text-[13px] text-muted leading-snug">Applies the next time the Dot Dash connects. A Dot Dash on older firmware ignores these.</p>
                           )}
                         </div>
                       )}
@@ -4261,25 +4277,25 @@ return (
                   message, instead of being tapped out letter by letter. */}
               {activeDevice && (
                 <>
-                  <button onClick={() => setOpenTypewriter(o => !o)} className={`w-full flex items-center justify-between p-4 bg-violet-50 border border-violet-100 active:bg-violet-100 transition-colors ${openTypewriter ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                  <button onClick={() => setOpenTypewriter(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openTypewriter ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
                      <div className="flex items-center space-x-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-violet-500 text-white flex items-center justify-center shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0">
                           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><circle cx="5" cy="12" r="2.6"/><rect x="10" y="9.4" width="11" height="5.2" rx="2.6"/></svg>
                         </div>
                         <div className="text-left min-w-0">
-                           <div className="font-bold text-gray-800 text-base">Dot Dash Mode</div>
-                           <div className="text-xs text-gray-500">{typewriterWanted ? 'Morse typed out live' : 'Morse shown whole'}</div>
+                           <div className="font-bold text-ink text-base leading-tight">Dot Dash Mode</div>
+                           <div className="text-[13px] text-muted">{typewriterWanted ? 'Morse typed out live' : 'Morse shown whole'}</div>
                         </div>
                      </div>
                      <div className="flex items-center space-x-2 shrink-0 ml-2">
-                        <span className={`text-white text-xs font-bold h-[22px] px-2 flex items-center justify-center rounded-full ${typewriterWanted ? 'bg-violet-500' : 'bg-gray-400'}`}>{typewriterWanted ? 'ON' : 'OFF'}</span>
-                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-violet-400 transition-transform duration-200 ${openTypewriter ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        <span className={`text-[13px] font-bold h-[22px] px-2 flex items-center justify-center rounded-full ${typewriterWanted ? 'bg-ok text-ok-ink' : 'bg-sunken text-muted border border-rule'}`}>{typewriterWanted ? 'ON' : 'OFF'}</span>
+                        <svg viewBox="0 0 24 24" className={`w-5 h-5 text-muted transition-transform duration-200 ${openTypewriter ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                      </div>
                   </button>
                   {openTypewriter && (
-                    <div className="border border-t-0 border-violet-100 rounded-b-2xl bg-white p-4 mb-3">
+                    <div className="border border-t-0 border-rule rounded-b-card bg-card p-4 mb-3">
                       <div className="flex items-center justify-between gap-4">
-                        <p className="text-gray-500 text-sm leading-relaxed flex-1">
+                        <p className="text-muted text-sm leading-relaxed flex-1">
                           Turn off/on Morse typewriter for incoming messages on {displayName(`${activeDevice.identity.name}${activeDevice.identity.pin}`)}'s device.
                           Off, a Morse message shows up whole, like a quick message, instead of being typed out with beeps.
                         </p>
@@ -4288,11 +4304,11 @@ return (
                           aria-checked={typewriterWanted}
                           aria-label="Morse typewriter"
                           onClick={handleToggleTypewriter}
-                          className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${typewriterWanted ? 'bg-green-500' : 'bg-gray-300'}`}>
-                          <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${typewriterWanted ? 'translate-x-6' : 'translate-x-0'}`} />
+                          className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 ${typewriterWanted ? 'bg-ok' : 'bg-sunken border border-rule'}`}>
+                          <span className={`absolute top-1 left-1 w-6 h-6 bg-card border border-muted rounded-full transition-transform duration-200 ${typewriterWanted ? 'translate-x-6' : 'translate-x-0'}`} />
                         </button>
                       </div>
-                      <p className="mt-3 text-xs text-gray-400 leading-snug">{typewriterStatus}</p>
+                      <p className="mt-3 text-[13px] text-muted leading-snug">{typewriterStatus}</p>
                     </div>
                   )}
                 </>
@@ -4310,59 +4326,59 @@ return (
                 // identity -- needs a parent, so it shows on the collapsed row too.
                 const conflict = !!k && ms(k.conflictAt) > ms(k.resetAt);
                 const since = k?.enrolledAt?.toDate ? k.enrolledAt.toDate().toLocaleDateString() : null;
-                const sectionTitle = "text-xs font-bold uppercase tracking-wider flex items-center mb-2";
+                const sectionTitle = "text-[13px] font-bold uppercase tracking-wider flex items-center mb-2";
                 return (
                   <>
-                    <button onClick={() => setOpenAdvanced(o => !o)} className={`w-full flex items-center justify-between p-4 border transition-colors ${conflict ? 'bg-red-50 border-red-200 active:bg-red-100' : 'bg-slate-50 border-slate-200 active:bg-slate-100'} ${openAdvanced ? 'rounded-t-2xl' : 'rounded-2xl mb-3'}`}>
+                    <button onClick={() => setOpenAdvanced(o => !o)} className={`w-full flex items-center justify-between p-4 border transition-colors ${conflict ? 'bg-sunken border-danger active:bg-rule' : 'bg-sunken border-rule active:bg-rule'} ${openAdvanced ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
                        <div className="flex items-center space-x-3 min-w-0">
-                          <div className={`w-10 h-10 rounded-full text-white flex items-center justify-center shrink-0 ${conflict ? 'bg-red-500' : 'bg-slate-500'}`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${conflict ? 'bg-danger text-danger-ink' : 'bg-accent text-accent-ink'}`}>
                             <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
                           </div>
                           <div className="text-left min-w-0">
-                             <div className="font-bold text-gray-800 text-base">Advanced settings</div>
-                             <div className={`text-xs ${conflict ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                             <div className="font-bold text-ink text-base leading-tight">Advanced settings</div>
+                             <div className={`text-[13px] ${conflict ? 'text-danger font-bold' : 'text-muted'}`}>
                                {conflict ? 'Connection security needs your attention' : (SHOW_BETA_FIRMWARE ? 'Unlink, connection security, beta firmware' : 'Unlink, connection security')}
                              </div>
                           </div>
                        </div>
                        <div className="flex items-center space-x-2 shrink-0 ml-2">
-                          {conflict && <span className="bg-red-500 text-white text-xs font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">!</span>}
-                          <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-200 ${conflict ? 'text-red-400' : 'text-slate-400'} ${openAdvanced ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                          {conflict && <span className="bg-danger text-danger-ink text-[13px] font-bold min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full">!</span>}
+                          <svg viewBox="0 0 24 24" className={`w-5 h-5 transition-transform duration-200 ${conflict ? 'text-danger' : 'text-muted'} ${openAdvanced ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                        </div>
                     </button>
                     {openAdvanced && (
-                      <div className={`border border-t-0 rounded-b-2xl bg-white p-4 mb-3 divide-y divide-gray-100 ${conflict ? 'border-red-200' : 'border-slate-200'}`}>
+                      <div className={`border border-t-0 rounded-b-card bg-card p-4 mb-3 divide-y divide-rule ${conflict ? 'border-danger' : 'border-rule'}`}>
 
                         {/* ---- Unlink ---- */}
                         <div className="pb-4">
-                          <button onClick={() => setUnlinkMode(true)} className="w-full py-3 text-red-500 font-bold bg-white border border-red-100 rounded-2xl active:bg-red-50">Unlink Device</button>
-                          <button onClick={() => setBrokenMode(true)} className="w-full mt-2 py-1 text-sm text-gray-400 font-semibold active:text-gray-600">Device won't turn on? Replace or remove it</button>
+                          <button onClick={() => setUnlinkMode(true)} className="w-full py-3 text-danger font-bold bg-card border border-danger rounded-control active:bg-sunken">Unlink Device</button>
+                          <button onClick={() => setBrokenMode(true)} className="w-full mt-2 py-1 text-sm text-muted font-semibold active:text-muted">Device won't turn on? Replace or remove it</button>
                         </div>
 
                         {/* ---- Connection security ---- */}
                         <div className="py-4">
-                          <h4 className={`${sectionTitle} ${conflict ? 'text-red-700' : 'text-gray-700'}`}>
+                          <h4 className={`${sectionTitle} ${conflict ? 'text-danger' : 'text-ink'}`}>
                             <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                             Connection security
                           </h4>
                           {conflict ? (
-                            <p className="text-red-800 text-sm leading-relaxed">
+                            <p className="text-danger text-sm leading-relaxed">
                               Another device tried to use {name}'s private connection. If you recently reset or replaced this Dot Dash, that was probably it. If not, reset the connection so only {name}'s device can use it.
                             </p>
                           ) : !k ? (
-                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash uses the standard connection. It has not set up a private connection of its own yet.</p>
+                            <p className="text-muted text-sm leading-relaxed">{name}'s Dot Dash uses the standard connection. It has not set up a private connection of its own yet.</p>
                           ) : k.disabled ? (
-                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is using the standard connection. Private connection is turned off for this device.</p>
+                            <p className="text-muted text-sm leading-relaxed">{name}'s Dot Dash is using the standard connection. Private connection is turned off for this device.</p>
                           ) : since ? (
-                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash has its own private connection, set up {since}.</p>
+                            <p className="text-muted text-sm leading-relaxed">{name}'s Dot Dash has its own private connection, set up {since}.</p>
                           ) : (
-                            <p className="text-gray-500 text-sm leading-relaxed">{name}'s Dot Dash is setting up its own private connection.</p>
+                            <p className="text-muted text-sm leading-relaxed">{name}'s Dot Dash is setting up its own private connection.</p>
                           )}
                           {k && (
                             <div className="mt-3 flex items-center justify-between gap-3">
-                              <p className="text-xs text-gray-500 leading-snug flex-1">{keyReset.msg}</p>
+                              <p className="text-[13px] text-muted leading-snug flex-1">{keyReset.msg}</p>
                               <button onClick={handleResetKey} disabled={keyReset.busy}
-                                className={`shrink-0 text-sm font-bold rounded-full px-4 py-2 border disabled:opacity-50 ${conflict ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-200'}`}>
+                                className={`shrink-0 text-sm font-bold rounded-full px-4 py-2 border disabled:opacity-50 ${conflict ? 'bg-danger text-danger-ink border-danger' : 'bg-card text-ink border-rule'}`}>
                                 {keyReset.busy ? 'Resetting…' : 'Reset connection'}
                               </button>
                             </div>
@@ -4375,23 +4391,23 @@ return (
                             and cannot install anything by itself. ---- */}
                         {SHOW_BETA_FIRMWARE && (
                           <div className="pt-4">
-                            <h4 className={`${sectionTitle} text-gray-700`}>
+                            <h4 className={`${sectionTitle} text-ink`}>
                               <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6"/><path d="M10 3v6.5L4.6 18.2A2 2 0 0 0 6.3 21h11.4a2 2 0 0 0 1.7-2.8L14 9.5V3"/><path d="M7.5 15h9"/></svg>
                               Beta firmware
-                              <span className="ml-2 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-fuchsia-500">BETA</span>
+                              <span className="ml-2 text-warn-ink text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-warn">BETA</span>
                             </h4>
-                            <p className="text-gray-500 text-sm leading-relaxed">
+                            <p className="text-muted text-sm leading-relaxed">
                               Install the newest test firmware on {name}'s device, ahead of the general release. Someone presses ENTER on the device to start; keep it plugged in until it restarts.
                             </p>
                             {firmware ? (
-                              <p className="mt-2 text-xs text-gray-400 font-mono">v{firmware.version} &middot; {String(firmware.line || '').toUpperCase()} &middot; {firmware.build}</p>
+                              <p className="mt-2 text-[13px] text-muted font-device">v{firmware.version} &middot; {String(firmware.line || '').toUpperCase()} &middot; {firmware.build}</p>
                             ) : (
-                              <p className="mt-2 text-xs text-gray-400 leading-snug">This device hasn't reported its firmware. Devices need one update through their setup page before they can be updated from here.</p>
+                              <p className="mt-2 text-[13px] text-muted leading-snug">This device hasn't reported its firmware. Devices need one update through their setup page before they can be updated from here.</p>
                             )}
                             <div className="mt-3 flex items-center justify-between gap-3">
-                              <p className="text-xs text-gray-500 leading-snug flex-1">{betaUpdate?.deviceId === activeDevice.id ? betaUpdate.msg : ''}</p>
+                              <p className="text-[13px] text-muted leading-snug flex-1">{betaUpdate?.deviceId === activeDevice.id ? betaUpdate.msg : ''}</p>
                               <button onClick={handleBetaUpdate} disabled={!firmware}
-                                className="shrink-0 text-sm font-bold rounded-full px-4 py-2 border bg-fuchsia-600 text-white border-fuchsia-600 disabled:opacity-40">
+                                className="shrink-0 text-sm font-bold rounded-full px-4 py-2 border bg-warn text-warn-ink border-warn disabled:opacity-40">
                                 Install beta
                               </button>
                             </div>
@@ -4406,9 +4422,9 @@ return (
             </div>
 
             {wifiSetupOpen && activeDevice && (
-              <div className="fixed inset-0 z-50 bg-white overflow-y-auto flex flex-col min-h-screen">
+              <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col min-h-screen">
                 <div className="p-4 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}>
-                  <button onClick={() => setWifiSetupOpen(false)} className="p-2 text-gray-500 hover:text-gray-700 font-bold flex items-center transition-colors">
+                  <button onClick={() => setWifiSetupOpen(false)} className="p-2 text-muted hover:text-ink font-bold flex items-center transition-colors">
                     <ArrowLeft className="w-5 h-5 mr-1"/> Back
                   </button>
                 </div>
@@ -4429,18 +4445,18 @@ return (
               </div>
             )}
 
-            <button onClick={startAddDeviceFlow} className="w-full py-3 bg-white text-blue-600 font-bold rounded-2xl mb-6 flex items-center justify-center shadow-sm border border-gray-100 active:bg-blue-50"><Plus className="w-5 h-5 mr-1"/> Add another device</button>
+            <button onClick={startAddDeviceFlow} className="w-full py-3 bg-card text-accent font-bold rounded-control mb-6 flex items-center justify-center border border-rule active:bg-sunken"><Plus className="w-5 h-5 mr-1"/> Add another device</button>
 
             {/* In the web app this sits directly above Add to Home Screen on
                 purpose: on iPhone the one is a precondition for the other, and a
                 parent who taps this from a Safari tab needs the next box to be
                 the answer. The native app shows no such box -- see below. */}
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-4">
-              <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
+            <div className="bg-card rounded-card p-5 border border-rule mb-4">
+              <h3 className="font-bold text-ink mb-3 text-sm uppercase tracking-wider flex items-center">
                   <Bell className="w-4 h-4 mr-2" /> Notifications
               </h3>
               <div className="flex items-center justify-between gap-4">
-                <p className="text-gray-500 text-sm leading-relaxed flex-1">
+                <p className="text-muted text-sm leading-relaxed flex-1">
                     Get alerted when a Dot Dash messages you, someone new messages
                     them, a timer needs approving, or a battery runs low.
                 </p>
@@ -4450,13 +4466,13 @@ return (
                   aria-label="Notifications"
                   onClick={handleTogglePush}
                   disabled={pushState.busy}
-                  className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 disabled:opacity-50 ${pushOn ? 'bg-green-500' : 'bg-gray-300'}`}>
-                  <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow transition-transform duration-200 ${pushOn ? 'translate-x-6' : 'translate-x-0'}`} />
+                  className={`relative shrink-0 w-14 h-8 rounded-full transition-colors duration-200 disabled:opacity-50 ${pushOn ? 'bg-ok' : 'bg-sunken border border-rule'}`}>
+                  <span className={`absolute top-1 left-1 w-6 h-6 bg-card border border-muted rounded-full transition-transform duration-200 ${pushOn ? 'translate-x-6' : 'translate-x-0'}`} />
                 </button>
               </div>
-              {pushState.busy && <p className="mt-3 text-sm text-gray-400">Working...</p>}
+              {pushState.busy && <p className="mt-3 text-sm text-muted">Working...</p>}
               {pushState.msg && (
-                <p className="mt-3 text-sm text-gray-600 leading-snug">{pushState.msg}</p>
+                <p className="mt-3 text-sm text-muted leading-snug">{pushState.msg}</p>
               )}
             </div>
 
@@ -4466,11 +4482,11 @@ return (
                 Also hidden once the web app is already running from the Home
                 Screen, where it would be telling someone to do what they did. */}
             {!isNativeApp() && !isStandalone() && (
-              <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 mb-6">
-                <h3 className="font-bold text-gray-800 mb-3 text-sm uppercase tracking-wider flex items-center">
+              <div className="bg-card rounded-card p-5 border border-rule mb-6">
+                <h3 className="font-bold text-ink mb-3 text-sm uppercase tracking-wider flex items-center">
                     <Share className="w-4 h-4 mr-2" /> Add to Home Screen (iOS)
                 </h3>
-                <ol className="list-decimal list-inside text-gray-500 space-y-2 text-sm leading-relaxed">
+                <ol className="list-decimal list-inside text-muted space-y-2 text-sm leading-relaxed">
                     <li>Open the web app url in the Safari browser</li>
                     <li>Tap the Share button at the bottom of the screen</li>
                     <li>Scroll down and select "Add to Home Screen"</li>
@@ -4483,10 +4499,10 @@ return (
                 has to hunt for is treated as not offered. */}
             <div className="mt-6 mb-2">
               <button onClick={handleDeleteAccount} disabled={!!deleting}
-                className="w-full py-4 text-white font-bold bg-red-500 rounded-3xl shadow-sm active:bg-red-600 disabled:bg-red-300">
+                className="w-full py-4 text-danger-ink font-bold bg-danger rounded-control active:opacity-90 disabled:bg-rule disabled:text-muted">
                 {deleting || 'Delete My Account'}
               </button>
-              <p className="text-xs text-gray-400 mt-2 text-center leading-relaxed">
+              <p className="text-[13px] text-muted mt-2 text-center leading-relaxed">
                 Unpairs every Dot Dash, erases your messages and removes your base call sign.
                 This cannot be undone.
               </p>
@@ -4551,25 +4567,38 @@ return (
 
       return (
         <div className="flex flex-col h-full relative">
-          <div className="shrink-0 flex space-x-3 overflow-x-auto pb-4 pt-2 hide-scrollbar mb-2 border-b border-gray-200">
+          {/* The contact row. A call sign is a string the device itself shows,
+              so it is set in the device face -- the one place the pixel type
+              earns its keep on this screen.
+              Online is TWO channels, not one: a filled dot or a hollow ring,
+              and the state in the button's accessible name. It was a 10px
+              green-or-grey dot, which is colour alone carrying the only
+              indication of whether a message can even arrive (WCAG 1.4.1),
+              and 2.5px of it at that. */}
+          <div className="shrink-0 flex space-x-2 overflow-x-auto pb-3 pt-2 hide-scrollbar mb-2 border-b border-rule">
             {devices.map(device => {
                const childLabel = `${device.identity.name}${device.identity.pin}`;
                const online = childOnlineStatus[device.id] || false;
                const isActive = activeChildId === device.id;
+               const unread = unreadByChild[childLabel] || 0;
                return (
                  <button 
                    key={device.id} onClick={() => setActiveChildId(device.id)}
-                   className={`px-5 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center space-x-2 transition-all duration-200 shadow-sm ${isActive ? 'bg-blue-500 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
+                   aria-current={isActive ? 'true' : undefined}
+                   aria-label={`${displayName(childLabel)}, ${online ? 'online' : 'offline'}${!isActive && unread > 0 ? `, ${unread} unread` : ''}`}
+                   className={`min-h-[44px] px-4 py-2.5 rounded-full font-device flex flex-shrink-0 items-center space-x-2 transition-colors duration-200 ${isActive ? 'bg-accent text-accent-ink' : 'bg-card text-ink border border-rule'}`}
                  >
-                   <span className={`w-2.5 h-2.5 rounded-full ${online ? (isActive ? 'bg-green-300 shadow-[0_0_6px_#86efac]' : 'bg-green-500 shadow-[0_0_6px_#22c55e]') : (isActive ? 'bg-blue-300' : 'bg-gray-300')}`}></span>
+                   <span aria-hidden="true" className={`w-2.5 h-2.5 rounded-full shrink-0 ${online
+                     ? (isActive ? 'bg-accent-ink' : 'bg-ok')
+                     : `border-2 ${isActive ? 'border-accent-ink' : 'border-rule'}`}`} />
                    <span>{displayName(childLabel)}</span>
                    {/* Unread count for this child. Hidden on the chat you are
                        currently looking at, because opening it is what marks it
                        read -- leaving a number on the open conversation would
                        be telling you about messages you can see. */}
-                   {!isActive && unreadByChild[childLabel] > 0 && (
-                     <span className="bg-red-500 text-white text-xs font-bold min-w-[20px] h-[20px] px-1.5 flex items-center justify-center rounded-full">
-                       {unreadByChild[childLabel] > 99 ? '99+' : unreadByChild[childLabel]}
+                   {!isActive && unread > 0 && (
+                     <span aria-hidden="true" className="bg-alert text-alert-ink text-[13px] font-bold min-w-[20px] h-[20px] px-1.5 flex items-center justify-center rounded-full">
+                       {unread > 99 ? '99+' : unread}
                      </span>
                    )}
                  </button>
@@ -4577,61 +4606,80 @@ return (
             })}
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-            {activeMessages.length === 0 && <p className="text-center text-gray-400 mt-10">No messages yet with {displayName(activeChildLabel)}.</p>}
+          {/* The stream. 8px between messages, --r-bubble with a 6px tail on
+              the corner that points at its sender, and the two bubble ROLES
+              rather than the accent: outgoing is --sent (white on #2563eb,
+              5.17:1 -- it was white on #3b82f6 at 3.68:1, the worst contrast
+              in the app and on the words a parent is actually reading);
+              incoming is --recv, which is the card colour and 17.39:1, so what
+              the Dot Dash said gets the best numbers on the screen.
+              The incoming hairline is not decoration: --recv IS --card, so
+              without it the bubble has no edge at all. */}
+          <div className="flex-1 overflow-y-auto space-y-2 pb-4 pt-1">
+            {activeMessages.length === 0 && (
+              <div className="flex flex-col items-center text-center mt-10 px-4">
+                <Mark grid={24} px={48} className="text-rule mb-3" />
+                <p className="font-bold text-ink">No messages yet with {displayName(activeChildLabel)}</p>
+                <p className="text-muted text-[15px] mt-1">Say hello — what you send appears on its screen.</p>
+              </div>
+            )}
             {activeMessages.map((msg) => (
               <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${msg.isMe ? 'bg-blue-500 text-white' : 'bg-white text-black shadow-sm border border-gray-100'}`}>
+                <div className={`max-w-[82%] px-3.5 py-2.5 break-words whitespace-pre-wrap rounded-bubble ${msg.isMe
+                  ? 'bg-sent text-sent-ink rounded-br-[6px]'
+                  : 'bg-recv text-recv-ink border border-rule rounded-bl-[6px]'}`}>
                   {msg.type === 'PULSE' && <Volume2 className="inline mr-2 w-5 h-5" />}
                   {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
                   {msg.type === 'VNOTE' && <span><Volume2 className="inline mr-2 w-5 h-5" />Voice note</span>}
                 </div>
-                <span className="text-xs text-gray-400 mt-1 px-1">{msg.timestamp}</span>
+                <span className="text-[13px] text-muted mt-1 px-1">{msg.timestamp}</span>
               </div>
             ))}
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="shrink-0 bg-[#f2f2f7] pt-2 pb-2">
-            <div className="flex items-center space-x-2 bg-white rounded-full px-4 py-2 shadow-sm border border-gray-200">
-              <input type="text" placeholder="Text Message..." value={inputText} onChange={(e) => setInputText(wireSafe(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && handleSend('MORSE')} className="flex-1 outline-none bg-transparent py-1 text-lg" />
-              <button onClick={() => handleSend('MORSE')} disabled={!inputText} className="bg-blue-500 text-white p-2 rounded-full disabled:bg-blue-300 flex-shrink-0 transition-opacity">
+          <div className="shrink-0 bg-ground pt-2 pb-2">
+            {/* "Text Message..." was the placeholder. The copy rule is
+                message, never text -- and this field is not SMS anyway. */}
+            <div className="flex items-center space-x-2 bg-card rounded-full px-4 py-2 border border-rule">
+              <input type="text" placeholder="Message…" aria-label={`Message ${displayName(activeChildLabel)}`} value={inputText} onChange={(e) => setInputText(wireSafe(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && handleSend('MORSE')} className="flex-1 min-w-0 outline-none bg-transparent py-1 text-lg text-ink placeholder:text-muted" />
+              <button onClick={() => handleSend('MORSE')} disabled={!inputText} aria-label="Send" className="bg-accent text-accent-ink p-2 rounded-full disabled:bg-rule disabled:text-muted flex-shrink-0 transition-colors">
                 <Send className="w-5 h-5 ml-0.5" />
               </button>
             </div>
             {canCall && (
               <div className="mt-3 flex flex-col items-center space-y-2" style={noSelect}>
                 {(!callingThis || call.phase === 'idle') && (
-                  <button onClick={startCall} className="w-full bg-green-500 text-white font-bold py-3 rounded-full shadow-sm active:bg-green-600">
+                  <button onClick={startCall} className="w-full bg-accent text-accent-ink font-bold py-3 rounded-control active:opacity-90">
                     Call {callName}
                   </button>
                 )}
-                {callingThis && call.phase === 'starting' && <p className="text-gray-500 text-sm">Starting call...</p>}
+                {callingThis && call.phase === 'starting' && <p className="text-muted text-sm">Starting call...</p>}
                 {callingThis && call.phase === 'calling' && (
                   <>
-                    <p className="text-gray-600 font-semibold">Calling {callName}...</p>
-                    <button onClick={() => walkieCall.hangup()} className="w-full bg-gray-200 text-gray-800 font-bold py-3 rounded-full">Cancel</button>
+                    <p className="text-muted font-semibold">Calling {callName}...</p>
+                    <button onClick={() => walkieCall.hangup()} className="w-full bg-sunken border border-rule text-ink font-bold py-3 rounded-control">Cancel</button>
                   </>
                 )}
-                {callingThis && call.phase === 'busy' && <p className="text-gray-600 font-semibold">Busy</p>}
+                {callingThis && call.phase === 'busy' && <p className="text-muted font-semibold">Busy</p>}
                 {callingThis && call.phase === 'active' && (
                   <>
-                    <p className="text-gray-600 font-semibold">In call with {callName}</p>
+                    <p className="text-muted font-semibold">In call with {callName}</p>
                     <button
                       onPointerDown={(e) => { e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {} walkieCall.pttDown(); }}
                       onPointerUp={() => walkieCall.pttUp()}
                       onPointerCancel={() => walkieCall.pttUp()}
                       onLostPointerCapture={() => walkieCall.pttUp()}
                       onContextMenu={(e) => e.preventDefault()}
-                      className={`w-40 h-40 rounded-full font-bold text-lg shadow-lg select-none ${call.talking ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`}
+                      className={`w-40 h-40 rounded-full font-bold text-lg select-none ${call.talking ? 'bg-danger text-danger-ink' : 'bg-accent text-accent-ink'}`}
                       style={noSelect}
                     >
                       {call.talking ? 'Talking...' : call.rxTalking ? `${callName} is talking` : 'Hold to talk'}
                     </button>
-                    <button onClick={() => walkieCall.hangup()} className="w-full bg-red-500 text-white font-bold py-3 rounded-full">Hang up</button>
+                    <button onClick={() => walkieCall.hangup()} className="w-full bg-danger text-danger-ink font-bold py-3 rounded-control">Hang up</button>
                   </>
                 )}
-                {call.notice && <p className="text-sm text-gray-500 text-center">{call.notice}</p>}
+                {call.notice && <p className="text-sm text-muted text-center">{call.notice}</p>}
               </div>
             )}
           </div>
@@ -4730,49 +4778,49 @@ return (
           <h1 className="text-3xl font-bold mb-4 shrink-0 px-2">Log</h1>
 
           {lowBatteryDevices.length > 0 && (
-            <div className="shrink-0 space-y-3 mb-4 px-2">
+            <div className="shrink-0 space-y-3 mb-4">
               {lowBatteryDevices.map(d => (
-                <div key={d.id} className="bg-white rounded-2xl p-4 shadow-md border-2 border-red-300">
-                  <div className="flex items-center space-x-2 mb-2 text-red-600 font-bold text-sm">
+                <div key={d.id} className="bg-card rounded-card p-4 border border-rule border-l-[3px] border-l-danger">
+                  <div className="flex items-center space-x-2 mb-2 text-danger font-bold text-sm">
                     <BatteryLow className="w-5 h-5" />
                     <span>Low battery</span>
                   </div>
-                  <p className="text-black leading-snug">
-                    <span className="font-bold text-indigo-600">{displayName(`${d.identity.name}${d.identity.pin}`)}</span>{' '}
+                  <p className="text-ink leading-snug">
+                    <span className="font-device">{displayName(`${d.identity.name}${d.identity.pin}`)}</span>{' '}
                     needs charging. The battery icon is blinking on the device.
                   </p>
                   {/* No dismiss button, on purpose. The device owns this warning
                       and withdraws it itself once it is charging, so a parent
                       cannot swipe away a problem that is still real. */}
-                  <p className="text-gray-400 text-xs mt-2">Clears on its own once it's plugged in.</p>
+                  <p className="text-muted text-[13px] mt-2">Clears on its own once it's plugged in.</p>
                 </div>
               ))}
             </div>
           )}
 
           {liveFriendReqs.length > 0 && (
-            <div className="shrink-0 space-y-3 mb-4 px-2">
+            <div className="shrink-0 space-y-3 mb-4">
               {liveFriendReqs.map(req => (
-                <div key={req.childMac + req.strangerId} className="bg-white rounded-2xl p-4 shadow-md border-2 border-sky-300">
-                  <div className="flex items-center space-x-2 mb-2 text-sky-600 font-bold text-sm">
+                <div key={req.childMac + req.strangerId} className="bg-card rounded-card p-4 border border-rule border-l-[3px] border-l-accent">
+                  <div className="flex items-center space-x-2 mb-2 text-accent font-bold text-sm">
                     <UserPlus className="w-5 h-5" />
                     <span>New contact request</span>
                   </div>
-                  <p className="text-black mb-3 leading-snug">
-                    <span className="font-bold text-gray-700">{displayName(req.strangerId)}</span> sent a message to{' '}
-                    <span className="font-bold text-indigo-600">{displayName(req.childLabel)}</span>, but isn't on their
+                  <p className="text-ink mb-3 leading-snug">
+                    <span className="font-device">{displayName(req.strangerId)}</span> sent a message to{' '}
+                    <span className="font-device">{displayName(req.childLabel)}</span>, but isn't on their
                     friends list.
                     <br/>Add them as a contact?
-                    <br/><span className="text-xs text-gray-400">Full ID: {req.strangerId}</span>
+                    <br/><span className="text-[13px] text-muted">Full ID: <span className="font-device">{req.strangerId}</span></span>
                   </p>
                   <div className="flex space-x-3">
                     <button onClick={() => respondFriendReq(req, true)}
-                      className="flex-1 flex items-center justify-center space-x-2 bg-sky-500 active:bg-sky-600 text-white font-bold py-3 rounded-xl shadow-sm">
+                      className="flex-1 flex items-center justify-center space-x-2 bg-accent text-accent-ink active:opacity-90 font-bold py-3 rounded-control">
                       <CheckCircle2 className="w-5 h-5" />
                       <span>Add contact</span>
                     </button>
                     <button onClick={() => respondFriendReq(req, false)}
-                      className="flex-1 flex items-center justify-center space-x-2 bg-gray-100 active:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl border border-gray-200">
+                      className="flex-1 flex items-center justify-center space-x-2 bg-card active:bg-sunken text-ink font-bold py-3 rounded-control border border-rule">
                       <X className="w-5 h-5" />
                       <span>Ignore</span>
                     </button>
@@ -4783,26 +4831,26 @@ return (
           )}
 
           {pendingApprovals.length > 0 && (
-            <div className="shrink-0 space-y-3 mb-4 px-2">
+            <div className="shrink-0 space-y-3 mb-4">
               {pendingApprovals.map(appr => (
-                <div key={appr.reqId} className="bg-white rounded-2xl p-4 shadow-md border-2 border-amber-300">
-                  <div className="flex items-center space-x-2 mb-2 text-amber-600 font-bold text-sm">
+                <div key={appr.reqId} className="bg-card rounded-card p-4 border border-rule border-l-[3px] border-l-warn">
+                  <div className="flex items-center space-x-2 mb-2 text-warn font-bold text-sm">
                     <Clock className="w-5 h-5" />
                     <span>Timer completed</span>
                   </div>
-                  <p className="text-black mb-3 leading-snug">
-                    <span className="font-bold text-indigo-600">{displayName(appr.childLabel)}</span> finished a{' '}
+                  <p className="text-ink mb-3 leading-snug">
+                    <span className="font-device">{displayName(appr.childLabel)}</span> finished a{' '}
                     <span className="font-bold">{appr.minutes}-minute</span> focus timer.
                     <br/>Grant <span className="font-bold">{appr.points} point{appr.points > 1 ? 's' : ''}</span>?
                   </p>
                   <div className="flex space-x-3">
                     <button onClick={() => respondApproval(appr, true)}
-                      className="flex-1 flex items-center justify-center space-x-2 bg-green-500 active:bg-green-600 text-white font-bold py-3 rounded-xl shadow-sm">
+                      className="flex-1 flex items-center justify-center space-x-2 bg-accent text-accent-ink active:opacity-90 font-bold py-3 rounded-control">
                       <CheckCircle2 className="w-5 h-5" />
                       <span>Approve +{appr.points}</span>
                     </button>
                     <button onClick={() => respondApproval(appr, false)}
-                      className="flex-1 flex items-center justify-center space-x-2 bg-gray-100 active:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl border border-gray-200">
+                      className="flex-1 flex items-center justify-center space-x-2 bg-card active:bg-sunken text-ink font-bold py-3 rounded-control border border-rule">
                       <X className="w-5 h-5" />
                       <span>Deny</span>
                     </button>
@@ -4812,59 +4860,65 @@ return (
             </div>
           )}
 
-          <div className="shrink-0 flex space-x-3 overflow-x-auto pb-4 hide-scrollbar mb-2 border-b border-gray-200 px-2">
+          {/* The same contact row as Chat, to the pixel: one accent, one
+              shape, the call sign in the device face. It used to be indigo
+              here and blue there, which read as two different products. */}
+          <div className="shrink-0 flex space-x-2 overflow-x-auto pb-3 hide-scrollbar mb-2 border-b border-rule">
             {devices.map(device => {
                const childLabel = `${device.identity.name}${device.identity.pin}`;
                const isActive = activeChildId === device.id;
                return (
                  <button 
                    key={device.id} onClick={() => setActiveChildId(device.id)}
-                   className={`px-5 py-2.5 rounded-full font-bold flex flex-shrink-0 items-center space-x-2 transition-all duration-200 shadow-sm ${isActive ? 'bg-indigo-500 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
+                   aria-current={isActive ? 'true' : undefined}
+                   aria-label={`${displayName(childLabel)}${lowBattery[device.id] ? ', low battery' : ''}`}
+                   className={`min-h-[44px] px-4 py-2.5 rounded-full font-device flex flex-shrink-0 items-center space-x-2 transition-colors duration-200 ${isActive ? 'bg-accent text-accent-ink' : 'bg-card text-ink border border-rule'}`}
                  >
                    <span>{displayName(childLabel)}</span>
-                   {lowBattery[device.id] && <BatteryLow className={`w-4 h-4 ${isActive ? 'text-white' : 'text-red-500'}`} />}
+                   {lowBattery[device.id] && <BatteryLow aria-hidden="true" className={`w-4 h-4 ${isActive ? 'text-accent-ink' : 'text-danger'}`} />}
                  </button>
                )
             })}
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pb-4 pt-2 px-2">
+          <div className="flex-1 overflow-y-auto space-y-3 pb-4 pt-2">
             {activeMonitorMsgs.length === 0 && (
-               <div className="text-center mt-10">
-                 <Shield className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                 <p className="text-gray-400">Nothing logged yet.<br/>Messages sent and received will appear here.</p>
+               <div className="flex flex-col items-center text-center mt-10 px-4">
+                 <Mark grid={24} px={48} className="text-rule mb-3" />
+                 <p className="font-bold text-ink">Nothing logged yet</p>
+                 <p className="text-muted text-[15px] mt-1">Messages sent and received appear here.</p>
                </div>
             )}
-            
+
+            {/* One card per entry. Direction is carried by the ORDER of the two
+                call signs and by the arrow between them, not by a green or
+                indigo wash behind the words: the two tints were the only thing
+                telling the two apart, and a parent who cannot distinguish them
+                had no second channel. The child is always the one in ink, the
+                other party is muted, both in the device face because both are
+                strings the Dot Dash itself displayed. */}
             {activeMonitorMsgs.map((msg) => {
               const isOutgoing = msg.direction === 'out';
+              const other = displayName(whoIs(msg.otherParty));
+              const child = displayName(activeChildLabel);
               return (
-                <div key={msg.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div key={msg.id} className="bg-card rounded-card p-4 border border-rule">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2 text-sm font-bold">
-                       {isOutgoing ? (
-                         <>
-                           <span className="text-indigo-600">{displayName(activeChildLabel)}</span>
-                           <ArrowRight className="w-4 h-4 text-gray-400" />
-                           <span className="text-gray-500 italic">{displayName(whoIs(msg.otherParty))}</span>
-                         </>
-                       ) : (
-                         <>
-                           <span className="text-gray-600">{displayName(whoIs(msg.otherParty))}</span>
-                           <ArrowRight className="w-4 h-4 text-gray-400" />
-                           <span className="text-green-600">{displayName(activeChildLabel)}</span>
-                         </>
-                       )}
+                    <div className="flex items-center space-x-2 text-sm font-device min-w-0"
+                         aria-label={isOutgoing ? `${child} sent to ${other}` : `${other} sent to ${child}`}>
+                       <span className={`truncate ${isOutgoing ? 'text-ink' : 'text-muted'}`}>{isOutgoing ? child : other}</span>
+                       <ArrowRight aria-hidden="true" className="w-4 h-4 shrink-0 text-muted" />
+                       <span className={`truncate ${isOutgoing ? 'text-muted' : 'text-ink'}`}>{isOutgoing ? other : child}</span>
                     </div>
-                    <span className="text-xs text-gray-400">{msg.timestamp}</span>
+                    <span className="text-[13px] text-muted shrink-0 ml-2">{msg.timestamp}</span>
                   </div>
-                  
-                  <div className={`p-3 rounded-xl text-black ${isOutgoing ? 'bg-indigo-50' : 'bg-green-50'}`}>
-                    {msg.type === 'PULSE' && <div className="flex items-center text-gray-500"><Volume2 className="w-4 h-4 mr-2" /> Buzz / Notification</div>}
+
+                  <div className="p-3 rounded-control text-ink bg-sunken break-words">
+                    {msg.type === 'PULSE' && <div className="flex items-center text-muted"><Volume2 className="w-4 h-4 mr-2 shrink-0" /> Buzz / Notification</div>}
                     {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
                     {/* A walkie voice note (walkie repo VoiceNote.ino). msg.text is the
                         note's id on the server; the app cannot play it yet. */}
-                    {msg.type === 'VNOTE' && <div className="flex items-center text-gray-500"><Volume2 className="w-4 h-4 mr-2" /> Voice note</div>}
+                    {msg.type === 'VNOTE' && <div className="flex items-center text-muted"><Volume2 className="w-4 h-4 mr-2 shrink-0" /> Voice note</div>}
                   </div>
                 </div>
               );
@@ -4888,11 +4942,11 @@ return (
 
       // Small inline menu icons that mirror the on-device menu (used via {{env}} / {{gear}} tokens).
       const iconFor = (name) => {
-        const cls = "inline w-4 h-4 align-text-bottom text-gray-700";
+        const cls = "inline w-4 h-4 align-text-bottom text-ink";
         if (name === 'env') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg>;
         if (name === 'gear') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-        if (name === 'dot') return <svg viewBox="0 0 12 12" className="inline w-2.5 h-2.5 mx-1 align-middle text-gray-800" fill="currentColor"><circle cx="6" cy="6" r="4.5"/></svg>;
-        if (name === 'dash') return <svg viewBox="0 0 28 12" className="inline w-6 h-2.5 mx-1 align-middle text-gray-800" fill="currentColor"><rect x="1" y="3" width="26" height="6" rx="3"/></svg>;
+        if (name === 'dot') return <svg viewBox="0 0 12 12" className="inline w-2.5 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><circle cx="6" cy="6" r="4.5"/></svg>;
+        if (name === 'dash') return <svg viewBox="0 0 28 12" className="inline w-6 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><rect x="1" y="3" width="26" height="6" rx="3"/></svg>;
         return null;
       };
 
@@ -4901,7 +4955,7 @@ return (
         text.split(/(\{\{\w+\}\}|[A-Z]{2,})/g).map((part, k) => {
           const tok = part.match(/^\{\{(\w+)\}\}$/);
           if (tok) return <span key={k}>{iconFor(tok[1])}</span>;
-          if (/^[A-Z]{2,}$/.test(part)) return <strong key={k} className="text-gray-800">{part}</strong>;
+          if (/^[A-Z]{2,}$/.test(part)) return <strong key={k} className="text-ink">{part}</strong>;
           return part;
         });
 
@@ -4915,13 +4969,13 @@ return (
       };
 
       const renderBullets = (bullets) => (
-        <ul className="text-gray-500 space-y-2 text-sm leading-relaxed">
+        <ul className="text-muted space-y-2 text-sm leading-relaxed">
           {bullets.map((bullet, j) => {
             const splitIndex = bullet.indexOf(':');
             if (splitIndex > -1) {
-              return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-blue-500 text-xs">●</span><span><strong className="text-gray-700">{bullet.substring(0, splitIndex + 1)}</strong>{emphasizeCaps(bullet.substring(splitIndex + 1))}</span></li>;
+              return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span><strong className="text-ink">{bullet.substring(0, splitIndex + 1)}</strong>{emphasizeCaps(bullet.substring(splitIndex + 1))}</span></li>;
             }
-            return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-blue-500 text-xs">●</span><span>{emphasizeCaps(bullet)}</span></li>;
+            return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span>{emphasizeCaps(bullet)}</span></li>;
           })}
         </ul>
       );
@@ -4979,9 +5033,9 @@ return (
           <img
             src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/dotdashkey.jpg"
             alt="Dot Dash Morse code key"
-            className="w-full rounded-2xl shadow-sm mb-4"
+            className="w-full rounded-card mb-4"
           />
-          <h1 className="text-3xl font-bold mb-4">Tutorials</h1>
+          <h1 className="font-device text-[26px] mb-4">Tutorials</h1>
 
           <div className="space-y-3">
             {tutorials.map((tut, i) => {
@@ -4990,29 +5044,29 @@ return (
               const cur = Math.min(stepIdx[i] || 0, steps.length - 1);
               const card = steps[cur];
               return (
-                <div key={i} className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                  <button onClick={() => toggle(i)} className="w-full flex items-center justify-between px-5 py-4 text-left active:bg-gray-50 transition-colors">
+                <div key={i} className="bg-card rounded-card border border-rule overflow-hidden">
+                  <button onClick={() => toggle(i)} className="w-full flex items-center justify-between px-5 py-4 text-left active:bg-sunken transition-colors">
                     <span className="flex items-center gap-2.5 min-w-0">
-                      {tut.icon && <span className="text-blue-500 shrink-0">{titleIcon(tut.icon)}</span>}
-                      <span className="font-bold text-lg text-gray-900">{tut.title}</span>
+                      {tut.icon && <span className="text-accent shrink-0">{titleIcon(tut.icon)}</span>}
+                      <span className="font-bold text-lg text-ink">{tut.title}</span>
                     </span>
-                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-gray-400 shrink-0 ml-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    <svg viewBox="0 0 24 24" className={`w-5 h-5 text-muted shrink-0 ml-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                   </button>
 
                   {isOpen && (
                     <div className="px-4 pb-4">
-                      <div className="bg-gray-50 rounded-2xl border border-gray-100 p-4 min-h-[96px]">
-                        {card.title && <h4 className="font-bold text-gray-800 text-sm mb-2">{card.title}</h4>}
-                        {card.text && <p className="text-gray-600 text-sm leading-relaxed">{emphasizeCaps(card.text)}</p>}
+                      <div className="bg-sunken rounded-control border border-rule p-4 min-h-[96px]">
+                        {card.title && <h4 className="font-bold text-ink text-sm mb-2">{card.title}</h4>}
+                        {card.text && <p className="text-muted text-sm leading-relaxed">{emphasizeCaps(card.text)}</p>}
                         {card.bullets && renderBullets(card.bullets)}
                       </div>
 
                       <div className="flex items-center justify-between mt-3 px-1">
-                        <button onClick={() => go(i, -1, steps.length)} disabled={cur === 0} className={`p-2 rounded-full transition-colors ${cur === 0 ? 'text-gray-200' : 'text-blue-500 active:bg-blue-50'}`}>
+                        <button onClick={() => go(i, -1, steps.length)} disabled={cur === 0} className={`p-2 rounded-full transition-colors ${cur === 0 ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
                           <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                         </button>
-                        <span className="text-xs font-semibold text-gray-400">{cur + 1} / {steps.length}</span>
-                        <button onClick={() => go(i, 1, steps.length)} disabled={cur === steps.length - 1} className={`p-2 rounded-full transition-colors ${cur === steps.length - 1 ? 'text-gray-200' : 'text-blue-500 active:bg-blue-50'}`}>
+                        <span className="text-[13px] font-semibold text-muted">{cur + 1} / {steps.length}</span>
+                        <button onClick={() => go(i, 1, steps.length)} disabled={cur === steps.length - 1} className={`p-2 rounded-full transition-colors ${cur === steps.length - 1 ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
                           <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
                       </div>
@@ -5026,18 +5080,26 @@ return (
       );
     }
 
+    // The one component both halves of the bundle were meant to share. It is
+    // handed to ContactApp through `ui`, which until now could not use it
+    // because it was hard-coded to blue-500 and gray-400; on tokens it is the
+    // same object on both surfaces.
+    // --alert, not --danger: an unread count is the "unread badge" role, and
+    // an unanswered message is not an error. 44px minimum target.
     function TabButton({ icon, label, active, onClick, badge }) {
       return (
-        <button onClick={onClick} className={`relative flex flex-col items-center justify-center w-[60px] space-y-1 transition-colors ${active ? 'text-blue-500' : 'text-gray-400'}`}>
+        <button onClick={onClick} aria-current={active ? 'page' : undefined}
+          aria-label={badge > 0 ? `${label}, ${badge} unread` : label}
+          className={`relative flex flex-col items-center justify-center w-[60px] min-h-[44px] space-y-1 transition-colors ${active ? 'text-accent' : 'text-muted'}`}>
           <div className={`${active ? 'scale-110' : 'scale-100'} transition-transform duration-200`}>
             {icon}
           </div>
           {badge > 0 && (
-            <span className="absolute top-[-4px] right-[8px] min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full shadow">
+            <span aria-hidden="true" className="absolute top-[-4px] right-[8px] min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-alert text-alert-ink text-[11px] font-bold rounded-full">
               {badge > 9 ? '9+' : badge}
             </span>
           )}
-          <span className="text-[10px] font-medium">{label}</span>
+          <span className="text-[11px] font-bold">{label}</span>
         </button>
       );
     }

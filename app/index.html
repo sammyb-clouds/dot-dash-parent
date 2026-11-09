@@ -26,7 +26,10 @@
   <!-- iOS Home Screen Icon -->
   <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/icon.jpg">
 </head>
-<body class="bg-[#f2f2f7] text-black font-sans selection:bg-blue-200">
+<!-- Ground, ink and selection come from the brand tokens (app/src/index.css);
+     the face and `color-scheme` arrive on `body` from the same file. iOS
+     system grey #f2f2f7 and flat black are gone from here and from main.jsx. -->
+<body class="bg-ground text-ink selection:bg-accent-soft">
 
   <div id="root"></div>
 
