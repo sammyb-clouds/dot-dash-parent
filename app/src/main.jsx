@@ -2089,6 +2089,39 @@ return (
     const wifiSetupRunning = { active: false };
     const PORTAL = 'http://192.168.4.1';
 
+    // Joining the device's own network by hand. These four steps are the ONE
+    // copy: the Tutorials tab spreads them into "Changing Wi-Fi Networks", and
+    // Settings shows them to web users behind the same "WiFi Disconnected?"
+    // button the iOS app uses to run the flow for real. Two copies of a
+    // procedure drift, and the one in a parent's hand while the device is
+    // offline is the worst one to have gone stale.
+    const MANUAL_WIFI_STEPS = [
+      { title: "Step 1", text: "On your Dot Dash, open {{gear}} TOOLS and select WIFI (shown as DOT DASH SETUP on devices that haven't updated yet)." },
+      { title: "Step 2", text: "On your phone, open Wi-Fi settings and join the network called Dot Dash Setup." },
+      { title: "Step 3", text: "A setup page should pop up automatically. If it doesn't, open a browser and go to 192.168.4.1." },
+      { title: "Step 4", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
+    ];
+
+    // Small inline menu icons that mirror the on-device menu (used via {{env}} / {{gear}} tokens).
+    const iconFor = (name) => {
+      const cls = "inline w-4 h-4 align-text-bottom text-ink";
+      if (name === 'env') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg>;
+      if (name === 'gear') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
+      if (name === 'dot') return <svg viewBox="0 0 12 12" className="inline w-2.5 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><circle cx="6" cy="6" r="4.5"/></svg>;
+      if (name === 'dash') return <svg viewBox="0 0 28 12" className="inline w-6 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><rect x="1" y="3" width="26" height="6" rx="3"/></svg>;
+      return null;
+    };
+
+    // Render tutorial text: swap {{icon}} tokens for menu icons and bold ALL-CAPS words.
+    const emphasizeCaps = (text) =>
+      text.split(/(\{\{\w+\}\}|[A-Z]{2,})/g).map((part, k) => {
+        const tok = part.match(/^\{\{(\w+)\}\}$/);
+        if (tok) return <span key={k}>{iconFor(tok[1])}</span>;
+        if (/^[A-Z]{2,}$/.test(part)) return <strong key={k} className="text-ink">{part}</strong>;
+        return part;
+      });
+
+
     // Must match the options the device's own portal offers (WebUI.h), because
     // the device stores whichever POSIX string it is sent.
     const DEVICE_TZ_OPTIONS = [
@@ -2848,6 +2881,8 @@ return (
        const [revealed, setRevealed] = useState({});
        const [wifiSyncMsg, setWifiSyncMsg] = useState('');
        const [wifiSetupOpen, setWifiSetupOpen] = useState(false);
+       // Web only: the same button opens the steps instead of running the flow.
+       const [wifiHelpOpen, setWifiHelpOpen] = useState(false);
        // Asked after a network is added: saved for another day, or wanted now?
        const [wifiWhen, setWifiWhen] = useState(null);       // { ssid, pass } | null
        const [wifiPreset, setWifiPreset] = useState(null);   // handed to the setup flow
@@ -4123,14 +4158,20 @@ return (
               {openWifi && (
                 <div className="border border-t-0 border-rule rounded-b-card bg-card p-4 mb-3">
                   <div className="mb-4">
-                    {/* iOS app only: in-app setup joins the device's own network,
-                        which the web app cannot do. */}
-                    {isNativeApp() && (
-                      <button onClick={() => setWifiSetupOpen(true)}
-                        className="mb-2 text-sm font-bold text-accent-ink bg-accent rounded-full px-4 py-2 active:opacity-90">
-                        WiFi Disconnected?
-                      </button>
-                    )}
+                    {/* The iOS app joins the device's own network and runs setup
+                        in-app. A browser cannot: the page is served over HTTPS and
+                        the portal is plain HTTP (mixed content, a hard block), the
+                        portal sends no CORS headers, and -- the one that settles it
+                        -- the device answers EVERY hostname with 192.168.4.1 while
+                        you are joined to it (portalDns, Network.ino), so this very
+                        page's own origin resolves to the device. A web app cannot
+                        survive on a network built to make its domain point
+                        elsewhere. So on the web the same button shows the manual
+                        route instead of pretending to run it. */}
+                    <button onClick={() => isNativeApp() ? setWifiSetupOpen(true) : setWifiHelpOpen(true)}
+                      className="mb-2 text-sm font-bold text-accent-ink bg-accent rounded-full px-4 py-2 active:opacity-90">
+                      WiFi Disconnected?
+                    </button>
                     <p className="text-[13px] text-muted leading-relaxed">
                       Save up to 5 networks. The device picks whichever it finds.
                     </p>
@@ -4425,6 +4466,41 @@ return (
               })()}
 
             </div>
+
+            {wifiHelpOpen && (
+              <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col min-h-screen">
+                <div className="p-4 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}>
+                  <button onClick={() => setWifiHelpOpen(false)} className="p-2 text-muted hover:text-ink font-bold flex items-center transition-colors">
+                    <ArrowLeft className="w-5 h-5 mr-1"/> Back
+                  </button>
+                </div>
+                <div className="flex-1 px-4 pb-8 max-w-lg w-full mx-auto">
+                  <h2 className="font-device text-ink text-[22px] leading-tight mb-2">Reconnect a Dot Dash</h2>
+                  <p className="text-sm text-muted leading-relaxed mb-5">
+                    Your Dot Dash makes its own Wi-Fi network when it cannot find a saved one.
+                    Join it from this phone or computer and tell it which network to use.
+                  </p>
+                  <ol className="space-y-3 mb-6">
+                    {MANUAL_WIFI_STEPS.map((st, k) => (
+                      <li key={k} className="flex items-start gap-3">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-accent text-accent-ink font-device text-[13px] flex items-center justify-center">{k + 1}</span>
+                        <span className="text-sm text-ink leading-relaxed">{emphasizeCaps(st.text)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="rounded-control border border-rule bg-sunken p-4">
+                    <p className="text-[13px] text-muted leading-relaxed">
+                      While you are joined to <strong className="text-ink">Dot Dash Setup</strong> you have no
+                      internet, so this page will not reload until you rejoin your usual network. That is
+                      expected. The Dot Dash restarts itself once it has the new details.
+                    </p>
+                  </div>
+                  <p className="text-[13px] text-muted leading-relaxed mt-4">
+                    The Dot Dash app for iPhone does these steps for you.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {wifiSetupOpen && activeDevice && (
               <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col min-h-screen">
@@ -4945,25 +5021,6 @@ return (
         return { ...prev, [i]: Math.max(0, Math.min(len - 1, cur + delta)) };
       });
 
-      // Small inline menu icons that mirror the on-device menu (used via {{env}} / {{gear}} tokens).
-      const iconFor = (name) => {
-        const cls = "inline w-4 h-4 align-text-bottom text-ink";
-        if (name === 'env') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg>;
-        if (name === 'gear') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-        if (name === 'dot') return <svg viewBox="0 0 12 12" className="inline w-2.5 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><circle cx="6" cy="6" r="4.5"/></svg>;
-        if (name === 'dash') return <svg viewBox="0 0 28 12" className="inline w-6 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><rect x="1" y="3" width="26" height="6" rx="3"/></svg>;
-        return null;
-      };
-
-      // Render tutorial text: swap {{icon}} tokens for menu icons and bold ALL-CAPS words.
-      const emphasizeCaps = (text) =>
-        text.split(/(\{\{\w+\}\}|[A-Z]{2,})/g).map((part, k) => {
-          const tok = part.match(/^\{\{(\w+)\}\}$/);
-          if (tok) return <span key={k}>{iconFor(tok[1])}</span>;
-          if (/^[A-Z]{2,}$/.test(part)) return <strong key={k} className="text-ink">{part}</strong>;
-          return part;
-        });
-
       // Symbol shown in each tutorial's collapsible title bar.
       const titleIcon = (name) => {
         if (name === 'env') return <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg>;
@@ -5023,10 +5080,7 @@ return (
           icon: "rss",
           steps: [
             { text: "Moving your Dot Dash somewhere new? Add the new network from your phone — the Dot Dash remembers up to five, and picks whichever one it finds." },
-            { title: "Step 1", text: "On your Dot Dash, open {{gear}} TOOLS and select WIFI (shown as DOT DASH SETUP on devices that haven't updated yet)." },
-            { title: "Step 2", text: "On your phone, open Wi-Fi settings and join the network called Dot Dash Setup." },
-            { title: "Step 3", text: "A setup page should pop up automatically. If it doesn't, open a browser and go to 192.168.4.1." },
-            { title: "Step 4", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
+            ...MANUAL_WIFI_STEPS,
             { title: "Good to know", text: "Old networks are kept, not replaced. Back at a previous location, the Dot Dash reconnects on its own." },
             { title: "Plan ahead", text: "Know where your Dot Dash is going? Add up to five networks ahead of time in the Settings tab, under Wi-Fi Networks, and it will connect by itself when it gets there." }
           ]
