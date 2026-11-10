@@ -17,6 +17,12 @@
 // a broken image where the logo goes. icon.jpg is untouched and is still the
 // favicon, the manifest icon and the Home Screen icon.
 import Mark from './Mark.jsx';
+// The six Settings section icons are the device's OWN menu artwork, decoded
+// from dot_dash_7_3/Icons.h rather than approximated with a UI icon set: a
+// parent scrolling Settings and a child scrolling the 128x32 panel now see
+// the same drawings. Drawn at 24px, 1:1 on the 24-unit grid -- DeviceIcons.jsx
+// explains why any other size fringes.
+import DeviceIcon from './DeviceIcons.jsx';
 import { walkieCall } from './walkieCall.js';
 import { isVoicePayload } from './walkieAudio.js';
 
@@ -496,7 +502,6 @@ import { isVoicePayload } from './walkieAudio.js';
     const Info = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
     const Clock = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
     const X = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-    const Users = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
     // "On an iPhone?" and the badge, plus the instructions it opens, in one
     // self-contained piece: it is offered both to an account holder on the
     // landing page and to a contact on the Connect waiting screen, and those
@@ -644,7 +649,7 @@ import { isVoicePayload } from './walkieAudio.js';
     const SMS_ERRORS = {
       'invalid-number': "That doesn't look like a mobile number. Include the area code.",
       'invalid-name': 'Give them a name with at least two letters, like GRANDMA.',
-      'friends-full': 'This Dot Dash is full. Remove a contact to add another.',
+      'friends-full': 'This Dot Dash is full. Remove a friend to add another.',
       'already-added': 'That number is already a contact on this Dot Dash.',
       'pool-exhausted': "We can't add that number to another device just yet. We've been told and are adding capacity. Try again in a day or two.",
       'slow-down': 'Too many phone numbers added today. Try again tomorrow.',
@@ -1426,7 +1431,7 @@ import { isVoicePayload } from './walkieAudio.js';
                   if (prev.some(r => r.childMac === sourceChildMac && r.strangerId === strangerId)) return prev;
                   return [...prev, { strangerId, childMac: sourceChildMac, childHash: topicParts[2], childLabel, topic }];
                 });
-                notify('👋 New contact request', `${displayName(strangerId)} messaged ${displayName(childLabel)}. Add them as a contact?`);
+                notify('👋 New contact request', `${displayName(strangerId)} messaged ${displayName(childLabel)}. Add them to Friends?`);
               }
               return; // do NOT auto-clear; cleared when the parent answers
             }
@@ -1457,7 +1462,7 @@ import { isVoicePayload } from './walkieAudio.js';
               return;
             }
             if (parts.length >= 3) {
-              let targetFriend = "A contact";
+              let targetFriend = "A friend";
               if (parts.length > 3) {
                  const targetData = parts[3];
                  if (targetData.length === 64) {
@@ -1467,7 +1472,7 @@ import { isVoicePayload } from './walkieAudio.js';
                                  if (await hashId(f) === targetData) { targetFriend = f; break; }
                              }
                          }
-                         if (targetFriend !== "A contact") break;
+                         if (targetFriend !== "A friend") break;
                      }
                  } else { targetFriend = targetData; }
               }
@@ -2794,8 +2799,8 @@ return (
 
              {step === 'ADD_FRIENDS' && (
                 <div className="w-full max-w-sm my-auto space-y-4">
-                   <h2 className="text-xl font-bold mb-2">Add contacts</h2>
-                   <p className="text-muted mb-6">Enter a call sign — another Dot Dash{SHOW_PHONE_CONTACTS ? ', a base, or a phone patch' : ' or a base'} — to add it to this Dot Dash’s contacts.</p>
+                   <h2 className="text-xl font-bold mb-2">Add friends</h2>
+                   <p className="text-muted mb-6">Enter a call sign — another Dot Dash{SHOW_PHONE_CONTACTS ? ', a base, or a phone patch' : ' or a base'} — to add it to this Dot Dash’s friends.</p>
                    
                    <ul className="space-y-2 mb-4 text-left">
                      {displayFriends.map((f, i) => (
@@ -3495,7 +3500,7 @@ return (
            if (mac !== old.id) await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'devices', old.id));
            setActiveChildId(mac);
 
-           // 4. Contacts, quick messages, points -- in that order, to the new
+           // 4. Friends, quick messages, points -- in that order, to the new
            //    device and only once it is back. The command slot holds one
            //    message: sent to a device that is not listening, each overwrites
            //    the last. To one that is, each is delivered at once and in order.
@@ -3514,7 +3519,7 @@ return (
            const pause = (ms) => new Promise((r) => setTimeout(r, ms));
            if (isOnline) {
              for (let attempt = 0; attempt < 3 && !pointsLanded; attempt++) {
-               say(attempt ? 'Sending again…' : 'Sending contacts and quick messages…');
+               say(attempt ? 'Sending again…' : 'Sending friends and quick messages…');
                await publishConfirmed(slot, `CMD,SYNC_FRIENDS,${friends.join('|')}`, { qos: 1, retain: true });
                await pause(1500);
                await publishConfirmed(slot, `CMD,SYNC_PHRASES,${phrases.join('|')}`, { qos: 1, retain: true });
@@ -3544,8 +3549,8 @@ return (
            const oldNote = released ? '' :
              ` The old Dot Dash could not be reached, so it is still linked to ${childName}. Unlink or reset it by hand the next time it is switched on, or it will keep answering to ${childName} and receive their messages.`;
            const body = isOnline
-             ? `Done. ${childName} is on the new Dot Dash${listsSent ? ' with its contacts and quick messages' : ''}.${pointsNote}`
-             : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on.${pointsNote} Once it is on, drag any contact in the Contacts list and edit any quick message to send them to it again.`;
+             ? `Done. ${childName} is on the new Dot Dash${listsSent ? ' with its friends and quick messages' : ''}.${pointsNote}`
+             : `Paired, but the new Dot Dash hasn't come back online yet. Leave it on.${pointsNote} Once it is on, drag any friend in the Friends list and edit any quick message to send them to it again.`;
            // Red (error) when something still needs doing by hand.
            setBrokenStatus({
              busy: false, done: true,
@@ -3573,7 +3578,7 @@ return (
          const fId = newFriendId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
          const current = friendsInOrder(activeDevice, parentProfile.virtualId);
          if (!current.includes(fId)) {
-             if (current.length >= contactLimit) return alert(`This Dot Dash holds ${contactLimit} contacts. Remove one to add another.`);
+             if (current.length >= contactLimit) return alert(`This Dot Dash holds ${contactLimit} friends. Remove one to add another.`);
              await saveFriends([fId, ...current]);        // newest at the top
          }
          setNewFriendId('');
@@ -3595,7 +3600,7 @@ return (
            const r = await smsApi(user, 'DELETE', `/${phone.id}`);
            if (!r.ok && r.status !== 404) return alert(smsError(r));
            setSmsContacts(list => (list || []).filter(c => c.id !== phone.id));
-         } else if (!window.confirm(`Remove ${fIdToRemove} from contacts?`)) return;
+         } else if (!window.confirm(`Remove ${fIdToRemove} from friends?`)) return;
          await saveFriends(friendsInOrder(activeDevice, parentProfile.virtualId).filter(f => f !== fIdToRemove));
        };
 
@@ -3628,7 +3633,7 @@ return (
 
        const handleAddPhone = async () => {
          const current = friendsInOrder(activeDevice, parentProfile.virtualId);
-         if (current.length >= contactLimit) return setPhoneForm(f => ({ ...f, error: `This Dot Dash holds ${contactLimit} contacts. Remove one to add another.` }));
+         if (current.length >= contactLimit) return setPhoneForm(f => ({ ...f, error: `This Dot Dash holds ${contactLimit} friends. Remove one to add another.` }));
          setPhoneForm(f => ({ ...f, busy: true, error: '' }));
          const r = await smsApi(user, 'POST', '', { deviceId: activeDevice.id, phone: phoneForm.phone, contactName: phoneForm.name });
          if (!r.ok) return setPhoneForm(f => ({ ...f, busy: false, error: smsError(r) }));
@@ -3673,7 +3678,7 @@ return (
 
        const handleAddLink = async () => {
          const current = friendsInOrder(activeDevice, parentProfile.virtualId);
-         if (current.length >= contactLimit) return setLinkForm(f => ({ ...f, error: `This Dot Dash holds ${contactLimit} contacts. Remove one to add another.` }));
+         if (current.length >= contactLimit) return setLinkForm(f => ({ ...f, error: `This Dot Dash holds ${contactLimit} friends. Remove one to add another.` }));
          setLinkForm(f => ({ ...f, busy: true, error: '' }));
          const r = await smsApi(user, 'POST', '', { deviceId: activeDevice.id, contactName: linkForm.name, channel: 'web' });
          if (!r.ok) return setLinkForm(f => ({ ...f, busy: false, error: smsError(r) }));
@@ -3820,7 +3825,7 @@ return (
                 <p className="text-muted mb-6 leading-relaxed">If {childName}'s Dot Dash is broken, lost, or can't be switched on, you can still release it from your account.</p>
 
                 {card('replace', 'Replace with a new Dot Dash',
-                  `Keep ${childId}, with its contacts, quick messages, points and settings, and move it to new hardware.`,
+                  `Keep ${childId}, with its friends, quick messages, points and settings, and move it to new hardware.`,
                   'border-rule',
                   <>
                     <ol className="list-decimal list-inside text-sm text-muted space-y-1 mb-3 leading-relaxed">
@@ -3895,7 +3900,7 @@ return (
                 otherwise the only doors in once someone is signed in. */}
             {onContactMode && savedContactChats().some((c) => c.claim) && (
               <button onClick={onContactMode} className="w-full flex items-center justify-between p-4 mb-3 bg-card border border-rule rounded-card active:bg-sunken text-left">
-                <div className="flex items-center space-x-3 min-w-0">
+                <div className="flex items-center space-x-2 min-w-0">
                   <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
                   <div className="min-w-0">
                     <div className="font-bold text-ink text-base leading-tight">Dot Dash Connect</div>
@@ -3960,11 +3965,11 @@ return (
 
               {/* Approved Friends (collapsible) */}
               <button onClick={() => setOpenFriends(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openFriends ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                 <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><Users className="w-5 h-5"/></div>
+                 <div className="flex items-center space-x-2 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><DeviceIcon name="friends" /></div>
                     <div className="text-left min-w-0">
-                       <div className="font-bold text-ink text-base leading-tight">Contacts</div>
-                       <div className="text-[13px] text-muted">{displayFriends.length === 1 ? '1 contact' : `${displayFriends.length} contacts`}</div>
+                       <div className="font-bold text-ink text-base leading-tight">Friends</div>
+                       <div className="text-[13px] text-muted">{displayFriends.length === 1 ? '1 friend' : `${displayFriends.length} friends`}</div>
                     </div>
                  </div>
                  <div className="flex items-center space-x-2 shrink-0 ml-2">
@@ -4074,8 +4079,8 @@ return (
 
               {/* Custom Messages (collapsible) */}
               <button onClick={() => setOpenMessages(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openMessages ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                 <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
+                 <div className="flex items-center space-x-2 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><DeviceIcon name="quickMessages" /></div>
                     <div className="text-left min-w-0">
                        <div className="font-bold text-ink text-base leading-tight">Quick Messages</div>
                        <div className="text-[13px] text-muted">{currentPhrases.length === 1 ? '1 saved phrase' : `${currentPhrases.length} saved phrases`}</div>
@@ -4104,8 +4109,8 @@ return (
 
               {/* Wi-Fi networks (collapsible) */}
               <button onClick={() => setOpenWifi(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openWifi ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                 <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><Wifi className="w-5 h-5"/></div>
+                 <div className="flex items-center space-x-2 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><DeviceIcon name="wifi" /></div>
                     <div className="text-left min-w-0">
                        <div className="font-bold text-ink text-base leading-tight">Wi-Fi Networks</div>
                        <div className="text-[13px] text-muted">{wifiNets.length === 1 ? '1 network saved' : `${wifiNets.length} networks saved`}</div>
@@ -4203,9 +4208,9 @@ return (
               {activeDevice && (
                 <>
                   <button onClick={() => setOpenArcade(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openArcade ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                     <div className="flex items-center space-x-3 min-w-0">
+                     <div className="flex items-center space-x-2 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0">
-                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
+                          <DeviceIcon name="arcade" />
                         </div>
                         <div className="text-left min-w-0">
                            <div className="font-bold text-ink text-base leading-tight">Arcade</div>
@@ -4278,9 +4283,9 @@ return (
               {activeDevice && (
                 <>
                   <button onClick={() => setOpenTypewriter(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openTypewriter ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                     <div className="flex items-center space-x-3 min-w-0">
+                     <div className="flex items-center space-x-2 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0">
-                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><circle cx="5" cy="12" r="2.6"/><rect x="10" y="9.4" width="11" height="5.2" rx="2.6"/></svg>
+                          <DeviceIcon name="dotDash" />
                         </div>
                         <div className="text-left min-w-0">
                            <div className="font-bold text-ink text-base leading-tight">Dot Dash Mode</div>
@@ -4330,9 +4335,9 @@ return (
                 return (
                   <>
                     <button onClick={() => setOpenAdvanced(o => !o)} className={`w-full flex items-center justify-between p-4 border transition-colors ${conflict ? 'bg-sunken border-danger active:bg-rule' : 'bg-sunken border-rule active:bg-rule'} ${openAdvanced ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                       <div className="flex items-center space-x-3 min-w-0">
+                       <div className="flex items-center space-x-2 min-w-0">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${conflict ? 'bg-danger text-danger-ink' : 'bg-accent text-accent-ink'}`}>
-                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                            <DeviceIcon name="tools" />
                           </div>
                           <div className="text-left min-w-0">
                              <div className="font-bold text-ink text-base leading-tight">Advanced settings</div>
@@ -4733,7 +4738,7 @@ return (
         // that mis-split a payload, not from a real stranger. Clear it, never
         // write it: a comma or pipe in a contact list corrupts the next sync.
         if (accept && !isCallSign(req.strangerId)) {
-          alert("That contact request looks garbled, so it wasn't added. If someone is trying to reach this Dot Dash, add their call sign by hand in Contacts.");
+          alert("That contact request looks garbled, so it wasn't added. If someone is trying to reach this Dot Dash, add their call sign by hand in Friends.");
           accept = false;
         }
         if (accept) {
@@ -4747,7 +4752,7 @@ return (
               const limit = contactLimitFor(dev, deviceContacts);
               if (current.length >= limit) {
                 // Left unanswered on purpose, so it can be approved after a removal.
-                alert(`${displayName(`${dev.identity.name}${dev.identity.pin}`)} already has ${limit} contacts, the most that Dot Dash holds. Remove one in Settings, then approve this request.`);
+                alert(`${displayName(`${dev.identity.name}${dev.identity.pin}`)} already has ${limit} friends, the most that Dot Dash holds. Remove one in Settings, then approve this request.`);
                 return;
               }
               const updatedFriends = [req.strangerId, ...current];
@@ -4810,14 +4815,14 @@ return (
                     <span className="font-device">{displayName(req.strangerId)}</span> sent a message to{' '}
                     <span className="font-device">{displayName(req.childLabel)}</span>, but isn't on their
                     friends list.
-                    <br/>Add them as a contact?
+                    <br/>Add them to Friends?
                     <br/><span className="text-[13px] text-muted">Full ID: <span className="font-device">{req.strangerId}</span></span>
                   </p>
                   <div className="flex space-x-3">
                     <button onClick={() => respondFriendReq(req, true)}
                       className="flex-1 flex items-center justify-center space-x-2 bg-accent text-accent-ink active:opacity-90 font-bold py-3 rounded-control">
                       <CheckCircle2 className="w-5 h-5" />
-                      <span>Add contact</span>
+                      <span>Add to Friends</span>
                     </button>
                     <button onClick={() => respondFriendReq(req, false)}
                       className="flex-1 flex items-center justify-center space-x-2 bg-card active:bg-sunken text-ink font-bold py-3 rounded-control border border-rule">
@@ -4986,7 +4991,7 @@ return (
           icon: "env",
           steps: [
             { text: "From the clock screen, tap the front SELECT button to move through the menu, and the top ENTER button to choose an option." },
-            { text: "Open {{env}} SEND, then tap SELECT to scroll to the contact you want and ENTER to pick them." },
+            { text: "Open {{env}} SEND, then tap SELECT to scroll to the friend you want and ENTER to pick them." },
             { text: "Choose <QUICK> with ENTER (or <DOT DASH> to type your own in Morse code)." },
             { text: "Tap SELECT to browse the pre-written messages, then tap ENTER to send." }
           ]
@@ -4995,7 +5000,7 @@ return (
           title: "Dot Dash Mode",
           icon: "morse",
           steps: [
-            { text: "Open SEND, pick a contact, then choose <DOT DASH> to start typing in Morse code." },
+            { text: "Open SEND, pick a friend, then choose <DOT DASH> to start typing in Morse code." },
             { title: "Dots & dashes", bullets: [ "Dot: {{dot}} short tap the front SELECT button.", "Dash: {{dash}} long-press the front SELECT button." ] },
             { title: "Building words", bullets: [ "Commit a letter: tap the top ENTER button.", "Add a space: tap ENTER on its own.", "Delete: tap ENTER twice quickly." ] },
             { title: "Send it", text: "When your message is ready, long-press ENTER to send." }
@@ -5005,7 +5010,7 @@ return (
           title: "How Points Work",
           icon: "joystick",
           steps: [
-            { text: "Points are earned by messaging contacts and spent to unlock arcade games. They stay on the Dot Dash — a private balance, not a score or competition." },
+            { text: "Points are earned by messaging friends and spent to unlock arcade games. They stay on the Dot Dash — a private balance, not a score or competition." },
             { title: "Earning by sending", bullets: [ "Pre-written message: 1 point.", "Dot Dash message: 2 points when it uses at least 3 different characters, otherwise 1 point.", "Counts for up to 2 messages per friend each day.", "Up to 5 sent messages earn points per day." ] },
             { title: "Earning by replying", bullets: [ "Replying to an Inbox message earns 3 points — the most valuable way to earn.", "Only for messages received in the last 24 hours.", "Only once per message.", "No per-friend limit — a real back-and-forth conversation is fully rewarded.", "Up to 5 replies earn points per day." ] },
             { title: "Fair-play safeguards", bullets: [ "A short wait (about 30 seconds) between messages that earn points.", "Sending the exact same message twice in a row only earns once.", "Daily maximum: roughly 25 points." ] },
