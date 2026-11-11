@@ -571,6 +571,48 @@ import { isVoicePayload } from './walkieAudio.js';
     // should read: never stored, shown or counted -- only released from the broker.
     const isGameTraffic = (action) => action === 'GAME';
 
+    // ---- Date dividers (Chat and Log) ----
+    // `ts` is the raw epoch ms behind the display-only `timestamp` string.
+    // Messages stored before the field existed carry the same value in `id`,
+    // so fall back to that. Anything below 2020-01-01 is device uptime
+    // (millis()), not a date: it returns null and gets no divider.
+    const MIN_REAL_TS = 1577836800000;
+    const msgTs = (m) => {
+      const v = Number(m && (m.ts != null ? m.ts : m.id));
+      return Number.isFinite(v) && v >= MIN_REAL_TS ? v : null;
+    };
+    const dayStart = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    // Calendar-day label in the viewer's local zone, computed at render so a
+    // "Today" never outlives midnight.
+    const dayLabel = (ms) => {
+      const d = new Date(ms);
+      const now = new Date();
+      const diff = Math.round((dayStart(now.getTime()) - dayStart(ms)) / 86400000);
+      if (diff === 0) return 'Today';
+      if (diff === 1) return 'Yesterday';
+      if (diff > 1 && diff <= 6) return d.toLocaleDateString([], { weekday: 'long' });
+      if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+    // For each item, the label to print before it ('' for none). Compares with
+    // the previous DATED item in display order; undated items never open a day.
+    const dayDividers = (list) => {
+      let prev = null;
+      return list.map((m) => {
+        const ts = msgTs(m);
+        if (ts == null) return '';
+        const day = dayStart(ts);
+        const out = day !== prev ? dayLabel(ts) : '';
+        prev = day;
+        return out;
+      });
+    };
+    const DateDivider = ({ label }) => (
+      <div role="separator" className="flex justify-center py-1">
+        <span className="text-[13px] text-muted">{label}</span>
+      </div>
+    );
+
     async function hashId(message) {
       if (window.crypto && window.crypto.subtle) {
         const msgBuffer = new TextEncoder().encode(message.toLowerCase().trim()); 
@@ -1286,7 +1328,7 @@ import { isVoicePayload } from './walkieAudio.js';
                 payload.slice(lastComma + 1),
               ];
               const newMsg = {
-                id: msgId, type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
+                id: msgId, ts: msgId, type: parts[0], text: parts[1], sender: parts[2], target: parentId, isMe: false,
                 timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               };
               setMessages(prev => {
@@ -1312,7 +1354,7 @@ import { isVoicePayload } from './walkieAudio.js';
             if (isGameTraffic(parts[0])) return;   // device-owned slot, not shown
             if (parts.length >= 3 && parts[2] !== parentId) {
                 const newMonMsg = {
-                  id: msgId, type: parts[0], text: parts[1], direction: 'in', childMac: targetChildMac, otherParty: parts[2],
+                  id: msgId, ts: msgId, type: parts[0], text: parts[1], direction: 'in', childMac: targetChildMac, otherParty: parts[2],
                   timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 };
                 setMonitorMessages(prev => {
@@ -1478,7 +1520,7 @@ import { isVoicePayload } from './walkieAudio.js';
               }
 
               const newMonMsg = {
-                id: msgId, type: parts[0], text: parts[1], direction: 'out', childMac: sourceChildMac, otherParty: targetFriend,
+                id: msgId, ts: msgId, type: parts[0], text: parts[1], direction: 'out', childMac: sourceChildMac, otherParty: targetFriend,
                 timestamp: new Date(msgId).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               };
               setMonitorMessages(prev => {
@@ -1657,6 +1699,7 @@ import { isVoicePayload } from './walkieAudio.js';
             const m = d.data();
             return {
               id: m.id || Number(d.id),
+              ts: m.id || Number(d.id),
               type: m.type,
               text: m.text,
               sender: m.sender,
@@ -1696,7 +1739,7 @@ import { isVoicePayload } from './walkieAudio.js';
             const m = d.data();
             const id = m.id || Number(d.id);
             return {
-              id, type: m.type, text: m.text, direction: m.direction,
+              id, ts: id, type: m.type, text: m.text, direction: m.direction,
               childMac: m.childMac, otherParty: m.otherParty,
               timestamp: new Date(id).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             };
@@ -4639,8 +4682,9 @@ return (
         // a 3s window and slips through when message handling blocks, arriving twice.)
         mqttClient.publish(queueTopic, messageString, { qos: 1, retain: true });
         
+        const sentAt = Date.now();
         setMessages(prev => [...prev, {
-          id: Date.now(), type: type, text: payload, sender: parentProfile.virtualId, target: activeChildLabel, isMe: true,
+          id: sentAt, ts: sentAt, type: type, text: payload, sender: parentProfile.virtualId, target: activeChildLabel, isMe: true,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
         setInputText('');
@@ -4704,8 +4748,10 @@ return (
                 <p className="text-muted text-[15px] mt-1">Say hello — what you send appears on its screen.</p>
               </div>
             )}
-            {activeMessages.map((msg) => (
-              <div key={msg.id} className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
+            {(() => { const dv = dayDividers(activeMessages); return activeMessages.map((msg, i) => (
+              <React.Fragment key={msg.id}>
+              {dv[i] && <DateDivider label={dv[i]} />}
+              <div className={`flex flex-col ${msg.isMe ? 'items-end' : 'items-start'}`}>
                 <div className={`max-w-[82%] px-3.5 py-2.5 break-words whitespace-pre-wrap rounded-bubble ${msg.isMe
                   ? 'bg-sent text-sent-ink rounded-br-[6px]'
                   : 'bg-recv text-recv-ink border border-rule rounded-bl-[6px]'}`}>
@@ -4715,7 +4761,8 @@ return (
                 </div>
                 <span className="text-[13px] text-muted mt-1 px-1">{msg.timestamp}</span>
               </div>
-            ))}
+              </React.Fragment>
+            )); })()}
             <div ref={messagesEndRef} />
           </div>
 
@@ -4978,12 +5025,14 @@ return (
                 had no second channel. The child is always the one in ink, the
                 other party is muted, both in the device face because both are
                 strings the Dot Dash itself displayed. */}
-            {activeMonitorMsgs.map((msg) => {
+            {(() => { const dv = dayDividers(activeMonitorMsgs); return activeMonitorMsgs.map((msg, i) => {
               const isOutgoing = msg.direction === 'out';
               const other = displayName(whoIs(msg.otherParty));
               const child = displayName(activeChildLabel);
               return (
-                <div key={msg.id} className="bg-card rounded-card p-4 border border-rule">
+                <React.Fragment key={msg.id}>
+                {dv[i] && <DateDivider label={dv[i]} />}
+                <div className="bg-card rounded-card p-4 border border-rule">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2 text-sm font-device min-w-0"
                          aria-label={isOutgoing ? `${child} sent to ${other}` : `${other} sent to ${child}`}>
@@ -5002,8 +5051,9 @@ return (
                     {msg.type === 'VNOTE' && <div className="flex items-center text-muted"><Volume2 className="w-4 h-4 mr-2 shrink-0" /> Voice note</div>}
                   </div>
                 </div>
+                </React.Fragment>
               );
-            })}
+            }); })()}
           </div>
         </div>
       );
