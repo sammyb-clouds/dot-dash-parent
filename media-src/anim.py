@@ -11,14 +11,40 @@ sys.path.insert(0, os.path.dirname(HERE))
 import png
 
 # ------------------------------------------------------------------ firmware
-MORSE = {c: m for c, m in zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-  ".-|-...|-.-.|-..|.|..-.|--.|....|..|.---|-.-|.-..|--|-.|---|.--.|--.-|.-.|...|-|..-|...-|.--|-..-|-.--|--..".split("|"))}
+# Read the code table out of the firmware rather than retyping it, so the GIF
+# plays exactly what encodeMorse() would: MORSE_ALPHA, MORSE_NUM and the
+# MORSE_PUNCT pairs in Helpers.ino.  A character the firmware cannot encode
+# is refused, not guessed.
+_FW = os.path.expanduser('~/Documents/Arduino/Dot Dash/dot_dash_7_3/Helpers.ino')
+_hs = open(_FW).read()
+def _codes(name):
+    body = _hs[_hs.index(name):]
+    body = body[body.index('{')+1:body.index('};')]
+    return re.findall(r'"([.-]+)"', body)
+MORSE = dict(zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ", _codes('MORSE_ALPHA[26]')))
+MORSE.update(zip("0123456789", _codes('MORSE_NUM[10]')))
+_pb = _hs[_hs.index('MORSE_PUNCT[] = {'):]
+_pb = _pb[:_pb.index('};')]
+for c, m in re.findall(r"\{'(\\?.)',\s*\"([.-]+)\"\}", _pb):
+    MORSE[c.replace('\\', '')] = m
+assert len(MORSE) == 26 + 10 + 17 and MORSE['A'] == '.-' and MORSE['!'] == '-.-.--', MORSE
 DOT_MS, DASH_MS, GAP_MS, LETTER_MS = 100, 300, 100, 300
 
 def timeline(text):
-    """(t_ms, shown_symbols, revealed_text, led) at every state change."""
+    """(t_ms, shown_symbols, revealed_text, led) at every state change.
+
+    Mirrors STATE_PLAY_MORSE: a mark shows as its tone starts, the letter lands
+    100ms after its last mark, then 300ms before the next; a space lands at
+    once and waits 700ms."""
     out, t = [], 0
     for i, ch in enumerate(text):
+        if ch == ' ':
+            out.append((t, "", text[:i+1], False))
+            t += 700
+            continue
+        if ch not in MORSE:
+            raise SystemExit("firmware has no Morse for %r -- encodeMorse() "
+                             "returns \"\" and the device would skip it" % ch)
         sym = MORSE[ch]
         for k, s in enumerate(sym):
             out.append((t, sym[:k+1], text[:i], True))

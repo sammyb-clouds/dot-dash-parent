@@ -123,3 +123,26 @@ Verify a build by decoding it back rather than trusting the encoder:
 ```
 swiftc -O -o readgif readgif.swift && ./readgif ../site/media/device.gif
 ```
+
+## Any word -> build.py WORD OUT
+
+```
+python3 build.py "DOT DASH" 180 HELLO ../site/media/device.gif
+python3 build.py "DOT DASH" 180 'DROP!' ../site/media/drop.gif
+```
+
+Arguments are sender, end-hold (1/100 s), word, output, and optionally the
+base image (default `base960.png` here). The code table is read out of
+`dot_dash_7_3/Helpers.ino` (`MORSE_ALPHA`, `MORSE_NUM`, `MORSE_PUNCT`), so the
+GIF plays what `encodeMorse()` plays; a character the firmware cannot encode
+(the comma, for one) stops the build instead of being guessed. A space waits
+700 ms, as `STATE_PLAY_MORSE` does. A word wider than the screen at size 2 is
+refused, because the firmware would scroll it and this template does not.
+
+`png.py` re-exports `screen.py`'s PNG reader; `build.py` always imported it,
+but it was not committed with it. With it back, the HELLO command above
+rebuilds `device.gif` byte-for-byte (checked 2026-11-12), which is the proof
+that a new word is drawn on exactly the same template.
+
+Mind the strip: with `INSET` the marks start at x=64, so a six-mark letter
+ending in a dash (`!` is `-.-.--`) ends on column 127, the last there is.

@@ -6,10 +6,19 @@ import png, anim, gifout
 T0 = time.time()
 def say(*a): print("[%5.1fs]" % (time.time()-T0), *a, flush=True)
 
-SRC   = os.path.join(HERE, 'base960.png')
-OUT   = os.path.join(HERE, 'hero.gif')
-SENDER = sys.argv[1] if len(sys.argv) > 1 else 'SAM'
-HOLD_CS = int(sys.argv[2]) if len(sys.argv) > 2 else 180     # end hold, 1/100s
+# python3 build.py [SENDER] [HOLD_CS] [WORD] [OUT] [BASE]
+#   device.gif:  python3 build.py "DOT DASH" 180 HELLO ../site/media/device.gif
+#   drop.gif:    python3 build.py "DOT DASH" 180 'DROP!' ../site/media/drop.gif
+A = sys.argv[1:]
+SENDER  = A[0] if len(A) > 0 else 'SAM'
+HOLD_CS = int(A[1]) if len(A) > 1 else 180                   # end hold, 1/100s
+WORD    = A[2] if len(A) > 2 else 'HELLO'
+OUT     = A[3] if len(A) > 3 else os.path.join(HERE, 'hero.gif')
+SRC     = A[4] if len(A) > 4 else os.path.join(HERE, 'base960.png')
+# The firmware right-anchors (scrolls) a big line wider than the screen; this
+# template draws it flush left from INSET, so refuse rather than misdraw.
+if anim.INSET + len(WORD)*12 - 2 > anim.SW:     # last glyph column ends 2 short of its 12
+    sys.exit("%r is %d px at size 2 -- wider than the screen" % (WORD, len(WORD)*12))
 
 W0 = 1600.0
 w, h, nch, buf, stride = png.load(SRC)
@@ -114,7 +123,7 @@ def crop(x0, y0, cw, ch):
     return o
 
 # ---- states ----------------------------------------------------------------
-tl, total = anim.timeline('HELLO')
+tl, total = anim.timeline(WORD)
 states = []
 for i, (t, seq, rev, led) in enumerate(tl):
     nt = tl[i+1][0] if i+1 < len(tl) else total
@@ -129,7 +138,10 @@ for y in range(0, h, 3):
     for x in range(0, w, 3):
         i = y*stride + x*nch; samp.append((buf[i], buf[i+1], buf[i+2]))
 lit = crop(SBX0, SBY0, SBW, SBH)
-screen_rgb(anim.screen('.-..', 'HELL', SENDER), lit, SBX0, SBY0, SBW, SBH)
+# A representative lit screen for the palette: the second-to-last letter's
+# full marks over everything before the last letter (for HELLO, '.-..' / HELL).
+_pc = WORD[-2] if len(WORD) > 1 and WORD[-2] in anim.MORSE else WORD[-1]
+screen_rgb(anim.screen(anim.MORSE.get(_pc, ''), WORD[:-1], SENDER), lit, SBX0, SBY0, SBW, SBH)
 for p in range(0, SBW*SBH, 2):
     samp.append((lit[p*3], lit[p*3+1], lit[p*3+2]))
 ledc = crop(LBX0, LBY0, LBW, LBH)
