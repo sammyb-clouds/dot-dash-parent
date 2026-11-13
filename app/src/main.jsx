@@ -2145,17 +2145,6 @@ return (
       { title: "Step 4", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
     ];
 
-    // Web-only Wi-Fi setup slides (OnboardingWizard, WIFI_INSTRUCT). The iOS app
-    // runs DeviceWifiSetup instead and never shows these. Last slide hands off
-    // to the "Done, let's continue" button.
-    const WEB_WIFI_STEPS = [
-      { title: "Find TOOLS", text: "On your Dot Dash, press SELECT (the front arcade button) until you see {{gear}} TOOLS." },
-      { title: "Open TOOLS", text: "Press ENTER (the top arcade button) to open Tools." },
-      { title: "Choose WIFI", text: "Press ENTER on WIFI (shown as DOT DASH SETUP on devices that haven't updated yet)." },
-      { title: "Join the network", text: "On your phone or computer, open Wi-Fi settings and join the network named Dot Dash Setup." },
-      { title: "Finish setup", text: "Wait a few seconds for a window to pop up and follow its instructions. Then come back here and tap the button below." },
-    ];
-
     // Small inline menu icons that mirror the on-device menu (used via {{env}} / {{gear}} tokens).
     const iconFor = (name) => {
       const cls = "inline w-4 h-4 align-text-bottom text-ink";
@@ -2780,33 +2769,18 @@ return (
 
              {step === 'WIFI_CHECK' && (
                 <div className="w-full max-w-sm my-auto space-y-6">
-                   <h2 className="text-xl font-bold mb-8">Have you connected your Dot Dash to your home Wi-Fi?</h2>
+                   <div className="mb-8">
+                     <h2 className="text-xl font-bold">Is your Dot Dash on Wi-Fi yet?</h2>
+                     <p className="text-sm text-muted mt-2">A Wi-Fi symbol in the top-right corner of its screen means yes. A crossed-out circle means no. Not sure? Choose No.</p>
+                   </div>
                    <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">Yes, it's connected</button>
-                   <button onClick={()=>setStep('WIFI_INSTRUCT')} className="w-full bg-card text-ink font-bold py-4 rounded-control border border-rule">No, I need to do that</button>
+                   <button onClick={()=>setStep('WIFI_INSTRUCT')} className="w-full bg-card text-ink font-bold py-4 rounded-control border border-rule">No, set it up now</button>
                 </div>
              )}
 
              {step === 'WIFI_INSTRUCT' && (
                 <div className="w-full max-w-sm my-auto text-left space-y-4">
-                   <h2 className="text-2xl font-bold mb-6 text-center">Connect to Wi-Fi</h2>
-                   
-                   <StepCarousel
-                     steps={WEB_WIFI_STEPS}
-                     footer={<button onClick={()=>setStep('CHILD_ID')} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-4">Done, let's continue</button>} />
-
-                   <div className="bg-sunken border border-warn rounded-control p-4 text-left mt-4">
-                     <div className="flex items-start">
-                        <div className="shrink-0 mt-0.5">
-                           <Info className="w-5 h-5 text-warn" />
-                        </div>
-                        <div className="ml-3">
-                           <h3 className="text-sm font-bold text-warn">Don't see the Dot Dash Setup network?</h3>
-                           <p className="text-sm text-warn mt-1 leading-relaxed">
-                             Sometimes phones hold onto old network lists. Try turning your phone's Wi-Fi <strong>off and back on</strong> to force it to rescan!
-                           </p>
-                        </div>
-                     </div>
-                   </div>
+                   <WifiSetupSlides onDone={()=>setStep('CHILD_ID')} />
                 </div>
              )}
 
@@ -5060,6 +5034,78 @@ return (
         })}
       </ul>
     );
+
+    // Device-screen mock: black 4:1 panel (128x32 OLED), white device font. Stays
+    // black in both themes on purpose -- it is a picture of the hardware.
+    function OledMock({ children, label }) {
+      return (
+        <div role="img" aria-label={label} className="bg-black text-white font-device rounded-control w-full max-w-[220px] aspect-[4/1] flex items-center overflow-hidden">
+          {children}
+        </div>
+      );
+    }
+    const OledTools = () => (
+      <OledMock label="Dot Dash screen showing TOOLS">
+        <div className="flex items-center gap-3 px-4">
+          <SettingsIcon className="w-6 h-6 text-white" />
+          <span className="text-xl leading-none">TOOLS</span>
+        </div>
+      </OledMock>
+    );
+    const OledSetup = () => (
+      <OledMock label="Dot Dash screen showing WI-FI SETUP, Join WiFi Network: Dot Dash Setup, Hold ENTER to Exit">
+        <div className="px-3 text-[9px] leading-[1.15] whitespace-nowrap">
+          <div>WI-FI SETUP</div>
+          <div>Join WiFi Network:</div>
+          <div>&gt; Dot Dash Setup &lt;</div>
+          <div>Hold ENTER to Exit</div>
+        </div>
+      </OledMock>
+    );
+
+    // Web-only Wi-Fi setup (OnboardingWizard, WIFI_INSTRUCT). The iOS app runs
+    // DeviceWifiSetup instead. One slide per place the user is looking.
+    function WifiSetupSlides({ onDone }) {
+      const [cur, setCur] = useState(0);
+      const b = (t) => <strong className="font-bold">{t}</strong>;
+      const slides = [
+        { eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
+          body: <>Press {b("SELECT")} (front button) until you see TOOLS. Then press {b("ENTER")} (top button) twice.</>,
+          pic: <div className="flex flex-col items-center gap-1"><OledTools /><svg viewBox="0 0 24 24" className="w-5 h-5 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg><OledSetup /></div>,
+          see: "The screen says WI-FI SETUP (walkie models say SETUP MODE)." },
+        { eyebrow: "On your phone", head: "Join \u201CDot Dash Setup\u201D",
+          body: <>Open your phone's Wi-Fi settings and tap {b("Dot Dash Setup")}. There's no password.</>,
+          see: "Your phone may say \u201CNo internet\u201D. That's expected.",
+          tip: "Don't see it? Turn your phone's Wi-Fi off and on." },
+        { eyebrow: "In the pop-up", head: "Enter your home Wi-Fi",
+          body: <>A setup page opens by itself. Pick your home Wi-Fi, type its password, choose your timezone, and tap {b("Connect & Restart")}.</>,
+          see: "The page says Setup Complete.",
+          tip: "Nothing popped up? Open a browser and go to 192.168.4.1." },
+        { eyebrow: "Back here", head: "Come back and continue",
+          body: <>Your phone rejoins your own Wi-Fi. Return to this page and tap Continue.</> },
+      ];
+      const s = slides[cur];
+      const last = cur === slides.length - 1;
+      return (
+        <div className="text-left">
+          <div className="min-h-[26rem] space-y-3">
+            <div className="text-xs font-bold uppercase tracking-widest text-accent">{s.eyebrow}</div>
+            <h2 className="text-xl font-bold text-ink">{s.head}</h2>
+            <p className="text-base text-ink leading-relaxed">{s.body}</p>
+            {s.pic}
+            {s.see && <p className="text-base text-ink leading-relaxed"><span className="font-bold">You'll see: </span>{s.see}</p>}
+            {s.tip && <p className="bg-sunken rounded-control p-3 text-sm text-muted leading-relaxed">{s.tip}</p>}
+          </div>
+          <div className="flex justify-center gap-2 mb-4" aria-label={`Step ${cur + 1} of ${slides.length}`}>
+            {slides.map((_, k) => <span key={k} className={`w-2 h-2 rounded-full ${k === cur ? 'bg-accent' : 'bg-rule'}`} />)}
+          </div>
+          <button onClick={() => last ? onDone() : setCur(cur + 1)} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">{last ? 'Continue' : 'Next'}</button>
+          <div className="h-8 mt-2 text-center">
+            {cur > 0 && <button onClick={() => setCur(cur - 1)} className="text-sm text-muted underline py-1">Back</button>}
+          </div>
+        </div>
+      );
+    }
 
     // The step carousel the Tutorials tab introduced, lifted out so the web
     // Wi-Fi setup can use the same card. A card (optional title, text or bullets),
