@@ -2132,39 +2132,6 @@ return (
     const wifiSetupRunning = { active: false };
     const PORTAL = 'http://192.168.4.1';
 
-    // Joining the device's own network by hand. These four steps are the ONE
-    // copy: the Tutorials tab spreads them into "Changing Wi-Fi Networks", and
-    // Settings shows them to web users behind the same "WiFi Disconnected?"
-    // button the iOS app uses to run the flow for real. Two copies of a
-    // procedure drift, and the one in a parent's hand while the device is
-    // offline is the worst one to have gone stale.
-    const MANUAL_WIFI_STEPS = [
-      { title: "Step 1", text: "On your Dot Dash, open {{gear}} TOOLS and select WIFI (shown as DOT DASH SETUP on devices that haven't updated yet)." },
-      { title: "Step 2", text: "On your phone, open Wi-Fi settings and join the network called Dot Dash Setup." },
-      { title: "Step 3", text: "A setup page should pop up automatically. If it doesn't, open a browser and go to 192.168.4.1." },
-      { title: "Step 4", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
-    ];
-
-    // Small inline menu icons that mirror the on-device menu (used via {{env}} / {{gear}} tokens).
-    const iconFor = (name) => {
-      const cls = "inline w-4 h-4 align-text-bottom text-ink";
-      if (name === 'env') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg>;
-      if (name === 'gear') return <svg viewBox="0 0 24 24" className={cls} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-      if (name === 'dot') return <svg viewBox="0 0 12 12" className="inline w-2.5 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><circle cx="6" cy="6" r="4.5"/></svg>;
-      if (name === 'dash') return <svg viewBox="0 0 28 12" className="inline w-6 h-2.5 mx-1 align-middle text-ink" fill="currentColor"><rect x="1" y="3" width="26" height="6" rx="3"/></svg>;
-      return null;
-    };
-
-    // Render tutorial text: swap {{icon}} tokens for menu icons and bold ALL-CAPS words.
-    const emphasizeCaps = (text) =>
-      text.split(/(\{\{\w+\}\}|[A-Z]{2,})/g).map((part, k) => {
-        const tok = part.match(/^\{\{(\w+)\}\}$/);
-        if (tok) return <span key={k}>{iconFor(tok[1])}</span>;
-        if (/^[A-Z]{2,}$/.test(part)) return <strong key={k} className="text-ink">{part}</strong>;
-        return part;
-      });
-
-
     // Must match the options the device's own portal offers (WebUI.h), because
     // the device stores whichever POSIX string it is sent.
     const DEVICE_TZ_OPTIONS = [
@@ -5012,18 +4979,6 @@ return (
       );
     }
 
-    const renderBullets = (bullets) => (
-      <ul className="text-muted space-y-2 text-sm leading-relaxed">
-        {bullets.map((bullet, j) => {
-          const splitIndex = bullet.indexOf(':');
-          if (splitIndex > -1) {
-            return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span><strong className="text-ink">{bullet.substring(0, splitIndex + 1)}</strong>{emphasizeCaps(bullet.substring(splitIndex + 1))}</span></li>;
-          }
-          return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span>{emphasizeCaps(bullet)}</span></li>;
-        })}
-      </ul>
-    );
-
     // Device-screen mock: black 4:1 panel (128x32 OLED), white device font. Stays
     // black in both themes on purpose -- it is a picture of the hardware.
     function OledMock({ children, label }) {
@@ -5063,8 +5018,8 @@ return (
         </svg>
       );
     }
-    const oledText = (x, baseY, size, str) => (
-      <text x={x} y={baseY} fontSize={size === 2 ? 14 : 8} textLength={str.length * 6 * size} lengthAdjust="spacingAndGlyphs" style={{ fontFamily: 'inherit' }}>{str}</text>
+    const oledText = (x, baseY, size, str, fill) => (
+      <text x={x} y={baseY} fill={fill} fontSize={size === 2 ? 14 : 8} textLength={str.length * 6 * size} lengthAdjust="spacingAndGlyphs" style={{ fontFamily: 'inherit' }}>{str}</text>
     );
     // STATE_SETTINGS_MAIN with WIFI selected: "TOOLS:" header (size 1, 0,0),
     // option in size 2 at (0,16). The bracket styling in that block is only the
@@ -5078,11 +5033,12 @@ return (
     // Home screen as drawn by drawConnIcon() when online: fillCircle(115,10,1)
     // plus drawCircleHelper(115,10,4 and 8, top-right quadrant), pixel for
     // pixel. Points badge top left, "DOT DASH" size 2 at (16,16).
-    const OledOnline = ({ clock }) => (
-      <OledPixels label={clock ? "Dot Dash clock screen showing 3:45 PM, with the Wi-Fi symbol in the upper right corner" : "Dot Dash home screen with the Wi-Fi symbol in the upper right corner"}>
+    const OledOnline = ({ clock, pts = 0 }) => (
+      <OledPixels label={clock ? `Dot Dash clock screen showing 3:45 PM${pts ? ` and ${pts} points` : ''}, with the Wi-Fi symbol in the upper right corner` : "Dot Dash home screen with the Wi-Fi symbol in the upper right corner"}>
         <path d="M116 6h1v1h-1zM119 9h1v1h-1zM117 7h1v1h-1zM118 8h1v1h-1zM118 7h1v1h-1zM116 2h1v1h-1zM123 9h1v1h-1zM117 2h1v1h-1zM123 8h1v1h-1zM118 3h1v1h-1zM122 7h1v1h-1zM119 3h1v1h-1zM122 6h1v1h-1zM120 4h1v1h-1zM121 5h1v1h-1zM115 9h1v1h-1zM115 10h1v1h-1zM115 11h1v1h-1zM114 10h1v1h-1zM116 10h1v1h-1z" />
-        <rect x="0.5" y="0.5" width="8" height="10" fill="none" stroke="currentColor" strokeWidth="1" />
-        {oledText(2, 9, 1, "0")}
+        {/* drawPointsBadge(): drawRect(0,0,len*6+3,11), the count at (2,2). */}
+        <rect x="0.5" y="0.5" width={String(pts).length * 6 + 2} height="10" fill="none" stroke="currentColor" strokeWidth="1" />
+        {oledText(2, 9, 1, String(pts))}
         {/* Clock screen: getShortTime() ("%I:%M %p", leading zero stripped) in
             size 2 at (16,16), the same spot the home label uses. */}
         {oledText(16, 30, 2, clock ? "3:45 PM" : "DOT DASH")}
@@ -5156,47 +5112,364 @@ return (
       );
     }
 
-    // Web-only Wi-Fi setup (OnboardingWizard, WIFI_INSTRUCT). The iOS app runs
-    // DeviceWifiSetup instead. One slide per place the user is looking.
-    function WifiSetupSlides({ onDone, doneLabel, paired = false }) {
+    // ---------------------------------------------------------------------
+    // Firmware bitmaps, for the slide pictures. Each is the 24x24 array from
+    // dot_dash_7_3/Icons.h (Adafruit GFX drawBitmap: 3 bytes a row, MSB first),
+    // pasted as hex, so a mock of a menu screen draws the REAL icon rather than
+    // a lookalike. fwBits() turns one into a single SVG path of 1px runs.
+    // ---------------------------------------------------------------------
+    const FW_ICON_HEX = {
+      envelope: "0000000000000000000000003ffffc30000c38001c2c00342600642300c421818420c304206604203c042018042000042000042000042000043ffffc000000000000000000000000",
+      friends: "0000000000000f81f01fc3f81fc3f81fc3f80f81f00000000000000f81f01fc3f83fe7fc3fe7fc3fe7fc3fe7fc3fe7fc3fe7fc3fe7fc3fe7fc3fe7fc000000000000000000000000",
+      train: "0000000000000003f87ff3f87ff1f03fe1f03061f03061f03061f03ffffc3ffffc3ffffc3ffffc3ffffc3ffffc3ffffc07c3e00fe7f00ee7700fe7f007c3e00381c0000000000000",
+      arcade: "000000000000003c00007e0000ff0000ff0000ff0000ff0000ff00007e0000180000180000180000180000180000180001ff8003ffc003ffc007ffe007ffe0000000000000000000",
+      timer: "0000000000001ffff81ffff808001004ff20027e40013c800099000042000024000018000018000024000042000081000100800200400400200800101ffff81ffff8000000000000",
+      tools: "00000000e70003e7c007e7e003ffc011ff883bffdc3ffffc7ffffe7fc3fe7f81fe0f81f00f81f07f81fe7fc3fe7ffffe3ffffc3bffdc11ff8803ffc007e7e003e7c000e700000000",
+      quick: "0000000000000000001ffff83ffffc6000066000066000066000066318c66318c66000066000066000066000063ffffc1ffff80f80000f00000e00000c0000000000000000000000",
+      dotdash: "0000000000000000000000000000000000000000000000001c00003e1ffe7f1ffe7f1ffe7f1ffe3e1ffe1c0000000000000000000000000000000000000000000000000000000000",
+      emoji: "000000007e0003ffc00781e00e00701c003838001c30000c30000c61818661818660000660000660000660000630810c307e0c38001c1c00380e00700781e003ffc0007e00000000",
+      back: "00000000000000000000780000f80001fe0003ffc001ffe000f8f000783802003803001807001c07001c07001c03001803803803803801e0f000ffe0007fc0000e00000000000000",
+    };
+    const fwBitsCache = {};
+    function fwBits(name) {
+      if (fwBitsCache[name]) return fwBitsCache[name];
+      const hex = FW_ICON_HEX[name];
+      const bit = (x, y) => (parseInt(hex.substr((y * 3 + (x >> 3)) * 2, 2), 16) >> (7 - (x & 7))) & 1;
+      let d = '';
+      for (let y = 0; y < 24; y++) {
+        let x = 0;
+        while (x < 24) {
+          if (!bit(x, y)) { x++; continue; }
+          let e = x; while (e < 24 && bit(e, y)) e++;
+          d += `M${x} ${y}h${e - x}v1h-${e - x}z`;
+          x = e;
+        }
+      }
+      return (fwBitsCache[name] = d);
+    }
+    // display.drawBitmap(x, y, icon, 24, 24, WHITE) inside an OledPixels.
+    const OledIcon = ({ name, x, y }) => <path d={fwBits(name)} transform={`translate(${x} ${y})`} shapeRendering="crispEdges" />;
+    // display.setCursor(x, y); display.print(str) -- y is the cursor's top, as in
+    // the firmware, and the baseline is worked out from the text size.
+    const fwText = (x, y, size, str, fill) => oledText(x, y + (size === 2 ? 14 : 7), size, str, fill);
+
+    // The screens the slides show, each from the firmware that draws it.
+    // INBOX / FRIENDS / TRAIN / ARCADE / TIMER / TOOLS: drawMainMenuRow(), icon at
+    // (4,4), label in size 2 at (34,8).
+    const OledMenu = ({ icon, label }) => (
+      <OledPixels label={`Dot Dash main menu showing ${label}`}>
+        <OledIcon name={icon} x={4} y={4} />
+        {fwText(34, 8, 2, label)}
+      </OledPixels>
+    );
+    // STATE_CONTACTS: "FRIENDS:" header, the name in size 2 at (14,16), and the
+    // online dot (a fillCircle at (4,23), r 2) when that friend is online.
+    const OledFriend = ({ name, online = false }) => (
+      <OledPixels label={`Dot Dash FRIENDS list showing ${name}${online ? ', with the online dot' : ''}`}>
+        {fwText(0, 0, 1, "FRIENDS:")}
+        {fwText(14, 16, 2, name)}
+        {online && <circle cx="4.5" cy="23.5" r="2.5" />}
+      </OledPixels>
+    );
+    // STATE_CHOOSE_WHAT: the send strip. Three icons at rest, 40px apart with the
+    // focused one centred at x=52, and its name in size 1 underneath at y=24.
+    const SEND_STRIP = [["quick", "QUICK"], ["dotdash", "DOT DASH"], ["emoji", "EMOJI"], ["back", "BACK"]];
+    const OledSendStrip = ({ focus }) => (
+      <OledPixels label={`Dot Dash send screen with the ${SEND_STRIP[focus][1]} picture in the middle`}>
+        {[-1, 0, 1].map((k) => <OledIcon key={k} name={SEND_STRIP[(focus + k + 4) % 4][0]} x={52 + k * 40} y={0} />)}
+        {fwText((128 - SEND_STRIP[focus][1].length * 6) / 2, 24, 1, SEND_STRIP[focus][1])}
+      </OledPixels>
+    );
+    // sendHeader() in dot_dash_7_3.ino: "SEND TO: NAME", the name giving way first.
+    const sendHeaderStr = (to, maxChars) => {
+      const room = maxChars - 7 - 2;
+      if (room < 3) return "SEND TO:";
+      return "SEND TO: " + (to.length > room ? to.slice(0, room) : to);
+    };
+    // STATE_MESSAGES: the header, then the message in size 2 at (0,16).
+    const OledSendTo = ({ to, item }) => (
+      <OledPixels label={`Dot Dash send list, sending to ${to}, showing the message ${item}`}>
+        {fwText(0, 0, 1, sendHeaderStr(to, 21))}
+        {fwText(0, 16, 2, item)}
+      </OledPixels>
+    );
+    // The receipt: "SENT!" size 2 at (35,0), "+n PTS!" size 1 at (30,20).
+    const OledSent = ({ pts }) => (
+      <OledPixels label={`Dot Dash screen showing SENT! and ${pts} point${pts === 1 ? '' : 's'} earned`}>
+        {fwText(35, 0, 2, "SENT!")}
+        {fwText(30, 20, 1, `+${pts} PTS!`)}
+      </OledPixels>
+    );
+    // STATE_WRITE_MORSE. The strip of marks is right-anchored (126 minus its own
+    // width), a dot is a radius-2 circle and a dash a 9x3 bar; the word being
+    // written is size 2 at (0,16), the last nine characters of it. Mid-letter the
+    // letter the taps spell sits in the next slot; otherwise the cursor does (a
+    // 10x2 bar at y=30).
+    const morseStripW = (seq) => {
+      let w = 0, lastDot = true;
+      for (const c of seq) { lastDot = c === '.'; w += lastDot ? 8 : 13; }
+      return w ? w - (lastDot ? 3 : 4) : 0;
+    };
+    const OledMorse = ({ to, seq = '', word = '', preview = '' }) => {
+      const stripX = 126 - morseStripW(seq);
+      const header = sendHeaderStr(to, Math.min(21, Math.floor((stripX - 2) / 6)));
+      const vis = word.length > 9 ? word.slice(-9) : word;
+      const slotX = vis.length * 12;
+      let sx = stripX;
+      const marks = [...seq].map((c, i) => {
+        const dot = c === '.';
+        const m = dot ? <circle key={i} cx={sx + 2.5} cy="4.5" r="2.5" /> : <rect key={i} x={sx} y="3" width="9" height="3" />;
+        sx += dot ? 8 : 13;
+        return m;
+      });
+      return (
+        <OledPixels label={`Dot Dash Morse screen, sending to ${to}${seq ? `, with ${seq.replace(/\./g, 'dot ').replace(/-/g, 'dash ').trim()} keyed so far` : ''}${word ? `, the message so far reading ${word}` : ''}`}>
+          {fwText(0, 0, 1, header)}
+          {marks}
+          {vis && fwText(0, 16, 2, vis)}
+          {seq ? fwText(slotX, 16, 2, preview) : <rect x={slotX} y="30" width="10" height="2" />}
+        </OledPixels>
+      );
+    };
+    // STATE_INBOX: sender in size 1 at (0,0), a white "NEW" tag at the right while
+    // unread, and "1. message" in size 2 at (0,16).
+    const OledInbox = ({ from, item, n = 1, isNew = true }) => (
+      <OledPixels label={`Dot Dash INBOX showing message ${n} from ${from}: ${item}${isNew ? ', tagged NEW' : ''}`}>
+        {fwText(0, 0, 1, from)}
+        {isNew && <><rect x="104" y="0" width="24" height="9" />{fwText(107, 1, 1, "NEW", "#000")}</>}
+        {fwText(0, 16, 2, `${n}. ${item}`)}
+      </OledPixels>
+    );
+    // STATE_READING, the takeover when a message arrives: "FROM: name" in size 1
+    // and the message in size 2 (it scrolls; this is a frame of it).
+    const OledReading = ({ from, item }) => (
+      <OledPixels label={`Dot Dash screen showing FROM: ${from} and ${item}`}>
+        {fwText(0, 0, 1, `FROM: ${from}`)}
+        {fwText(0, 16, 2, item)}
+      </OledPixels>
+    );
+    // STATE_INBOX_REPLY.
+    const OledReply = ({ name }) => (
+      <OledPixels label={`Dot Dash screen asking REPLY TO: ${name}?`}>
+        {fwText(0, 0, 1, "REPLY TO:")}
+        {fwText(0, 14, 2, `${name}?`)}
+      </OledPixels>
+    );
+    // sleepByChord().
+    const OledSleeping = () => (
+      <OledPixels label="Dot Dash screen saying SLEEPING, Press a button to wake it up">
+        {fwText(0, 0, 1, "SLEEPING...")}
+        {fwText(0, 16, 1, "Press a button")}
+        {fwText(0, 24, 1, "to wake it up")}
+      </OledPixels>
+    );
+    // lockedGameMenu(): the game and its price in size 1, the choice centred in size 2.
+    const OledLocked = ({ game, cost, choice }) => (
+      <OledPixels label={`Dot Dash locked game screen for ${game}, ${cost} points, showing ${choice}`}>
+        {fwText(0, 0, 1, game)}
+        {fwText(86, 0, 1, `${cost} PTS`)}
+        {fwText(Math.max(0, (128 - choice.length * 12) / 2), 16, 2, choice)}
+      </OledPixels>
+    );
+    // promptUnlock().
+    const OledUnlock = ({ game, cost }) => (
+      <OledPixels label={`Dot Dash screen asking UNLOCK ${game}? Cost ${cost} points, with YES chosen`}>
+        {fwText(0, 0, 1, `UNLOCK ${game}?`)}
+        {fwText(0, 8, 1, `Cost: ${cost} pts`)}
+        {fwText(22, 16, 2, "< YES >")}
+      </OledPixels>
+    );
+    // bedtimeShut().
+    const OledBedtime = () => (
+      <OledPixels label="Dot Dash screen saying BEDTIME! Arcade is sleeping. Back tomorrow morning">
+        {fwText(40, 0, 1, "BEDTIME!")}
+        {fwText((128 - 18 * 6) / 2, 12, 1, "Arcade is sleeping")}
+        {fwText(0, 24, 1, "Back tomorrow morning")}
+      </OledPixels>
+    );
+    const OledOne = ({ children }) => <div className="flex justify-center"><div className="w-full max-w-[220px]">{children}</div></div>;
+    // Several screens in the order they appear, with an arrow between.
+    const OledFlow = ({ children }) => (
+      <div className="flex flex-col items-center gap-1">
+        {React.Children.toArray(children).map((k, i) => (
+          <React.Fragment key={i}>{i > 0 && <DownArrow />}<div className="w-full max-w-[176px]">{k}</div></React.Fragment>
+        ))}
+      </div>
+    );
+    // A plain label / value card for rules that are a list rather than a screen.
+    const RuleTable = ({ label, rows }) => (
+      <div role="img" aria-label={label} className="w-full max-w-[220px] mx-auto bg-sunken border border-rule rounded-control divide-y divide-rule">
+        {rows.map(([k, v]) => (
+          <div key={k} aria-hidden="true" className="flex items-center justify-between px-3 py-1.5 text-sm">
+            <span className="font-device text-ink">{k}</span>
+            <span className="font-bold text-ink">{v}</span>
+          </div>
+        ))}
+      </div>
+    );
+
+    // Small generic mocks of the parent app, from brand tokens only -- pictures,
+    // not controls (nothing focusable, hidden from assistive tech under one label).
+    const AppShot = ({ label, children }) => (
+      <div role="img" aria-label={label} className="w-full max-w-[260px] mx-auto bg-ground border border-rule rounded-card p-2 text-left select-none">
+        <div aria-hidden="true" className="space-y-2">{children}</div>
+      </div>
+    );
+    const AppField = ({ value, placeholder, mono = true }) => (
+      <div className={`flex-1 min-w-0 bg-sunken border border-rule rounded-control px-2.5 py-1.5 text-xs truncate ${value ? 'text-ink' : 'text-muted'} ${mono && value ? 'font-device' : ''}`}>{value || placeholder}</div>
+    );
+    const AppBtn = ({ children, quiet = false }) => (
+      <div className={`shrink-0 text-xs font-bold rounded-control px-3 py-1.5 ${quiet ? 'bg-card border border-rule text-ink' : 'bg-accent text-accent-ink'}`}>{children}</div>
+    );
+    const AppSectionRow = ({ icon, title, sub, open }) => (
+      <div className={`flex items-center justify-between p-2.5 bg-sunken border border-rule ${open ? 'rounded-t-card' : 'rounded-card'}`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0">{icon}</div>
+          <div className="min-w-0">
+            <div className="font-bold text-ink text-sm leading-tight">{title}</div>
+            <div className="text-[11px] text-muted">{sub}</div>
+          </div>
+        </div>
+        <svg viewBox="0 0 24 24" className={`w-4 h-4 text-muted shrink-0 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    );
+    const AppCallSigns = () => (
+      <AppShot label="The Settings tab of the app, showing a base call sign DAD0612 and an Active Dot Dash MAYA0412">
+        <div className="bg-card border border-rule rounded-card p-2.5">
+          <div className="text-[10px] font-bold uppercase text-muted">Your base call sign</div>
+          <div className="font-device text-ink">DAD0612</div>
+        </div>
+        <div className="bg-card border border-rule rounded-card p-2.5 flex items-center justify-between">
+          <div className="text-[10px] font-bold uppercase text-muted">Active Dot Dash</div>
+          <div className="bg-sunken border border-rule rounded-control px-2 py-0.5 text-xs font-bold text-ink">MAYA0412</div>
+        </div>
+      </AppShot>
+    );
+    const AppFriendsPanel = () => (
+      <AppShot label="The Friends section of the app's Settings tab: a Call sign box beside an Add button, and MAYA0412 newly added at the top of the friends list above your own call sign">
+        <div>
+          <AppSectionRow icon={<DeviceIcon name="friends" />} title="Friends" sub="2 friends" open />
+          <div className="bg-card border border-t-0 border-rule rounded-b-card p-2.5 space-y-2">
+            <div className="flex gap-2"><AppField placeholder="Call sign" /><AppBtn>Add</AppBtn></div>
+            <div className="space-y-1.5">
+              <div className="bg-sunken border border-rule rounded-control px-2.5 py-1.5 text-xs font-bold text-ink font-device">MAYA0412</div>
+              <div className="bg-sunken border border-rule rounded-control px-2.5 py-1.5 text-xs font-bold text-ink font-device">DAD0612 <span className="text-[10px] text-muted font-normal font-body">(You)</span></div>
+            </div>
+          </div>
+        </div>
+      </AppShot>
+    );
+    const AppRequestCard = () => (
+      <AppShot label="A New contact request card in the app's Log tab: MAYA sent a message to ARTHUR but is not on their friends list, with Add to Friends and Ignore buttons">
+        <div className="bg-card rounded-card p-3 border border-rule border-l-[3px] border-l-accent">
+          <div className="flex items-center gap-1.5 mb-1.5 text-accent font-bold text-xs"><UserPlus className="w-4 h-4" /><span>New contact request</span></div>
+          <p className="text-ink text-xs leading-snug mb-2"><span className="font-device">MAYA</span> sent a message to <span className="font-device">ARTHUR</span>, but isn't on their friends list. Add them to Friends?</p>
+          <div className="flex gap-2">
+            <div className="flex-1 bg-accent text-accent-ink text-xs font-bold text-center rounded-control py-1.5">Add to Friends</div>
+            <div className="flex-1 bg-card border border-rule text-ink text-xs font-bold text-center rounded-control py-1.5">Ignore</div>
+          </div>
+        </div>
+      </AppShot>
+    );
+    const AppLinkForm = () => (
+      <AppShot label="The Add someone by link form in the app: a name box with GRANDMA typed in, and Cancel and Add buttons">
+        <div className="bg-sunken border border-rule rounded-control p-2.5 space-y-2">
+          <div className="font-bold text-ink text-xs flex items-center"><LinkIcon className="w-4 h-4 text-accent mr-1.5" />Add someone by link</div>
+          <div className="flex"><AppField value="GRANDMA" mono={false} /></div>
+          <div className="flex gap-2">
+            <div className="flex-1 bg-card border border-rule text-muted text-xs font-bold text-center rounded-control py-1.5">Cancel</div>
+            <div className="flex-1 bg-accent text-accent-ink text-xs font-bold text-center rounded-control py-1.5">Add</div>
+          </div>
+        </div>
+      </AppShot>
+    );
+    const AppLinkInvite = () => (
+      <AppShot label="The app offering a Send GRANDMA their link button and a Copy button, and a friends row for GRANDMA saying Link not opened yet">
+        <div className="bg-sunken border border-rule rounded-control p-2.5 space-y-2">
+          <div className="text-xs text-ink leading-snug">Now send GRANDMA their link from your phone.</div>
+          <div className="flex gap-2"><div className="flex-1 min-w-0 bg-accent text-accent-ink text-xs font-bold text-center rounded-control py-1.5 truncate">Send GRANDMA their link</div><AppBtn quiet>Copy</AppBtn></div>
+        </div>
+        <div className="bg-sunken border border-rule rounded-control px-2.5 py-1.5">
+          <div className="flex items-center text-xs font-bold text-ink"><LinkIcon className="w-4 h-4 text-accent mr-1.5" />GRANDMA</div>
+          <div className="text-[11px] text-warn">Link not opened yet</div>
+        </div>
+      </AppShot>
+    );
+    const AppWifiCard = () => (
+      <AppShot label="The Wi-Fi Networks section of the app's Settings tab, open, with a WiFi Disconnected? button at the top">
+        <div>
+          <AppSectionRow icon={<DeviceIcon name="wifi" />} title="Wi-Fi Networks" sub="2 networks saved" open />
+          <div className="bg-card border border-t-0 border-rule rounded-b-card p-2.5 space-y-1.5">
+            <div className="inline-block text-xs font-bold text-accent-ink bg-accent rounded-full px-3 py-1.5">WiFi Disconnected?</div>
+            <p className="text-[11px] text-muted leading-snug">Save up to 5 networks. The device picks whichever it finds.</p>
+          </div>
+        </div>
+      </AppShot>
+    );
+    const AppWifiChoose = () => (
+      <AppShot label="The app's Wi-Fi chooser: a list of networks with Home Wi-Fi selected, a password box, and a Connect button">
+        <div className="bg-sunken border border-rule rounded-control divide-y divide-rule">
+          {[["Home Wi-Fi", true], ["Neighbor 5G", false], ["Other network…", false]].map(([n, on]) => (
+            <div key={n} className="flex items-center justify-between px-2.5 py-1.5 text-xs text-ink">
+              <span className={on ? 'font-bold' : ''}>{n}</span>{on && <span className="w-2.5 h-2.5 rounded-full bg-accent" />}
+            </div>
+          ))}
+        </div>
+        <div className="flex"><AppField value={"••••••••"} mono={false} /></div>
+        <div className="bg-accent text-accent-ink text-xs font-bold text-center rounded-control py-2">Connect</div>
+      </AppShot>
+    );
+
+    // ---------------------------------------------------------------------
+    // The slide deck: the Back / Next row, tappable dots, swipe and arrow keys.
+    // Shared by the Wi-Fi flows and the Tutorials tab, so there is one
+    // implementation of the navigation.
+    //
+    // Arrow keys: any number of decks can be mounted at once (every open
+    // tutorial is one), but only ONE window listener exists, and it steers one
+    // deck -- the one last opened or last touched. Closing a deck hands the keys
+    // to the one before it.
+    // ---------------------------------------------------------------------
+    const deckKeys = { stack: [] };
+    function deckKeyHandler(e) {
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '') || e.metaKey || e.ctrlKey || e.altKey) return;
+      const top = deckKeys.stack[deckKeys.stack.length - 1];
+      if (!top) return;
+      if (e.key === 'ArrowRight') top.step(1);
+      else if (e.key === 'ArrowLeft') top.step(-1);
+    }
+    // Returns claim(): make this deck the one the arrow keys steer.
+    function useDeckKeys(step) {
+      const me = useRef(null);
+      if (!me.current) me.current = { step };
+      me.current.step = step;
+      useEffect(() => {
+        const d = me.current;
+        deckKeys.stack.push(d);
+        if (deckKeys.stack.length === 1) window.addEventListener('keydown', deckKeyHandler);
+        return () => {
+          deckKeys.stack = deckKeys.stack.filter((x) => x !== d);
+          if (!deckKeys.stack.length) window.removeEventListener('keydown', deckKeyHandler);
+        };
+      }, []);
+      return () => {
+        const st = deckKeys.stack, i = st.indexOf(me.current);
+        if (i >= 0 && i !== st.length - 1) { st.splice(i, 1); st.push(me.current); }
+      };
+    }
+
+    // slides: [{ eyebrow, head, body, pic, see, tip }]. A tip may be a function
+    // of go(k), for a tip that links back to another slide. minH reserves height
+    // (the Wi-Fi onboarding keeps its own; the Tutorials tab does not, so an
+    // open section is never padded with empty space).
+    function Slides({ slides, onDone, doneLabel = 'Done', minH = '', cardClass = '' }) {
       const [cur, setCur] = useState(0);
       const touch = useRef(null);
-      const endLabel = doneLabel || (paired ? 'Done' : 'Continue');
-      const b = (t) => <strong className="font-bold">{t}</strong>;
-      const slides = [
-        { eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
-          body: <>Press {b("SELECT")} (front button) until you see TOOLS. Then press {b("ENTER")} (top button) twice.</>,
-          pic: <OpenSetupMocks />,
-          see: "The screen says WI-FI SETUP." },
-        { eyebrow: "On your phone", head: "Join \u201CDot Dash Setup\u201D",
-          body: <>Open your phone's Wi-Fi settings and tap {b("Dot Dash Setup")}. There's no password.</>,
-          pic: <div className="flex justify-center"><PhoneWifiList /></div>,
-          see: "Your phone may say \u201CNo internet\u201D. That's expected.",
-          tip: "Don't see it? Turn your phone's Wi-Fi off and on." },
-        { eyebrow: "In the pop-up", head: paired ? "Choose the new Wi-Fi" : "Enter your home Wi-Fi",
-          body: <>A setup page opens by itself. {paired ? "Pick your new Wi-Fi network" : "Pick your home Wi-Fi"}, type its password, choose your timezone, and tap {b("Connect & Restart")}.</>,
-          pic: <PortalMock />,
-          see: "The page says Setup Complete.",
-          tip: "Nothing popped up? Open a browser and go to 192.168.4.1." },
-        { eyebrow: "On the Dot Dash", head: "Check for the Wi-Fi symbol",
-          body: <>The Dot Dash restarts, and its {paired ? "clock" : "home"} screen shows the Wi-Fi symbol in the upper right.</>,
-          pic: <div className="flex justify-center"><div className="w-full max-w-[176px]"><OledOnline clock={paired} /></div></div>,
-          tip: <>Don't see the Wi-Fi symbol? Go back and <button onClick={() => setCur(0)} className="text-accent font-bold underline">try again</button>.</> },
-        { eyebrow: "Back here", head: "Come back and continue",
-          body: <>Your phone rejoins your own Wi-Fi. Return to this page and tap {endLabel}.</> },
-      ];
+      const n = slides.length;
+      const go = (k) => setCur(Math.max(0, Math.min(n - 1, k)));
+      const claim = useDeckKeys((d) => setCur((c) => Math.max(0, Math.min(n - 1, c + d))));
       const s = slides[cur];
-      const last = cur === slides.length - 1;
-      const go = (k) => setCur(Math.max(0, Math.min(slides.length - 1, k)));
-      useEffect(() => {
-        const onKey = (e) => {
-          if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '') || e.metaKey || e.ctrlKey || e.altKey) return;
-          if (e.key === 'ArrowRight') setCur(c => Math.min(slides.length - 1, c + 1));
-          else if (e.key === 'ArrowLeft') setCur(c => Math.max(0, c - 1));
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-      }, [slides.length]);
+      const last = cur === n - 1;
       // Swipe: a mostly-horizontal drag of 50px or more.
       const onTouchStart = (e) => { const t = e.touches[0]; touch.current = { x: t.clientX, y: t.clientY }; };
       const onTouchEnd = (e) => {
@@ -5208,53 +5481,212 @@ return (
         go(cur + (dx < 0 ? 1 : -1));
       };
       return (
-        <div className="text-left" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          <div className="min-h-[24rem]"><SlideCard s={s} /></div>
+        <div className="text-left" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onPointerDownCapture={claim} onFocusCapture={claim}>
+          <div className={`${minH} ${cardClass}`.trim() || undefined}><SlideCard s={{ ...s, tip: typeof s.tip === 'function' ? s.tip(go) : s.tip }} /></div>
           <div className="flex justify-center mb-2">
             {slides.map((_, k) => (
-              <button key={k} onClick={() => go(k)} aria-label={`Go to step ${k + 1} of ${slides.length}`} aria-current={k === cur ? 'step' : undefined} className="w-9 h-11 flex items-center justify-center">
+              <button key={k} onClick={() => go(k)} aria-label={`Go to step ${k + 1} of ${n}`} aria-current={k === cur ? 'step' : undefined} className="w-9 h-11 flex items-center justify-center">
                 <span className={`w-2.5 h-2.5 rounded-full ${k === cur ? 'bg-accent' : 'bg-rule'}`} />
               </button>
             ))}
           </div>
           <div className="flex gap-3">
             <button onClick={() => go(cur - 1)} disabled={cur === 0} className="w-1/3 bg-card text-ink font-bold py-4 rounded-control border border-rule disabled:opacity-40">Back</button>
-            <button onClick={() => last ? onDone() : go(cur + 1)} className="w-2/3 bg-accent text-accent-ink font-bold py-4 rounded-control">{last ? endLabel : 'Next'}</button>
+            <button onClick={() => last ? onDone && onDone() : go(cur + 1)} className="w-2/3 bg-accent text-accent-ink font-bold py-4 rounded-control">{last ? doneLabel : 'Next'}</button>
           </div>
         </div>
       );
     }
 
-    // The step carousel the Tutorials tab introduced, lifted out so the web
-    // Wi-Fi setup can use the same card. A card (optional title, text or bullets),
-    // back / next arrows and an "n / N" counter. `footer` shows only on the last
-    // card -- the hand-off to whatever comes next.
-    function StepCarousel({ steps, footer }) {
-      const [cur, setCur] = useState(0);
-      const go = (delta) => setCur((c) => Math.max(0, Math.min(steps.length - 1, c + delta)));
-      const card = steps[cur];
-      const last = cur === steps.length - 1;
-      return (
-        <div>
-          <div className="bg-sunken rounded-control border border-rule p-4 min-h-[96px]">
-            {card.title && <h4 className="font-bold text-ink text-sm mb-2">{card.title}</h4>}
-            {card.text && <p className="text-muted text-sm leading-relaxed">{emphasizeCaps(card.text)}</p>}
-            {card.bullets && renderBullets(card.bullets)}
-          </div>
-
-          <div className="flex items-center justify-between mt-3 px-1">
-            <button onClick={() => go(-1)} disabled={cur === 0} aria-label="Back" className={`p-2 rounded-full transition-colors ${cur === 0 ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
-              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-            </button>
-            <span className="text-[13px] font-semibold text-muted">{cur + 1} / {steps.length}</span>
-            <button onClick={() => go(1)} disabled={last} aria-label="Next" className={`p-2 rounded-full transition-colors ${last ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
-              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-          </div>
-          {last && footer}
-        </div>
-      );
+    // Web-only Wi-Fi setup (OnboardingWizard, WIFI_INSTRUCT). The iOS app runs
+    // DeviceWifiSetup instead. One slide per place the user is looking.
+    function WifiSetupSlides({ onDone, doneLabel, paired = false, compact = false }) {
+      const endLabel = doneLabel || (paired ? 'Done' : 'Continue');
+      const b = (t) => <strong className="font-bold">{t}</strong>;
+      const slides = [
+        { eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
+          body: <>Press {b("SELECT")} (front button) until you see TOOLS. Then press {b("ENTER")} (top button) twice.</>,
+          pic: <OpenSetupMocks />,
+          see: "The screen says WI-FI SETUP." },
+        { eyebrow: "On your phone", head: "Join “Dot Dash Setup”",
+          body: <>Open your phone's Wi-Fi settings and tap {b("Dot Dash Setup")}. There's no password.</>,
+          pic: <div className="flex justify-center"><PhoneWifiList /></div>,
+          see: "Your phone may say “No internet”. That's expected.",
+          tip: "Don't see it? Turn your phone's Wi-Fi off and on." },
+        { eyebrow: "In the pop-up", head: paired ? "Choose the new Wi-Fi" : "Enter your home Wi-Fi",
+          body: <>A setup page opens by itself. {paired ? "Pick your new Wi-Fi network" : "Pick your home Wi-Fi"}, type its password, choose your timezone, and tap {b("Connect & Restart")}.</>,
+          pic: <PortalMock />,
+          see: "The page says Setup Complete.",
+          tip: "Nothing popped up? Open a browser and go to 192.168.4.1." },
+        { eyebrow: "On the Dot Dash", head: "Check for the Wi-Fi symbol",
+          body: <>The Dot Dash restarts, and its {paired ? "clock" : "home"} screen shows the Wi-Fi symbol in the upper right.</>,
+          pic: <div className="flex justify-center"><div className="w-full max-w-[176px]"><OledOnline clock={paired} /></div></div>,
+          tip: (go) => <>Don't see the Wi-Fi symbol? Go back and <button onClick={() => go(0)} className="text-accent font-bold underline">try again</button>.</> },
+        { eyebrow: "Back here", head: "Come back and continue",
+          body: <>Your phone rejoins your own Wi-Fi. Return to this page and tap {endLabel}.</> },
+      ];
+      return <Slides slides={slides} onDone={onDone} doneLabel={endLabel} minH={compact ? '' : 'min-h-[24rem]'} cardClass={compact ? 'mb-3' : ''} />;
     }
+
+    // ---------------------------------------------------------------------
+    // The Tutorials tab. Every tutorial is a slide deck, in the same format as
+    // the Wi-Fi setup: where you are looking, a short headline, one or two
+    // sentences, a picture, and what you'll see. Every screen picture is drawn
+    // from the firmware that draws it (Icons.h, dot_dash_7_3.ino, Arcade.ino,
+    // Helpers.ino); a slide with no picture is one with no screen to show.
+    // ---------------------------------------------------------------------
+    const Bd = ({ children }) => <strong className="font-bold">{children}</strong>;
+
+    const SEND_QUICK_SLIDES = [
+      { eyebrow: "On the Dot Dash", head: "Open FRIENDS",
+        body: <>Press <Bd>SELECT</Bd> (front button) until you see FRIENDS. Then press <Bd>ENTER</Bd> (top button).</>,
+        pic: <OledOne><OledMenu icon="friends" label="FRIENDS" /></OledOne>,
+        see: "A friend's name." },
+      { eyebrow: "On the Dot Dash", head: "Pick a friend",
+        body: <>Press <Bd>SELECT</Bd> to step through your friends. Press <Bd>ENTER</Bd> on the one you want to message.</>,
+        pic: <OledOne><OledFriend name="MAYA" online /></OledOne>,
+        see: "Pictures in a row, with a name under the middle one.",
+        tip: "A blinking dot means that friend's Dot Dash is online. In any list, hold SELECT for a moment to jump to BACK. NO SIGNAL! means your Dot Dash isn't on Wi-Fi." },
+      { eyebrow: "On the Dot Dash", head: "Choose QUICK",
+        body: <>Press <Bd>SELECT</Bd> until the speech bubble is in the middle and says QUICK. Press <Bd>ENTER</Bd>.</>,
+        pic: <OledOne><OledSendStrip focus={0} /></OledOne>,
+        see: "A message, with SEND TO and your friend's name above it.",
+        tip: "The other pictures: dot and dash is DOT DASH (Morse code), the smiley is EMOJI, and the arrow is BACK. EMOJI sends faces like :) from a built-in list." },
+      { eyebrow: "On the Dot Dash", head: "Pick a message and send",
+        body: <>Press <Bd>SELECT</Bd> to browse the messages. Press <Bd>ENTER</Bd> to send the one on the screen.</>,
+        pic: <OledFlow><OledSendTo to="MAYA" item="HELLO!" /><OledSent pts={1} /></OledFlow>,
+        see: "SENT!, then back to the clock.",
+        tip: "A parent chooses these messages in the app, under Settings > Quick Messages." },
+    ];
+
+    const DOT_DASH_MODE_SLIDES = [
+      { eyebrow: "On the Dot Dash", head: "Choose DOT DASH",
+        body: <>Open FRIENDS and pick a friend. Press <Bd>SELECT</Bd> until the dot and dash picture is in the middle, then press <Bd>ENTER</Bd>.</>,
+        pic: <OledOne><OledSendStrip focus={1} /></OledOne>,
+        see: "SEND TO and your friend's name, and a blinking cursor." },
+      { eyebrow: "On the Dot Dash", head: "Tap out a letter",
+        body: <>Tap <Bd>SELECT</Bd> for a dot. Hold it a little longer for a dash. A letter is a few dots and dashes in a row.</>,
+        pic: <OledOne><OledMorse to="MAYA" seq=".-" preview="A" /></OledOne>,
+        see: "Your dots and dashes at the top right, and the letter they spell blinking below.",
+        tip: "Not sure of a letter's code? TRAIN on the main menu teaches them. The Dot Dash also learns how fast you tap." },
+      { eyebrow: "On the Dot Dash", head: "Lock in the letter",
+        body: <>Press <Bd>ENTER</Bd> to lock the letter in. Press ENTER again with no dots or dashes keyed to add a space.</>,
+        pic: <OledOne><OledMorse to="MAYA" word="A" /></OledOne>,
+        see: "The letter stays, and the cursor moves along.",
+        tip: "Made a mistake? Tap ENTER twice quickly to delete the last letter." },
+      { eyebrow: "On the Dot Dash", head: "Hold ENTER to send",
+        body: <>When the message is ready, press and hold <Bd>ENTER</Bd> until the screen says SENT!. Then let go.</>,
+        pic: <OledFlow><OledMorse to="MAYA" word="HI" /><OledSent pts={2} /></OledFlow>,
+        see: "SENT!, then back to the clock." },
+    ];
+
+    const GET_MESSAGE_SLIDES = [
+      { eyebrow: "On the Dot Dash", head: "A message arrives",
+        body: <>An awake Dot Dash lights up and shows who it's from. A quick message scrolls across the screen, and a Dot Dash message plays out letter by letter in beeps and light.</>,
+        pic: <OledOne><OledReading from="MAYA" item="HELLO!" /></OledOne> },
+      { eyebrow: "On the Dot Dash", head: "Reply or move on",
+        body: <>Press any button and the Dot Dash asks who to reply to. Press <Bd>ENTER</Bd> to reply, or <Bd>SELECT</Bd> to go back to the clock.</>,
+        pic: <OledOne><OledReply name="MAYA" /></OledOne>,
+        tip: "A reply to a message less than a day old earns 3 points." },
+      { eyebrow: "On the Dot Dash", head: "Read it later in INBOX",
+        body: <>Press <Bd>SELECT</Bd> until you see INBOX, then press <Bd>ENTER</Bd>. SELECT steps through your messages, newest first. ENTER on one lets you reply.</>,
+        pic: <OledFlow><OledMenu icon="envelope" label="INBOX" /><OledInbox from="MAYA" item="HELLO!" /></OledFlow>,
+        see: "A NEW tag on messages you haven't read.",
+        tip: "The Dot Dash keeps your 10 newest messages." },
+      { eyebrow: "On the Dot Dash", head: "Put it to sleep",
+        body: <>Hold <Bd>SELECT</Bd> and <Bd>ENTER</Bd> together for 2 seconds to put the Dot Dash to sleep. Press either button to wake it.</>,
+        pic: <OledOne><OledSleeping /></OledOne>,
+        tip: "It also goes to sleep by itself after an hour with no button pressed." },
+      { eyebrow: "While it sleeps", head: "It plays a melody",
+        body: <>A sleeping Dot Dash with an unread message plays a short melody when the message arrives, again 3, 6 and 30 minutes later, and then once an hour.</>,
+        tip: "It stays quiet from 8pm to 7am, and plays in the morning if a message is still waiting. Reading the message stops it." },
+    ];
+
+    const ADD_FRIEND_SLIDES = [
+      { eyebrow: "In the app", head: "Get their call sign",
+        body: <>Ask the other family for their Dot Dash's call sign: a name and a four-digit birthday, like <Bd>MAYA0412</Bd>. They'll find it in the Settings tab of their app.</>,
+        pic: <AppCallSigns />,
+        tip: "A parent's base call sign works too." },
+      { eyebrow: "In the app", head: "Add it to Friends",
+        body: <>Open the <Bd>Settings</Bd> tab and tap <Bd>Friends</Bd>. Type the call sign, like MAYA0412, and tap <Bd>Add</Bd>.</>,
+        pic: <AppFriendsPanel />,
+        see: "The new friend at the top of the list.",
+        tip: "The app doesn't check that a call sign is real, so check the spelling. A Dot Dash holds up to 20 friends (10 on one that hasn't updated), and you count as one of them." },
+      { eyebrow: "On the Dot Dash", head: "Find them in FRIENDS",
+        body: <>Your Dot Dash plays a short rising chime when its list updates. Press <Bd>SELECT</Bd> until FRIENDS, then <Bd>ENTER</Bd>.</>,
+        pic: <OledOne><OledFriend name="MAYA" /></OledOne>,
+        see: "The new friend first, with just their name and no numbers.",
+        tip: "No chime? The Dot Dash may be asleep or offline. It updates the next time it connects." },
+      { eyebrow: "On their Dot Dash", head: "They add you back",
+        body: <>Adding a friend works one way. Until the other family adds your call sign too, a message from you reaches them as a friend request, not as your message.</>,
+        pic: <OledOne><OledReading from="Friend Request" item="DAD0612" /></OledOne> },
+      { eyebrow: "In the app", head: "Approve a request",
+        body: <>It works the same way for you. When someone you haven't added messages your Dot Dash, the <Bd>Log</Bd> tab shows a <Bd>New contact request</Bd>. Tap <Bd>Add to Friends</Bd> to accept, or <Bd>Ignore</Bd>.</>,
+        pic: <AppRequestCard />,
+        tip: "Only a parent can add a friend. The Dot Dash shows the request, but can't answer it." },
+      { eyebrow: "In the app", head: "Add someone by link",
+        body: <>For someone without a Dot Dash: under <Bd>Friends</Bd>, tap <Bd>Add someone by link</Bd>, type their name, and tap <Bd>Add</Bd>.</>,
+        pic: <AppLinkForm />,
+        tip: "They need no app or account. The link opens a chat in their browser." },
+      { eyebrow: "In the app", head: "Send them their link",
+        body: <>Tap <Bd>Send GRANDMA their link</Bd>, with the name you typed, and send it from your own phone.</>,
+        pic: <AppLinkInvite />,
+        see: "Link not opened yet, then Connected by link once they connect.",
+        tip: "The link works on one device only. If it gets lost, tap Send a new link. On the Dot Dash they appear in FRIENDS like any other friend, without the four numbers." },
+    ];
+
+    const POINTS_SLIDES = [
+      { eyebrow: "On the Dot Dash", head: "Your points",
+        body: <>Sending messages earns points, and points unlock arcade games. Your total is the number in the box at the top left of the clock.</>,
+        pic: <OledOne><OledOnline clock pts={12} /></OledOne>,
+        tip: "A parent can see the total in the app, in the Settings tab." },
+      { eyebrow: "On the Dot Dash", head: "Send to earn",
+        body: <>A quick or emoji message earns 1 point. A Dot Dash message earns 2 points when it uses at least 3 different letters, and 1 point otherwise.</>,
+        pic: <OledOne><OledSent pts={2} /></OledOne>,
+        tip: "Up to 5 sent messages a day earn points, and 2 per friend. Wait about 30 seconds between them. Sending the same message to the same friend twice in a row earns once." },
+      { eyebrow: "On the Dot Dash", head: "Reply for 3 points",
+        body: <>Replying to a message earns 3 points, the most of any way. It has to be less than a day old, and each message pays once.</>,
+        pic: <OledOne><OledReply name="MAYA" /></OledOne>,
+        tip: "Up to 5 replies a day earn points. There's no limit per friend and no wait between replies. Messages top out at 25 points a day." },
+      { eyebrow: "On the Dot Dash", head: "Finish a timer",
+        body: <>Open TIMER and run one. When it ends, your parent can approve points: 1 for under 15 minutes, 2 for 15 to 29, and 3 for 30 or more.</>,
+        pic: <OledOne><OledMenu icon="timer" label="TIMER" /></OledOne>,
+        tip: "The request shows up in the Log tab of the app." },
+      { eyebrow: "On the Dot Dash", head: "What games cost",
+        body: <>Open ARCADE. Each game's price is in the top right of its row. Games you play against a friend, LEADERS and TRAIN are always free.</>,
+        pic: <RuleTable label="Arcade prices in points: Counter 2, Bird 4, Jumper 6, Dasher 8, Defender 10" rows={[["COUNTER", "2 pts"], ["BIRD", "4 pts"], ["JUMPER", "6 pts"], ["DASHER", "8 pts"], ["DEFENDER", "10 pts"]]} /> },
+      { eyebrow: "On the Dot Dash", head: "Demo, then unlock",
+        body: <>On a locked game, <Bd>SELECT</Bd> switches between DEMO?, UNLOCK? and BACK, and <Bd>ENTER</Bd> chooses. DEMO? plays 15 seconds free. UNLOCK? asks YES or NO.</>,
+        pic: <OledFlow><OledLocked game="JUMPER" cost={6} choice="UNLOCK?" /><OledUnlock game="JUMPER" cost={6} /></OledFlow>,
+        see: "SELECT switches between NO and YES. YES spends the points and opens the game.",
+        tip: "Not enough points? The Dot Dash says so and spends nothing." },
+      { eyebrow: "On the Dot Dash", head: "Games lock again",
+        body: <>A game you unlock stays open for the rest of that day, then locks again. The arcade and TRAIN also close from 8pm to 7am.</>,
+        pic: <OledOne><OledBedtime /></OledOne>,
+        tip: "A parent can turn the arcade off, play without points, or play after 8pm, in the app under Settings > Arcade." },
+    ];
+
+    // Changing Wi-Fi. On the web it is the same deck as the setup wizard, in its
+    // paired form. On iOS the app does the joining and the form-filling itself,
+    // so the slides say where to start it and what the app will do.
+    const WIFI_NATIVE_SLIDES = [
+      { eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
+        body: <>Press <Bd>SELECT</Bd> (front button) until you see TOOLS. Then press <Bd>ENTER</Bd> (top button) twice.</>,
+        pic: <OpenSetupMocks />,
+        see: "The screen says WI-FI SETUP." },
+      { eyebrow: "In the app", head: "Tap WiFi Disconnected?",
+        body: <>Open the <Bd>Settings</Bd> tab, then <Bd>Wi-Fi Networks</Bd>, and tap <Bd>WiFi Disconnected?</Bd>. Tap <Bd>Next</Bd>.</>,
+        pic: <AppWifiCard />,
+        see: "iOS asks to join Dot Dash Setup. Tap Join.",
+        tip: "If it asks about devices on your local network, tap Allow." },
+      { eyebrow: "In the app", head: "Choose the new Wi-Fi",
+        body: <>Pick your network, type its password, and tap <Bd>Connect</Bd>. The app does the rest and brings your phone back to your own Wi-Fi.</>,
+        pic: <AppWifiChoose />,
+        see: "Connected, once your Dot Dash is back online." },
+      { eyebrow: "On the Dot Dash", head: "Check for the Wi-Fi symbol",
+        body: <>The Dot Dash restarts, and its clock screen shows the Wi-Fi symbol in the upper right.</>,
+        pic: <OledOne><OledOnline clock /></OledOne> },
+    ];
 
     function TutorialsView() {
       const [openSet, setOpenSet] = useState({});
@@ -5267,52 +5699,21 @@ return (
         if (name === 'morse') return <svg viewBox="0 0 24 24" className="w-6 h-6" fill="currentColor"><circle cx="5" cy="12" r="2.6"/><rect x="10" y="9.4" width="11" height="5.2" rx="2.6"/></svg>;
         if (name === 'joystick') return <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.6"/><line x1="12" y1="7.6" x2="12" y2="15"/><path d="M7 20 L9 15 L15 15 L17 20 Z"/></svg>;
         if (name === 'rss') return <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="19" r="1.9" fill="currentColor" stroke="none"/><path d="M5 13 A 6 6 0 0 1 11 19"/><path d="M5 9 A 10 10 0 0 1 15 19"/></svg>;
+        if (name === 'bell') return <Bell className="w-6 h-6" />;
+        if (name === 'friend') return <UserPlus className="w-6 h-6" />;
         return null;
       };
 
+      const native = isNativeApp();
       const tutorials = [
-        {
-          title: "Sending a Quick Message",
-          icon: "env",
-          steps: [
-            { text: "From the clock screen, tap the front SELECT button to move through the menu, and the top ENTER button to choose an option." },
-            { text: "Open {{env}} SEND, then tap SELECT to scroll to the friend you want and ENTER to pick them." },
-            { text: "Choose <QUICK> with ENTER (or <DOT DASH> to type your own in Morse code)." },
-            { text: "Tap SELECT to browse the pre-written messages, then tap ENTER to send." }
-          ]
-        },
-        {
-          title: "Dot Dash Mode",
-          icon: "morse",
-          steps: [
-            { text: "Open SEND, pick a friend, then choose <DOT DASH> to start typing in Morse code." },
-            { title: "Dots & dashes", bullets: [ "Dot: {{dot}} short tap the front SELECT button.", "Dash: {{dash}} long-press the front SELECT button." ] },
-            { title: "Building words", bullets: [ "Commit a letter: tap the top ENTER button.", "Add a space: tap ENTER on its own.", "Delete: tap ENTER twice quickly." ] },
-            { title: "Send it", text: "When your message is ready, long-press ENTER to send." }
-          ]
-        },
-        {
-          title: "How Points Work",
-          icon: "joystick",
-          steps: [
-            { text: "Points are earned by messaging friends and spent to unlock arcade games. They stay on the Dot Dash — a private balance, not a score or competition." },
-            { title: "Earning by sending", bullets: [ "Pre-written message: 1 point.", "Dot Dash message: 2 points when it uses at least 3 different characters, otherwise 1 point.", "Counts for up to 2 messages per friend each day.", "Up to 5 sent messages earn points per day." ] },
-            { title: "Earning by replying", bullets: [ "Replying to an Inbox message earns 3 points — the most valuable way to earn.", "Only for messages received in the last 24 hours.", "Only once per message.", "No per-friend limit — a real back-and-forth conversation is fully rewarded.", "Up to 5 replies earn points per day." ] },
-            { title: "Fair-play safeguards", bullets: [ "A short wait (about 30 seconds) between messages that earn points.", "Sending the exact same message twice in a row only earns once.", "Daily maximum: roughly 25 points." ] },
-            { title: "Spending on the arcade", bullets: [ "Counter: 2 points", "Bird: 4 points", "Jumper: 6 points", "Dasher: 8 points", "Defender: 10 points", "Train and the Leaderboards are always free." ] },
-            { title: "How unlocking works", bullets: [ "Opening a locked game asks for a confirmation (Yes / No); Yes spends the points.", "Once unlocked, the game stays open for the rest of the day.", "Every day the games re-lock, so points are spent fresh each day.", "If there aren’t enough points, the Dot Dash says so." ] }
-          ]
-        },
-        {
-          title: "Changing Wi-Fi Networks",
-          icon: "rss",
-          steps: [
-            { text: "Moving your Dot Dash somewhere new? Add the new network from your phone — the Dot Dash remembers up to five, and picks whichever one it finds." },
-            ...MANUAL_WIFI_STEPS,
-            { title: "Good to know", text: "Old networks are kept, not replaced. Back at a previous location, the Dot Dash reconnects on its own." },
-            { title: "Plan ahead", text: "Know where your Dot Dash is going? Add up to five networks ahead of time in the Settings tab, under Wi-Fi Networks, and it will connect by itself when it gets there." }
-          ]
-        }
+        { title: "Sending a Quick Message", icon: "env", slides: SEND_QUICK_SLIDES },
+        { title: "Dot Dash Mode", icon: "morse", slides: DOT_DASH_MODE_SLIDES },
+        { title: "Getting a Message", icon: "bell", slides: GET_MESSAGE_SLIDES },
+        { title: "Adding a Friend", icon: "friend", slides: ADD_FRIEND_SLIDES },
+        { title: "How Points Work", icon: "joystick", slides: POINTS_SLIDES },
+        { title: "Changing Wi-Fi Networks", icon: "rss",
+          intro: "Your Dot Dash remembers up to five Wi-Fi networks and joins whichever it finds, so old ones are kept. Going somewhere new? You can also add networks ahead of time in Settings > Wi-Fi Networks.",
+          slides: native ? WIFI_NATIVE_SLIDES : null },
       ];
 
       return (
@@ -5327,9 +5728,10 @@ return (
           <div className="space-y-3">
             {tutorials.map((tut, i) => {
               const isOpen = !!openSet[i];
+              const close = () => setOpenSet(prev => ({ ...prev, [i]: false }));
               return (
                 <div key={i} className="bg-card rounded-card border border-rule overflow-hidden">
-                  <button onClick={() => toggle(i)} className="w-full flex items-center justify-between px-5 py-4 text-left active:bg-sunken transition-colors">
+                  <button onClick={() => toggle(i)} aria-expanded={isOpen} className="w-full flex items-center justify-between px-5 py-4 text-left active:bg-sunken transition-colors">
                     <span className="flex items-center gap-2.5 min-w-0">
                       {tut.icon && <span className="text-accent shrink-0">{titleIcon(tut.icon)}</span>}
                       <span className="font-bold text-lg text-ink">{tut.title}</span>
@@ -5339,7 +5741,10 @@ return (
 
                   {isOpen && (
                     <div className="px-4 pb-4">
-                      <StepCarousel steps={tut.steps} />
+                      {tut.intro && <p className="text-sm text-muted leading-relaxed mb-4">{tut.intro}</p>}
+                      {tut.slides
+                        ? <Slides slides={tut.slides} onDone={close} doneLabel="Done" cardClass="mb-3" />
+                        : <WifiSetupSlides paired compact doneLabel="Done" onDone={close} />}
                     </div>
                   )}
                 </div>
