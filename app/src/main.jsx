@@ -5717,11 +5717,6 @@ return (
 
       return (
         <div className="space-y-6 px-2">
-          <img
-            src="https://raw.githubusercontent.com/sammyb-clouds/dot-dash-parent/main/dotdashkey.jpg"
-            alt="Dot Dash Morse code key"
-            className="w-full rounded-card mb-4"
-          />
           <h1 className="font-device text-[26px] mb-4">Tutorials</h1>
 
           <div className="space-y-3">
