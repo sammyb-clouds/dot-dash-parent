@@ -2145,6 +2145,17 @@ return (
       { title: "Step 4", text: "Pick your new Wi-Fi network, enter the password, and tap Connect & Restart." },
     ];
 
+    // Web-only Wi-Fi setup slides (OnboardingWizard, WIFI_INSTRUCT). The iOS app
+    // runs DeviceWifiSetup instead and never shows these. Last slide hands off
+    // to the "Done, let's continue" button.
+    const WEB_WIFI_STEPS = [
+      { title: "Find TOOLS", text: "On your Dot Dash, press SELECT (the front arcade button) until you see {{gear}} TOOLS." },
+      { title: "Open TOOLS", text: "Press ENTER (the top arcade button) to open Tools." },
+      { title: "Choose WIFI", text: "Press ENTER on WIFI (shown as DOT DASH SETUP on devices that haven't updated yet)." },
+      { title: "Join the network", text: "On your phone or computer, open Wi-Fi settings and join the network named Dot Dash Setup." },
+      { title: "Finish setup", text: "Wait a few seconds for a window to pop up and follow its instructions. Then come back here and tap the button below." },
+    ];
+
     // Small inline menu icons that mirror the on-device menu (used via {{env}} / {{gear}} tokens).
     const iconFor = (name) => {
       const cls = "inline w-4 h-4 align-text-bottom text-ink";
@@ -2779,32 +2790,11 @@ return (
                 <div className="w-full max-w-sm my-auto text-left space-y-4">
                    <h2 className="text-2xl font-bold mb-6 text-center">Connect to Wi-Fi</h2>
                    
-                   <div className="space-y-3">
-                     <div className="flex items-start">
-                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">1</div>
-                       <p className="ml-3 text-ink">Turn on your Dot Dash. It will say <strong>HELLO!</strong> — press any button to begin.</p>
-                     </div>
-                     <div className="flex items-start">
-                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">2</div>
-                       <p className="ml-3 text-ink">Press <strong>SELECT</strong> (front arcade button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong> on the screen.</p>
-                     </div>
-                     <div className="flex items-start">
-                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">3</div>
-                       <p className="ml-3 text-ink">Press <strong>ENTER</strong> (top arcade button) to open Tools, then <strong>ENTER</strong> again on <strong>WIFI</strong> <span className="text-muted">(shown as <strong>DOT DASH SETUP</strong> on devices that haven't updated yet)</span>.</p>
-                     </div>
-                     <div className="flex items-start">
-                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">4</div>
-                       <p className="ml-3 text-ink">Get your phone or computer and open Wi-Fi settings. Join the network named <strong>Dot Dash Setup</strong>.</p>
-                     </div>
-                     <div className="flex items-start">
-                       <div className="bg-accent text-accent-ink font-bold rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5 text-sm">5</div>
-                       <p className="ml-3 text-ink">Wait a few seconds for a window to pop up, follow the setup instructions, then come back here!</p>
-                     </div>
-                   </div>
+                   <StepCarousel
+                     steps={WEB_WIFI_STEPS}
+                     footer={<button onClick={()=>setStep('CHILD_ID')} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-4">Done, let's continue</button>} />
 
-                   <button onClick={()=>setStep('CHILD_ID')} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-8 mb-4">Done, let's continue</button>
-
-                   <div className="bg-sunken border border-warn rounded-control p-4 text-left">
+                   <div className="bg-sunken border border-warn rounded-control p-4 text-left mt-4">
                      <div className="flex items-start">
                         <div className="shrink-0 mt-0.5">
                            <Info className="w-5 h-5 text-warn" />
@@ -5059,18 +5049,54 @@ return (
       );
     }
 
+    const renderBullets = (bullets) => (
+      <ul className="text-muted space-y-2 text-sm leading-relaxed">
+        {bullets.map((bullet, j) => {
+          const splitIndex = bullet.indexOf(':');
+          if (splitIndex > -1) {
+            return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span><strong className="text-ink">{bullet.substring(0, splitIndex + 1)}</strong>{emphasizeCaps(bullet.substring(splitIndex + 1))}</span></li>;
+          }
+          return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span>{emphasizeCaps(bullet)}</span></li>;
+        })}
+      </ul>
+    );
+
+    // The step carousel the Tutorials tab introduced, lifted out so the web
+    // Wi-Fi setup can use the same card. A card (optional title, text or bullets),
+    // back / next arrows and an "n / N" counter. `footer` shows only on the last
+    // card -- the hand-off to whatever comes next.
+    function StepCarousel({ steps, footer }) {
+      const [cur, setCur] = useState(0);
+      const go = (delta) => setCur((c) => Math.max(0, Math.min(steps.length - 1, c + delta)));
+      const card = steps[cur];
+      const last = cur === steps.length - 1;
+      return (
+        <div>
+          <div className="bg-sunken rounded-control border border-rule p-4 min-h-[96px]">
+            {card.title && <h4 className="font-bold text-ink text-sm mb-2">{card.title}</h4>}
+            {card.text && <p className="text-muted text-sm leading-relaxed">{emphasizeCaps(card.text)}</p>}
+            {card.bullets && renderBullets(card.bullets)}
+          </div>
+
+          <div className="flex items-center justify-between mt-3 px-1">
+            <button onClick={() => go(-1)} disabled={cur === 0} aria-label="Back" className={`p-2 rounded-full transition-colors ${cur === 0 ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
+              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span className="text-[13px] font-semibold text-muted">{cur + 1} / {steps.length}</span>
+            <button onClick={() => go(1)} disabled={last} aria-label="Next" className={`p-2 rounded-full transition-colors ${last ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
+              <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+          {last && footer}
+        </div>
+      );
+    }
+
     function TutorialsView() {
       const [openSet, setOpenSet] = useState({});
-      const [stepIdx, setStepIdx] = useState({});
       const toggle = (i) => {
         setOpenSet(prev => ({ ...prev, [i]: !prev[i] }));
-        setStepIdx(prev => ({ ...prev, [i]: 0 }));
       };
-      const go = (i, delta, len) => setStepIdx(prev => {
-        const cur = prev[i] || 0;
-        return { ...prev, [i]: Math.max(0, Math.min(len - 1, cur + delta)) };
-      });
-
       // Symbol shown in each tutorial's collapsible title bar.
       const titleIcon = (name) => {
         if (name === 'env') return <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/></svg>;
@@ -5079,18 +5105,6 @@ return (
         if (name === 'rss') return <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="19" r="1.9" fill="currentColor" stroke="none"/><path d="M5 13 A 6 6 0 0 1 11 19"/><path d="M5 9 A 10 10 0 0 1 15 19"/></svg>;
         return null;
       };
-
-      const renderBullets = (bullets) => (
-        <ul className="text-muted space-y-2 text-sm leading-relaxed">
-          {bullets.map((bullet, j) => {
-            const splitIndex = bullet.indexOf(':');
-            if (splitIndex > -1) {
-              return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span><strong className="text-ink">{bullet.substring(0, splitIndex + 1)}</strong>{emphasizeCaps(bullet.substring(splitIndex + 1))}</span></li>;
-            }
-            return <li key={j} className="flex items-start"><span className="mr-2 mt-1 text-accent text-[13px]">●</span><span>{emphasizeCaps(bullet)}</span></li>;
-          })}
-        </ul>
-      );
 
       const tutorials = [
         {
@@ -5149,9 +5163,6 @@ return (
           <div className="space-y-3">
             {tutorials.map((tut, i) => {
               const isOpen = !!openSet[i];
-              const steps = tut.steps;
-              const cur = Math.min(stepIdx[i] || 0, steps.length - 1);
-              const card = steps[cur];
               return (
                 <div key={i} className="bg-card rounded-card border border-rule overflow-hidden">
                   <button onClick={() => toggle(i)} className="w-full flex items-center justify-between px-5 py-4 text-left active:bg-sunken transition-colors">
@@ -5164,21 +5175,7 @@ return (
 
                   {isOpen && (
                     <div className="px-4 pb-4">
-                      <div className="bg-sunken rounded-control border border-rule p-4 min-h-[96px]">
-                        {card.title && <h4 className="font-bold text-ink text-sm mb-2">{card.title}</h4>}
-                        {card.text && <p className="text-muted text-sm leading-relaxed">{emphasizeCaps(card.text)}</p>}
-                        {card.bullets && renderBullets(card.bullets)}
-                      </div>
-
-                      <div className="flex items-center justify-between mt-3 px-1">
-                        <button onClick={() => go(i, -1, steps.length)} disabled={cur === 0} className={`p-2 rounded-full transition-colors ${cur === 0 ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
-                          <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                        </button>
-                        <span className="text-[13px] font-semibold text-muted">{cur + 1} / {steps.length}</span>
-                        <button onClick={() => go(i, 1, steps.length)} disabled={cur === steps.length - 1} className={`p-2 rounded-full transition-colors ${cur === steps.length - 1 ? 'text-rule' : 'text-accent active:bg-sunken'}`}>
-                          <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                        </button>
-                      </div>
+                      <StepCarousel steps={tut.steps} />
                     </div>
                   )}
                 </div>
