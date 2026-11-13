@@ -5063,6 +5063,63 @@ return (
       </OledMock>
     );
 
+    // 128x32 OLED drawn as an SVG in the panel's own pixel coordinates, so a
+    // glyph can be placed exactly where the firmware puts it. Text is laid out
+    // with textLength so each character takes its real 6px (size 1) or 12px
+    // (size 2) cell regardless of the font that renders it.
+    function OledPixels({ label, children }) {
+      return (
+        <svg role="img" aria-label={label} viewBox="0 0 128 32" className="bg-black text-white font-device rounded-control w-full block" fill="currentColor">
+          {children}
+        </svg>
+      );
+    }
+    const oledText = (x, baseY, size, str) => (
+      <text x={x} y={baseY} fontSize={size === 2 ? 14 : 8} textLength={str.length * 6 * size} lengthAdjust="spacingAndGlyphs" style={{ fontFamily: 'inherit' }}>{str}</text>
+    );
+    // STATE_SETTINGS_MAIN with WIFI selected: "TOOLS:" header (size 1, 0,0),
+    // option in size 2 at (0,16). The bracket styling in that block is only the
+    // BACK row, so WIFI is plain text.
+    const OledToolsWifi = () => (
+      <OledPixels label="Dot Dash screen inside TOOLS, showing the WIFI option">
+        {oledText(0, 7, 1, "TOOLS:")}
+        {oledText(0, 30, 2, "WIFI")}
+      </OledPixels>
+    );
+    // Home screen as drawn by drawConnIcon() when online: fillCircle(115,10,1)
+    // plus drawCircleHelper(115,10,4 and 8, top-right quadrant), pixel for
+    // pixel. Points badge top left, "DOT DASH" size 2 at (16,16).
+    const OledHomeOnline = () => (
+      <OledPixels label="Dot Dash home screen with the Wi-Fi symbol in the upper right corner">
+        <path d="M116 6h1v1h-1zM119 9h1v1h-1zM117 7h1v1h-1zM118 8h1v1h-1zM118 7h1v1h-1zM116 2h1v1h-1zM123 9h1v1h-1zM117 2h1v1h-1zM123 8h1v1h-1zM118 3h1v1h-1zM122 7h1v1h-1zM119 3h1v1h-1zM122 6h1v1h-1zM120 4h1v1h-1zM121 5h1v1h-1zM115 9h1v1h-1zM115 10h1v1h-1zM115 11h1v1h-1zM114 10h1v1h-1zM116 10h1v1h-1z" />
+        <rect x="0.5" y="0.5" width="8" height="10" fill="none" stroke="currentColor" strokeWidth="1" />
+        {oledText(2, 9, 1, "0")}
+        {oledText(16, 30, 2, "DOT DASH")}
+      </OledPixels>
+    );
+    const WifiGlyph = ({ className = "w-5 h-5" }) => (
+      <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+    );
+    // A generic phone Wi-Fi list, not a copy of any OS screen. Dot Dash Setup is
+    // open, so no lock on it.
+    function PhoneWifiList() {
+      const rows = [{ n: "Home Wi-Fi", lock: true }, { n: "Dot Dash Setup", hi: true }, { n: "Neighbor 5G", lock: true }];
+      return (
+        <div role="img" aria-label="A phone's list of Wi-Fi networks with Dot Dash Setup highlighted" className="bg-card border border-rule rounded-card overflow-hidden w-full max-w-[220px]">
+          {rows.map((r, i) => (
+            <div key={r.n} className={`flex items-center gap-2 px-3 py-1.5 text-sm ${i > 0 ? 'border-t border-rule' : ''} ${r.hi ? 'bg-accent text-accent-ink font-bold' : 'text-ink'}`}>
+              <WifiGlyph className="w-4 h-4 shrink-0" />
+              <span className="flex-1">{r.n}</span>
+              {r.lock && <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-muted shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    const DownArrow = () => <svg viewBox="0 0 24 24" className="w-4 h-4 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>;
+
     // Web-only Wi-Fi setup (OnboardingWizard, WIFI_INSTRUCT). The iOS app runs
     // DeviceWifiSetup instead. One slide per place the user is looking.
     function WifiSetupSlides({ onDone }) {
@@ -5071,16 +5128,21 @@ return (
       const slides = [
         { eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
           body: <>Press {b("SELECT")} (front button) until you see TOOLS. Then press {b("ENTER")} (top button) twice.</>,
-          pic: <div className="flex flex-col items-center gap-1"><OledTools /><svg viewBox="0 0 24 24" className="w-5 h-5 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg><OledSetup /></div>,
-          see: "The screen says WI-FI SETUP (walkie models say SETUP MODE)." },
+          pic: <div className="flex flex-col items-center gap-1"><div className="w-full max-w-[176px]"><OledTools /></div><DownArrow /><div className="w-full max-w-[176px]"><OledToolsWifi /></div><DownArrow /><div className="w-full max-w-[176px]"><OledSetup /></div></div>,
+          see: "The screen says WI-FI SETUP." },
         { eyebrow: "On your phone", head: "Join \u201CDot Dash Setup\u201D",
           body: <>Open your phone's Wi-Fi settings and tap {b("Dot Dash Setup")}. There's no password.</>,
+          pic: <div className="flex justify-center"><PhoneWifiList /></div>,
           see: "Your phone may say \u201CNo internet\u201D. That's expected.",
           tip: "Don't see it? Turn your phone's Wi-Fi off and on." },
         { eyebrow: "In the pop-up", head: "Enter your home Wi-Fi",
           body: <>A setup page opens by itself. Pick your home Wi-Fi, type its password, choose your timezone, and tap {b("Connect & Restart")}.</>,
           see: "The page says Setup Complete.",
           tip: "Nothing popped up? Open a browser and go to 192.168.4.1." },
+        { eyebrow: "On the Dot Dash", head: "Check for the Wi-Fi symbol",
+          body: <>The Dot Dash restarts, and its home screen shows the Wi-Fi symbol in the upper right.</>,
+          pic: <div className="flex justify-center"><div className="w-full max-w-[176px]"><OledHomeOnline /></div></div>,
+          tip: <>Don't see the Wi-Fi symbol? Go back and <button onClick={() => setCur(0)} className="text-accent font-bold underline">try again</button>.</> },
         { eyebrow: "Back here", head: "Come back and continue",
           body: <>Your phone rejoins your own Wi-Fi. Return to this page and tap Continue.</> },
       ];
