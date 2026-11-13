@@ -4487,19 +4487,11 @@ return (
                     Your Dot Dash makes its own Wi-Fi network when it cannot find a saved one.
                     Join it from this phone or computer and tell it which network to use.
                   </p>
-                  <ol className="space-y-3 mb-6">
-                    {MANUAL_WIFI_STEPS.map((st, k) => (
-                      <li key={k} className="flex items-start gap-3">
-                        <span className="shrink-0 w-6 h-6 rounded-full bg-accent text-accent-ink font-device text-[13px] flex items-center justify-center">{k + 1}</span>
-                        <span className="text-sm text-ink leading-relaxed">{emphasizeCaps(st.text)}</span>
-                      </li>
-                    ))}
-                  </ol>
+                  <div className="mb-6"><WifiSetupSlides paired doneLabel="Done" onDone={() => setWifiHelpOpen(false)} /></div>
                   <div className="rounded-control border border-rule bg-sunken p-4">
                     <p className="text-[13px] text-muted leading-relaxed">
                       While you are joined to <strong className="text-ink">Dot Dash Setup</strong> you have no
-                      internet, so this page will not reload until you rejoin your usual network. That is
-                      expected. The Dot Dash restarts itself once it has the new details.
+                      internet, so this page will not reload until you rejoin your usual network.
                     </p>
                   </div>
                   <p className="text-[13px] text-muted leading-relaxed mt-4">
@@ -5039,7 +5031,7 @@ return (
     // black in both themes on purpose -- it is a picture of the hardware.
     function OledMock({ children, label }) {
       return (
-        <div role="img" aria-label={label} className="bg-black text-white font-device rounded-control w-full max-w-[220px] aspect-[4/1] flex items-center overflow-hidden">
+        <div role="img" aria-label={label} className="bg-black text-white font-device w-full max-w-[220px] aspect-[4/1] flex items-center overflow-hidden">
           {children}
         </div>
       );
@@ -5069,7 +5061,7 @@ return (
     // (size 2) cell regardless of the font that renders it.
     function OledPixels({ label, children }) {
       return (
-        <svg role="img" aria-label={label} viewBox="0 0 128 32" className="bg-black text-white font-device rounded-control w-full block" fill="currentColor">
+        <svg role="img" aria-label={label} viewBox="0 0 128 32" className="bg-black text-white font-device w-full block" fill="currentColor">
           {children}
         </svg>
       );
@@ -5082,21 +5074,51 @@ return (
     // BACK row, so WIFI is plain text.
     const OledToolsWifi = () => (
       <OledPixels label="Dot Dash screen inside TOOLS, showing the WIFI option">
-        {oledText(0, 7, 1, "TOOLS:")}
-        {oledText(0, 30, 2, "WIFI")}
+        {oledText(1, 7, 1, "TOOLS:")}
+        {oledText(1, 30, 2, "WIFI")}
       </OledPixels>
     );
     // Home screen as drawn by drawConnIcon() when online: fillCircle(115,10,1)
     // plus drawCircleHelper(115,10,4 and 8, top-right quadrant), pixel for
     // pixel. Points badge top left, "DOT DASH" size 2 at (16,16).
-    const OledHomeOnline = () => (
-      <OledPixels label="Dot Dash home screen with the Wi-Fi symbol in the upper right corner">
+    const OledOnline = ({ clock }) => (
+      <OledPixels label={clock ? "Dot Dash clock screen showing 3:45 PM, with the Wi-Fi symbol in the upper right corner" : "Dot Dash home screen with the Wi-Fi symbol in the upper right corner"}>
         <path d="M116 6h1v1h-1zM119 9h1v1h-1zM117 7h1v1h-1zM118 8h1v1h-1zM118 7h1v1h-1zM116 2h1v1h-1zM123 9h1v1h-1zM117 2h1v1h-1zM123 8h1v1h-1zM118 3h1v1h-1zM122 7h1v1h-1zM119 3h1v1h-1zM122 6h1v1h-1zM120 4h1v1h-1zM121 5h1v1h-1zM115 9h1v1h-1zM115 10h1v1h-1zM115 11h1v1h-1zM114 10h1v1h-1zM116 10h1v1h-1z" />
         <rect x="0.5" y="0.5" width="8" height="10" fill="none" stroke="currentColor" strokeWidth="1" />
         {oledText(2, 9, 1, "0")}
-        {oledText(16, 30, 2, "DOT DASH")}
+        {/* Clock screen: getShortTime() ("%I:%M %p", leading zero stripped) in
+            size 2 at (16,16), the same spot the home label uses. */}
+        {oledText(16, 30, 2, clock ? "3:45 PM" : "DOT DASH")}
       </OledPixels>
     );
+    // Miniature of the device's Wi-Fi portal page (WebUI.h): a card with a
+    // heading, three labelled fields and a button, inside a hint of a phone pop-up.
+    // A picture only -- no inputs, nothing focusable.
+    function PortalMock() {
+      const field = (label, value, kind) => (
+        <div>
+          <div className="text-[8px] font-bold uppercase text-muted leading-none mb-0.5">{label}</div>
+          <div className="flex items-center justify-between border border-rule rounded-control bg-ground px-2 h-5 text-[10px] leading-none text-ink">
+            <span className={kind === 'pass' ? 'tracking-widest' : ''}>{value}</span>
+            {kind === 'select' && <svg viewBox="0 0 10 6" className="w-2 h-1.5 text-muted" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><polyline points="1 1 5 5 9 1"/></svg>}
+          </div>
+        </div>
+      );
+      return (
+        <div role="img" aria-label="Miniature of the Wi-Fi Setup page: Wi-Fi network Home Wi-Fi, a password, timezone US Eastern Time, and a Connect and Restart button" className="w-full max-w-[220px] mx-auto bg-sunken border border-rule rounded-card overflow-hidden">
+          <div className="flex items-center justify-center h-4 border-b border-rule text-[8px] leading-none text-muted" aria-hidden="true">192.168.4.1</div>
+          <div className="p-2" aria-hidden="true">
+            <div className="bg-card border border-rule rounded-control p-2 space-y-1.5">
+              <div className="text-center text-[11px] font-bold text-ink leading-none">Wi-Fi Setup</div>
+              {field("Wi-Fi Network", "Home Wi-Fi", "select")}
+              {field("Password", "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", "pass")}
+              {field("Timezone", "US Eastern Time", "select")}
+              <div className="bg-accent text-accent-ink text-[10px] font-bold text-center rounded-control py-1 leading-none">Connect &amp; Restart</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
     const WifiGlyph = ({ className = "w-5 h-5" }) => (
       <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
@@ -5122,8 +5144,10 @@ return (
 
     // Web-only Wi-Fi setup (OnboardingWizard, WIFI_INSTRUCT). The iOS app runs
     // DeviceWifiSetup instead. One slide per place the user is looking.
-    function WifiSetupSlides({ onDone }) {
+    function WifiSetupSlides({ onDone, doneLabel, paired = false }) {
       const [cur, setCur] = useState(0);
+      const touch = useRef(null);
+      const endLabel = doneLabel || (paired ? 'Done' : 'Continue');
       const b = (t) => <strong className="font-bold">{t}</strong>;
       const slides = [
         { eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
@@ -5135,21 +5159,42 @@ return (
           pic: <div className="flex justify-center"><PhoneWifiList /></div>,
           see: "Your phone may say \u201CNo internet\u201D. That's expected.",
           tip: "Don't see it? Turn your phone's Wi-Fi off and on." },
-        { eyebrow: "In the pop-up", head: "Enter your home Wi-Fi",
-          body: <>A setup page opens by itself. Pick your home Wi-Fi, type its password, choose your timezone, and tap {b("Connect & Restart")}.</>,
+        { eyebrow: "In the pop-up", head: paired ? "Choose the new Wi-Fi" : "Enter your home Wi-Fi",
+          body: <>A setup page opens by itself. {paired ? "Pick your new Wi-Fi network" : "Pick your home Wi-Fi"}, type its password, choose your timezone, and tap {b("Connect & Restart")}.</>,
+          pic: <PortalMock />,
           see: "The page says Setup Complete.",
           tip: "Nothing popped up? Open a browser and go to 192.168.4.1." },
         { eyebrow: "On the Dot Dash", head: "Check for the Wi-Fi symbol",
-          body: <>The Dot Dash restarts, and its home screen shows the Wi-Fi symbol in the upper right.</>,
-          pic: <div className="flex justify-center"><div className="w-full max-w-[176px]"><OledHomeOnline /></div></div>,
+          body: <>The Dot Dash restarts, and its {paired ? "clock" : "home"} screen shows the Wi-Fi symbol in the upper right.</>,
+          pic: <div className="flex justify-center"><div className="w-full max-w-[176px]"><OledOnline clock={paired} /></div></div>,
           tip: <>Don't see the Wi-Fi symbol? Go back and <button onClick={() => setCur(0)} className="text-accent font-bold underline">try again</button>.</> },
         { eyebrow: "Back here", head: "Come back and continue",
-          body: <>Your phone rejoins your own Wi-Fi. Return to this page and tap Continue.</> },
+          body: <>Your phone rejoins your own Wi-Fi. Return to this page and tap {endLabel}.</> },
       ];
       const s = slides[cur];
       const last = cur === slides.length - 1;
+      const go = (k) => setCur(Math.max(0, Math.min(slides.length - 1, k)));
+      useEffect(() => {
+        const onKey = (e) => {
+          if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '') || e.metaKey || e.ctrlKey || e.altKey) return;
+          if (e.key === 'ArrowRight') setCur(c => Math.min(slides.length - 1, c + 1));
+          else if (e.key === 'ArrowLeft') setCur(c => Math.max(0, c - 1));
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [slides.length]);
+      // Swipe: a mostly-horizontal drag of 50px or more.
+      const onTouchStart = (e) => { const t = e.touches[0]; touch.current = { x: t.clientX, y: t.clientY }; };
+      const onTouchEnd = (e) => {
+        const st = touch.current; touch.current = null;
+        if (!st) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - st.x, dy = t.clientY - st.y;
+        if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+        go(cur + (dx < 0 ? 1 : -1));
+      };
       return (
-        <div className="text-left">
+        <div className="text-left" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           <div className="min-h-[26rem] space-y-3">
             <div className="text-xs font-bold uppercase tracking-widest text-accent">{s.eyebrow}</div>
             <h2 className="text-xl font-bold text-ink">{s.head}</h2>
@@ -5158,12 +5203,16 @@ return (
             {s.see && <p className="text-base text-ink leading-relaxed"><span className="font-bold">You'll see: </span>{s.see}</p>}
             {s.tip && <p className="bg-sunken rounded-control p-3 text-sm text-muted leading-relaxed">{s.tip}</p>}
           </div>
-          <div className="flex justify-center gap-2 mb-4" aria-label={`Step ${cur + 1} of ${slides.length}`}>
-            {slides.map((_, k) => <span key={k} className={`w-2 h-2 rounded-full ${k === cur ? 'bg-accent' : 'bg-rule'}`} />)}
+          <div className="flex justify-center mb-2">
+            {slides.map((_, k) => (
+              <button key={k} onClick={() => go(k)} aria-label={`Go to step ${k + 1} of ${slides.length}`} aria-current={k === cur ? 'step' : undefined} className="w-9 h-11 flex items-center justify-center">
+                <span className={`w-2.5 h-2.5 rounded-full ${k === cur ? 'bg-accent' : 'bg-rule'}`} />
+              </button>
+            ))}
           </div>
-          <button onClick={() => last ? onDone() : setCur(cur + 1)} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">{last ? 'Continue' : 'Next'}</button>
-          <div className="h-8 mt-2 text-center">
-            {cur > 0 && <button onClick={() => setCur(cur - 1)} className="text-sm text-muted underline py-1">Back</button>}
+          <div className="flex gap-3">
+            <button onClick={() => go(cur - 1)} disabled={cur === 0} className="w-1/3 bg-card text-ink font-bold py-4 rounded-control border border-rule disabled:opacity-40">Back</button>
+            <button onClick={() => last ? onDone() : go(cur + 1)} className="w-2/3 bg-accent text-accent-ink font-bold py-4 rounded-control">{last ? endLabel : 'Next'}</button>
           </div>
         </div>
       );
