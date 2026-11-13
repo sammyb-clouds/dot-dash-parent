@@ -2439,20 +2439,18 @@ return (
       );
 
       return (
-        <div className="w-full max-w-sm my-auto text-left space-y-4">
+        <div className="w-full max-w-sm my-auto text-left space-y-4" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           {phase === 'INTRO' && (
             <>
-              <h2 className="text-2xl font-bold text-center">{isNew ? 'Connect to Wi-Fi' : 'Wi-Fi Setup'}</h2>
-              <p className="text-muted text-center">
-                {isNew
-                  ? 'First, let’s get your Dot Dash onto your home Wi-Fi.'
-                  : 'Set up your Dot Dash’s Wi-Fi, or reconnect it if it’s not online.'}
+              <SlideCard s={{
+                eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
+                body: <>Press <strong className="font-bold">SELECT</strong> (front button) until you see TOOLS. Then press <strong className="font-bold">ENTER</strong> (top button) twice.</>,
+                pic: <OpenSetupMocks />,
+                see: "The screen says WI-FI SETUP.",
+              }} />
+              <p className="bg-sunken rounded-control p-3 text-sm text-muted leading-relaxed">
+                Next, iOS will ask to join <strong className="font-bold">Dot Dash Setup</strong>. Tap <strong className="font-bold">Join</strong>, and <strong className="font-bold">Allow</strong> if it asks about devices on your local network. Then you'll pick your Wi-Fi here in the app.
               </p>
-              <div className="space-y-3 pt-2">
-                {isNew && <Step n={1}>Turn on your Dot Dash. It will say <strong>HELLO!</strong> — press any button.</Step>}
-                <Step n={isNew ? 2 : 1}>Press <strong>SELECT</strong> (front button) until you see <SettingsIcon className="inline w-4 h-4 align-text-bottom" /> <strong>TOOLS</strong>, then press <strong>ENTER</strong> (top button).</Step>
-                <Step n={isNew ? 3 : 2}>Press <strong>ENTER</strong> on <strong>WIFI</strong>. When the screen says <strong>WI-FI SETUP</strong>, tap Next.</Step>
-              </div>
               {error && (
                 <div className="text-danger text-sm bg-sunken p-3 rounded-control">
                   {error}
@@ -2481,10 +2479,7 @@ return (
                   )}
                 </div>
               )}
-              <button onClick={joinAndScan} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control mt-4">{trouble ? 'Try again' : 'Next'}</button>
-              <p className="text-[13px] text-muted leading-relaxed text-center">
-                Your phone will briefly join your Dot Dash’s own network. iOS asks first — tap <strong>Join</strong>, and <strong>Allow</strong> if it asks about devices on your local network. If a Dot Dash setup page opens on top, tap <strong>Cancel</strong> — setup carries on here.
-              </p>
+              <button onClick={joinAndScan} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">{trouble ? 'Try again' : 'Next'}</button>
               {isNew && onSkip && (
                 <button onClick={onSkip} className="w-full text-accent text-sm font-bold py-2">My Dot Dash is already on Wi-Fi</button>
               )}
@@ -2500,8 +2495,9 @@ return (
 
           {phase === 'CHOOSE' && (
             <>
-              <h2 className="text-2xl font-bold text-center">Choose a network</h2>
-              <p className="text-muted text-center">These are the networks your Dot Dash can see from where it is.</p>
+              <div className="text-xs font-bold uppercase tracking-widest text-accent">In this app</div>
+              <h2 className="text-xl font-bold text-ink">{isNew ? 'Enter your home Wi-Fi' : 'Choose the Wi-Fi'}</h2>
+              <p className="text-base text-ink leading-relaxed">Pick your network and type its password. These are the networks your Dot Dash can see from where it is.</p>
               {error && <div className="text-danger text-sm bg-sunken p-3 rounded-control">{error}</div>}
               <div className="bg-sunken border border-rule rounded-control divide-y divide-rule max-h-64 overflow-y-auto">
                 {networks.map((n) => (
@@ -2557,6 +2553,7 @@ return (
               <div className="w-16 h-16 rounded-full bg-sunken text-ok flex items-center justify-center mx-auto"><Wifi className="w-8 h-8" /></div>
               <h2 className="text-2xl font-bold">Connected</h2>
               <p className="text-muted">{childName ? `${childName}’s Dot Dash` : 'Your Dot Dash'} is back online.</p>
+              <div className="flex justify-center"><div className="w-full max-w-[176px]"><OledOnline clock /></div></div>
               <button onClick={() => onDone(codeRef.current)} className="w-full bg-accent text-accent-ink font-bold py-4 rounded-control">Back to Settings</button>
             </div>
           )}
@@ -5142,6 +5139,23 @@ return (
     }
     const DownArrow = () => <svg viewBox="0 0 24 24" className="w-4 h-4 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>;
 
+    // Pieces shared by the web slides and the iOS flow, so the two cannot drift.
+    const OpenSetupMocks = () => (
+      <div className="flex flex-col items-center gap-1"><div className="w-full max-w-[176px]"><OledTools /></div><DownArrow /><div className="w-full max-w-[176px]"><OledToolsWifi /></div><DownArrow /><div className="w-full max-w-[176px]"><OledSetup /></div></div>
+    );
+    function SlideCard({ s }) {
+      return (
+        <div className="space-y-3">
+          <div className="text-xs font-bold uppercase tracking-widest text-accent">{s.eyebrow}</div>
+          <h2 className="text-xl font-bold text-ink">{s.head}</h2>
+          <p className="text-base text-ink leading-relaxed">{s.body}</p>
+          {s.pic}
+          {s.see && <p className="text-base text-ink leading-relaxed"><span className="font-bold">You'll see: </span>{s.see}</p>}
+          {s.tip && <p className="bg-sunken rounded-control p-3 text-sm text-muted leading-relaxed">{s.tip}</p>}
+        </div>
+      );
+    }
+
     // Web-only Wi-Fi setup (OnboardingWizard, WIFI_INSTRUCT). The iOS app runs
     // DeviceWifiSetup instead. One slide per place the user is looking.
     function WifiSetupSlides({ onDone, doneLabel, paired = false }) {
@@ -5152,7 +5166,7 @@ return (
       const slides = [
         { eyebrow: "On the Dot Dash", head: "Open Wi-Fi setup",
           body: <>Press {b("SELECT")} (front button) until you see TOOLS. Then press {b("ENTER")} (top button) twice.</>,
-          pic: <div className="flex flex-col items-center gap-1"><div className="w-full max-w-[176px]"><OledTools /></div><DownArrow /><div className="w-full max-w-[176px]"><OledToolsWifi /></div><DownArrow /><div className="w-full max-w-[176px]"><OledSetup /></div></div>,
+          pic: <OpenSetupMocks />,
           see: "The screen says WI-FI SETUP." },
         { eyebrow: "On your phone", head: "Join \u201CDot Dash Setup\u201D",
           body: <>Open your phone's Wi-Fi settings and tap {b("Dot Dash Setup")}. There's no password.</>,
@@ -5195,14 +5209,7 @@ return (
       };
       return (
         <div className="text-left" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          <div className="min-h-[24rem] space-y-3">
-            <div className="text-xs font-bold uppercase tracking-widest text-accent">{s.eyebrow}</div>
-            <h2 className="text-xl font-bold text-ink">{s.head}</h2>
-            <p className="text-base text-ink leading-relaxed">{s.body}</p>
-            {s.pic}
-            {s.see && <p className="text-base text-ink leading-relaxed"><span className="font-bold">You'll see: </span>{s.see}</p>}
-            {s.tip && <p className="bg-sunken rounded-control p-3 text-sm text-muted leading-relaxed">{s.tip}</p>}
-          </div>
+          <div className="min-h-[24rem]"><SlideCard s={s} /></div>
           <div className="flex justify-center mb-2">
             {slides.map((_, k) => (
               <button key={k} onClick={() => go(k)} aria-label={`Go to step ${k + 1} of ${slides.length}`} aria-current={k === cur ? 'step' : undefined} className="w-9 h-11 flex items-center justify-center">
