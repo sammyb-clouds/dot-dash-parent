@@ -2740,7 +2740,7 @@ return (
       const displayFriends = [...new Set([parentProfile?.virtualId, ...friends].filter(Boolean))];
 
       return (
-        <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col min-h-screen">
+        <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col">
            <div className="p-4 shrink-0 relative flex items-center justify-center" style={{ paddingTop: 'max(3rem, calc(env(safe-area-inset-top) + 1rem))' }}>
                <button onClick={onCancel} className="absolute left-4 p-2 text-muted hover:text-ink font-bold flex items-center transition-colors">
                   <ArrowLeft className="w-5 h-5 mr-1"/> Back
@@ -4475,7 +4475,7 @@ return (
             </div>
 
             {wifiHelpOpen && (
-              <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col min-h-screen">
+              <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col">
                 <div className="p-4 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}>
                   <button onClick={() => setWifiHelpOpen(false)} className="p-2 text-muted hover:text-ink font-bold flex items-center transition-colors">
                     <ArrowLeft className="w-5 h-5 mr-1"/> Back
@@ -4502,7 +4502,7 @@ return (
             )}
 
             {wifiSetupOpen && activeDevice && (
-              <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col min-h-screen">
+              <div className="fixed inset-0 z-50 bg-ground overflow-y-auto flex flex-col">
                 <div className="p-4 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1rem)' }}>
                   <button onClick={() => setWifiSetupOpen(false)} className="p-2 text-muted hover:text-ink font-bold flex items-center transition-colors">
                     <ArrowLeft className="w-5 h-5 mr-1"/> Back
@@ -5195,7 +5195,7 @@ return (
       };
       return (
         <div className="text-left" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          <div className="min-h-[26rem] space-y-3">
+          <div className="min-h-[24rem] space-y-3">
             <div className="text-xs font-bold uppercase tracking-widest text-accent">{s.eyebrow}</div>
             <h2 className="text-xl font-bold text-ink">{s.head}</h2>
             <p className="text-base text-ink leading-relaxed">{s.body}</p>
