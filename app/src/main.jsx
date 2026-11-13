@@ -5706,10 +5706,10 @@ return (
 
       const native = isNativeApp();
       const tutorials = [
+        { title: "Adding a Friend", icon: "friend", slides: ADD_FRIEND_SLIDES },
         { title: "Sending a Quick Message", icon: "env", slides: SEND_QUICK_SLIDES },
         { title: "Dot Dash Mode", icon: "morse", slides: DOT_DASH_MODE_SLIDES },
         { title: "Getting a Message", icon: "bell", slides: GET_MESSAGE_SLIDES },
-        { title: "Adding a Friend", icon: "friend", slides: ADD_FRIEND_SLIDES },
         { title: "How Points Work", icon: "joystick", slides: POINTS_SLIDES },
         { title: "Changing Wi-Fi Networks", icon: "rss",
           intro: "Your Dot Dash remembers up to five Wi-Fi networks and joins whichever it finds, so old ones are kept. Going somewhere new? You can also add networks ahead of time in Settings > Wi-Fi Networks.",
