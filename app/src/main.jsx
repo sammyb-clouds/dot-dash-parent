@@ -617,13 +617,32 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
     // VOICE NOTE PLAYBACK. A walkie note lives on the server for 7 days; msg.text
     // is its id. Two steps: a 5-minute pass for the OWNED device (cached per
     // device until ~30 s before it lapses), then the raw 16-bit LE 11025 Hz
-    // mono PCM. Decoded buffers are cached per note id so a replay costs
+    // mono PCM. Decoded notes are cached per note id so a replay costs
     // nothing. Only one note plays at a time, module-wide.
+    //
+    // It plays through ONE <audio> element, not Web Audio: on an iPhone, Web
+    // Audio with no microphone open is silenced by the ring/silent switch, so a
+    // note "played" with no sound (Sam, 2026-11-15). Media elements are not.
+    // iOS only lets an element play inside a tap, so the tap first plays a
+    // tiny silent clip on it, which unlocks that element for the real note
+    // after the fetch.
     // =========================================================================
     const VNOTE_BASE = 'https://app.dotdashdevice.com';
     const vnoteTokens = new Map();   // device hash -> { token, exp }
-    const vnoteBuffers = new Map();  // note id -> AudioBuffer
-    let vnoteCtx = null;
+    const vnoteBuffers = new Map();  // note id -> { url, duration } (a WAV blob)
+    let vnoteEl = null;
+    // 0.01 s of silence as a WAV, for unlocking the element inside the tap.
+    const VNOTE_SILENCE = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQQAAAAAAAAA';
+    function vnoteWav(pcm) {   // Float32 [-1,1] -> 16-bit mono WAV Blob at WIRE_RATE
+      const n = pcm.length, buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf);
+      const str = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+      str(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+      dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+      dv.setUint32(24, WIRE_RATE, true); dv.setUint32(28, WIRE_RATE * 2, true);
+      dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); str(36, 'data'); dv.setUint32(40, n * 2, true);
+      for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(pcm[i] * 32767), true);
+      return new Blob([buf], { type: 'audio/wav' });
+    }
     let vnoteCurrent = null;         // { stop } of whatever is playing now
     const PlayIcon = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><polygon points="6 4 20 12 6 20 6 4"/></svg>;
     const StopIcon = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><rect x="5" y="5" width="14" height="14" rx="2"/></svg>;
@@ -650,7 +669,7 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
       return j.token;
     }
 
-    async function vnoteLoad(user, deviceHash, noteId, ctx) {
+    async function vnoteLoad(user, deviceHash, noteId) {
       const cached = vnoteBuffers.get(noteId);
       if (cached) return cached;
       let token = await vnoteToken(user, deviceHash);
@@ -674,10 +693,9 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
       const gain = peak > 0 ? Math.min(16, 0.9 / peak) : 1;
       const pcm = new Float32Array(flat.length);
       for (let i = 0; i < flat.length; i++) { const v = flat[i] * gain; pcm[i] = v > 1 ? 1 : v < -1 ? -1 : v; }
-      const buf = ctx.createBuffer(1, pcm.length, WIRE_RATE);
-      buf.copyToChannel(pcm, 0);
-      vnoteBuffers.set(noteId, buf);
-      return buf;
+      const note = { url: URL.createObjectURL(vnoteWav(pcm)), duration: pcm.length / WIRE_RATE };
+      vnoteBuffers.set(noteId, note);
+      return note;
     }
 
     // `device` is the user's OWN device in this entry; its hash authorises the pass.
@@ -694,11 +712,17 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
         setErr('');
         if (vnoteCurrent) vnoteCurrent.stop();
         let cancelled = false;
-        let src = null;
+        let started = false;
+        // Inside the tap, before any await: make the element and unlock it.
+        if (!vnoteEl) { vnoteEl = new Audio(); vnoteEl.setAttribute('playsinline', ''); vnoteEl.preload = 'auto'; }
+        try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+        const el = vnoteEl;
+        el.onended = null;
+        if (!vnoteBuffers.has(noteId)) { el.src = VNOTE_SILENCE; el.play().catch(() => {}); }
         const handle = {
           stop: () => {
             cancelled = true;
-            if (src) { try { src.onended = null; src.stop(); } catch (e) {} }
+            if (started) { el.onended = null; try { el.pause(); } catch (e) {} }
             if (vnoteCurrent === handle) vnoteCurrent = null;
             if (alive.current) setPhase('idle');
           },
@@ -707,18 +731,16 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
         vnoteCurrent = handle;
         setPhase('loading');
         try {
-          // Created on the tap: iOS only unlocks audio inside a user gesture.
-          if (!vnoteCtx) vnoteCtx = new (window.AudioContext || window.webkitAudioContext)();
-          if (vnoteCtx.state === 'suspended') vnoteCtx.resume().catch(() => {});
           const hash = device.hashedId || await hashId(device.identity.name + device.identity.pin);
-          const buf = await vnoteLoad(user, hash, noteId, vnoteCtx);
+          const note = await vnoteLoad(user, hash, noteId);
           if (cancelled) return;
-          if (alive.current) setDur(buf.duration);
-          src = vnoteCtx.createBufferSource();
-          src.buffer = buf;
-          src.connect(vnoteCtx.destination);
-          src.onended = () => handle.stop();
-          src.start();
+          if (alive.current) setDur(note.duration);
+          el.src = note.url;
+          el.currentTime = 0;
+          el.onended = () => handle.stop();
+          started = true;
+          await el.play();
+          if (cancelled) return;
           if (alive.current) setPhase('playing');
         } catch (e) {
           if (vnoteCurrent === handle) vnoteCurrent = null;
