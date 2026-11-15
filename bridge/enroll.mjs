@@ -728,6 +728,45 @@ async function callToken(token, rawBody, ip) {
   return [200, { status: 'ok', tag, token: signed, exp, url: VOICE_URL }];
 }
 
+// ---- Voice note playback passes ---------------------------------------------
+// /vnote-token lets the app play a walkie voice note from its Log. Same secret as
+// the call pass, but a different prefix inside the signed string ("vn1." vs
+// "v1."), so neither pass can ever be used as the other.
+// Byte-exact: "vn1." + b64url(payload) + "." + b64url(HMAC(secret, "vn1." + b64url(payload)))
+// payload key order is fixed: dev, uid, exp. relay/voice_notes.py verifies it.
+// Reusable until exp (5 minutes): one pass covers every note involving that
+// device, and voice_notes.py decides per note (sender, or recipient once sent).
+function signVnoteToken(payloadObj, secretBuf) {
+  const body = 'vn1.' + b64url(JSON.stringify(payloadObj));
+  return body + '.' + b64url(crypto.createHmac('sha256', secretBuf).update(body).digest());
+}
+const vnoteRecent = new Map();         // uid -> token timestamps
+const VNOTE_TOKENS_PER_10_MIN = 30;
+
+async function vnoteToken(token, rawBody, ip) {
+  if (!voiceSecret) return [503, { status: 'voice_disabled' }];
+  let device;
+  try { device = JSON.parse(rawBody)?.device; } catch { return [400, { status: 'bad-request' }]; }
+  if (typeof device !== 'string' || !/^[0-9a-f]{64}$/.test(device)) return [400, { status: 'bad-request' }];
+  const uid = await verifyIdToken(token);
+  if (!uid) {
+    log('INFO', `vnote-token refused from ${ip}: bad token`);
+    return [401, { status: 'unauthenticated' }];
+  }
+  const now = Date.now();
+  const recent = (vnoteRecent.get(uid) || []).filter((t) => now - t < 600_000);
+  recent.push(now); vnoteRecent.set(uid, recent);
+  if (recent.length > VNOTE_TOKENS_PER_10_MIN) return [429, { status: 'slow-down' }];
+
+  // Same ownership source as app-login and call-token.
+  const g = await grantsFor(uid);
+  if (!g.devices.includes(device)) return [403, { status: 'forbidden' }];
+
+  const exp = Math.floor(now / 1000) + 300;
+  log('INFO', `VNOTE TOKEN uid=${uid.slice(0, 8)}.. dev=${short(device)}`);
+  return [200, { status: 'ok', token: signVnoteToken({ dev: device, uid, exp }, voiceSecret), exp }];
+}
+
 // Daily: every app role re-derived from the database, so a grant can never
 // outlive the identity behind it for long -- whatever the phone does. An account
 // with no profile and no devices left (deleted, or never set up) loses its login;
@@ -815,6 +854,27 @@ const server = http.createServer(async (req, res) => {
       return send(code, body);
     } catch (e) {
       log('ERROR', `call-token failed: ${e.message}`);
+      return send(503, { status: 'unavailable' });
+    }
+  }
+
+  if (req.url === '/vnote-token') {
+    const origin = req.headers.origin;
+    if (origin && APP_ORIGINS.has(origin)) Object.assign(extra, { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' });
+    extra['Cache-Control'] = 'no-store';
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { ...extra, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600' });
+      return res.end();
+    }
+    if (req.method !== 'POST') return send(405, { status: 'method' });
+    const token = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '')?.[1];
+    let rawBody;
+    try { rawBody = await readBody(req); } catch { return send(400, { status: 'bad-request' }); }
+    try {
+      const [code, body] = await vnoteToken(token, rawBody, ip);
+      return send(code, body);
+    } catch (e) {
+      log('ERROR', `vnote-token failed: ${e.message}`);
       return send(503, { status: 'unavailable' });
     }
   }
