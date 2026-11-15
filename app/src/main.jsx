@@ -24,7 +24,7 @@ import Mark from './Mark.jsx';
 // explains why any other size fringes.
 import DeviceIcon from './DeviceIcons.jsx';
 import { walkieCall } from './walkieCall.js';
-import { isVoicePayload } from './walkieAudio.js';
+import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walkieAudio.js';
 
     // =========================================================================
     // ✅ YOUR FIREBASE CONFIGURATION ✅
@@ -612,6 +612,134 @@ import { isVoicePayload } from './walkieAudio.js';
         <span className="text-[13px] text-muted">{label}</span>
       </div>
     );
+
+    // =========================================================================
+    // VOICE NOTE PLAYBACK. A walkie note lives on the server for 7 days; msg.text
+    // is its id. Two steps: a 5-minute pass for the OWNED device (cached per
+    // device until ~30 s before it lapses), then the raw 16-bit LE 11025 Hz
+    // mono PCM. Decoded buffers are cached per note id so a replay costs
+    // nothing. Only one note plays at a time, module-wide.
+    // =========================================================================
+    const VNOTE_BASE = 'https://app.dotdashdevice.com';
+    const vnoteTokens = new Map();   // device hash -> { token, exp }
+    const vnoteBuffers = new Map();  // note id -> AudioBuffer
+    let vnoteCtx = null;
+    let vnoteCurrent = null;         // { stop } of whatever is playing now
+    const PlayIcon = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><polygon points="6 4 20 12 6 20 6 4"/></svg>;
+    const StopIcon = ({className}) => <svg viewBox="0 0 24 24" fill="currentColor" className={className}><rect x="5" y="5" width="14" height="14" rx="2"/></svg>;
+    const SpinnerIcon = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={`${className} animate-spin`}><path d="M12 3a9 9 0 1 0 9 9"/></svg>;
+    const fmtDuration = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+    async function vnoteToken(user, deviceHash, force = false) {
+      const hit = vnoteTokens.get(deviceHash);
+      if (!force && hit && Date.now() < hit.exp * 1000 - 30000) return hit.token;
+      let res;
+      try {
+        const idToken = await user.getIdToken();
+        res = await fetch(`${VNOTE_BASE}/vnote-token`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device: deviceHash }),
+        });
+      } catch (e) { throw { friendly: "Couldn't load this voice note." }; }
+      if (res.status === 429) throw { friendly: 'Too many tries. Wait a moment and try again.' };
+      if (!res.ok) throw { friendly: "Couldn't load this voice note." };
+      const j = await res.json().catch(() => null);
+      if (!j || !j.token) throw { friendly: "Couldn't load this voice note." };
+      vnoteTokens.set(deviceHash, { token: j.token, exp: j.exp });
+      return j.token;
+    }
+
+    async function vnoteLoad(user, deviceHash, noteId, ctx) {
+      const cached = vnoteBuffers.get(noteId);
+      if (cached) return cached;
+      let token = await vnoteToken(user, deviceHash);
+      const get = async () => {
+        try {
+          return await fetch(`${VNOTE_BASE}/vnote/play/${encodeURIComponent(noteId)}`, { headers: { Authorization: `Bearer ${token}` } });
+        } catch (e) { throw { friendly: "Couldn't load this voice note." }; }
+      };
+      let res = await get();
+      if (res.status === 401) { token = await vnoteToken(user, deviceHash, true); res = await get(); }
+      if (res.status === 404) throw { friendly: 'This voice note has expired.' };
+      if (res.status === 429) throw { friendly: 'Too many tries. Wait a moment and try again.' };
+      if (!res.ok) throw { friendly: "Couldn't load this voice note." };
+      const raw = await res.arrayBuffer();
+      if (raw.byteLength < 2) throw { friendly: "Couldn't load this voice note." };
+      // The recording is quiet (the walkie plays it ~x12 with a limiter), so
+      // scale the peak to ~0.9, gain capped at 16, then clamp.
+      const flat = int16LEToFloat(raw, 1, makeHighPass());
+      let peak = 0;
+      for (let i = 0; i < flat.length; i++) { const a = Math.abs(flat[i]); if (a > peak) peak = a; }
+      const gain = peak > 0 ? Math.min(16, 0.9 / peak) : 1;
+      const pcm = new Float32Array(flat.length);
+      for (let i = 0; i < flat.length; i++) { const v = flat[i] * gain; pcm[i] = v > 1 ? 1 : v < -1 ? -1 : v; }
+      const buf = ctx.createBuffer(1, pcm.length, WIRE_RATE);
+      buf.copyToChannel(pcm, 0);
+      vnoteBuffers.set(noteId, buf);
+      return buf;
+    }
+
+    // `device` is the user's OWN device in this entry; its hash authorises the pass.
+    function VoiceNotePlayer({ noteId, device, user }) {
+      const [phase, setPhase] = useState('idle');   // idle | loading | playing
+      const [err, setErr] = useState('');
+      const [dur, setDur] = useState(() => vnoteBuffers.get(noteId)?.duration || 0);
+      const me = useRef(null);
+      const alive = useRef(true);
+      useEffect(() => { alive.current = true; return () => { alive.current = false; me.current?.stop(); }; }, []);
+
+      const tap = async () => {
+        if (phase !== 'idle') { me.current?.stop(); return; }
+        setErr('');
+        if (vnoteCurrent) vnoteCurrent.stop();
+        let cancelled = false;
+        let src = null;
+        const handle = {
+          stop: () => {
+            cancelled = true;
+            if (src) { try { src.onended = null; src.stop(); } catch (e) {} }
+            if (vnoteCurrent === handle) vnoteCurrent = null;
+            if (alive.current) setPhase('idle');
+          },
+        };
+        me.current = handle;
+        vnoteCurrent = handle;
+        setPhase('loading');
+        try {
+          // Created on the tap: iOS only unlocks audio inside a user gesture.
+          if (!vnoteCtx) vnoteCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if (vnoteCtx.state === 'suspended') vnoteCtx.resume().catch(() => {});
+          const hash = device.hashedId || await hashId(device.identity.name + device.identity.pin);
+          const buf = await vnoteLoad(user, hash, noteId, vnoteCtx);
+          if (cancelled) return;
+          if (alive.current) setDur(buf.duration);
+          src = vnoteCtx.createBufferSource();
+          src.buffer = buf;
+          src.connect(vnoteCtx.destination);
+          src.onended = () => handle.stop();
+          src.start();
+          if (alive.current) setPhase('playing');
+        } catch (e) {
+          if (vnoteCurrent === handle) vnoteCurrent = null;
+          if (alive.current && !cancelled) { setErr((e && e.friendly) || "Couldn't load this voice note."); setPhase('idle'); }
+        }
+      };
+
+      return (
+        <div className="flex items-center">
+          <button onClick={tap} aria-label={phase === 'playing' ? 'Stop voice note' : 'Play voice note'}
+                  className="flex items-center text-ink min-h-[32px]">
+            {phase === 'loading' ? <SpinnerIcon className="w-4 h-4 mr-2 shrink-0" />
+              : phase === 'playing' ? <StopIcon className="w-4 h-4 mr-2 shrink-0" />
+              : <PlayIcon className="w-4 h-4 mr-2 shrink-0" />}
+            <span>{phase === 'loading' ? 'Loading…' : 'Voice note'}</span>
+            {dur > 0 && phase !== 'loading' && <span className="ml-2 text-muted">{fmtDuration(dur)}</span>}
+          </button>
+          {err && <span className="ml-3 text-[13px] text-muted">{err}</span>}
+        </div>
+      );
+    }
 
     async function hashId(message) {
       if (window.crypto && window.crypto.subtle) {
@@ -4677,7 +4805,7 @@ return (
                   : 'bg-recv text-recv-ink border border-rule rounded-bl-[6px]'}`}>
                   {msg.type === 'PULSE' && <Volume2 className="inline mr-2 w-5 h-5" />}
                   {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
-                  {msg.type === 'VNOTE' && <span><Volume2 className="inline mr-2 w-5 h-5" />Voice note</span>}
+                  {msg.type === 'VNOTE' && (activeDevice && user ? <VoiceNotePlayer noteId={msg.text} device={activeDevice} user={user} /> : <span><Volume2 className="inline mr-2 w-5 h-5" />Voice note</span>)}
                 </div>
                 <span className="text-[13px] text-muted mt-1 px-1">{msg.timestamp}</span>
               </div>
@@ -4947,6 +5075,7 @@ return (
                 strings the Dot Dash itself displayed. */}
             {(() => { const dv = dayDividers(activeMonitorMsgs); return activeMonitorMsgs.map((msg, i) => {
               const isOutgoing = msg.direction === 'out';
+              const monitorDevice = devices.find(d => d.id === activeChildId);
               const other = displayName(whoIs(msg.otherParty));
               const child = displayName(activeChildLabel);
               return (
@@ -4967,8 +5096,8 @@ return (
                     {msg.type === 'PULSE' && <div className="flex items-center text-muted"><Volume2 className="w-4 h-4 mr-2 shrink-0" /> Buzz / Notification</div>}
                     {(msg.type === 'MORSE' || msg.type === 'TEXT') && <span>{msg.text}</span>}
                     {/* A walkie voice note (walkie repo VoiceNote.ino). msg.text is the
-                        note's id on the server; the app cannot play it yet. */}
-                    {msg.type === 'VNOTE' && <div className="flex items-center text-muted"><Volume2 className="w-4 h-4 mr-2 shrink-0" /> Voice note</div>}
+                        note's id on the server; VoiceNotePlayer fetches and plays it. */}
+                    {msg.type === 'VNOTE' && (monitorDevice && user ? <VoiceNotePlayer noteId={msg.text} device={monitorDevice} user={user} /> : <div className="flex items-center text-muted"><Volume2 className="w-4 h-4 mr-2 shrink-0" /> Voice note</div>)}
                   </div>
                 </div>
                 </React.Fragment>
