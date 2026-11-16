@@ -220,17 +220,18 @@
     .shot img { filter:brightness(.86) contrast(1.03); }
   }
 
-  /* ---- "What's a Dot Dash?" list. Six facts at heading size in the device
-     face. The markers are the name itself: a dot, then a dash, alternating
+  /* ---- "What's a Dot Dash?" list. Six facts at heading size in the body
+     face -- the device face was hard to read at this length. The markers are the name itself: a dot, then a dash, alternating
      down the list -- drawn as boxes so they stay hard-edged like the type. ---- */
-  ul.feats { list-style:none; padding:0; margin:6px 0 2px; }
-  ul.feats li { position:relative; padding-left:40px; margin:0 0 16px;
-                font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
-                font-size:22px; line-height:1.3; }
+  ul.feats { list-style:none; padding:0; margin:26px 0 8px; }
+  ul.feats li { position:relative; padding-left:44px; margin:0 0 22px;
+                font-size:22px; font-weight:600; line-height:1.35; }
   ul.feats li:last-child { margin-bottom:0; }
-  ul.feats li::before { content:""; position:absolute; left:0; top:10px;
+  ul.feats li::before { content:""; position:absolute; left:0; top:11px;
                         width:8px; height:8px; background:var(--accent); }
   ul.feats li:nth-child(even)::before { width:24px; }
+  #what { padding-top:26px; padding-bottom:28px; }
+  #what .head { padding-bottom:18px; border-bottom:1px solid var(--rule); margin-bottom:0; }
 
   /* ---- Numbered steps ---- */
   ol.steps { list-style:none; counter-reset:s; padding:0; margin:0; }
@@ -261,8 +262,8 @@
   footer .who { margin-top:8px; }
 
   @media (max-width: 560px) {
-    ul.feats li { font-size:18px; padding-left:34px; }
-    ul.feats li::before { top:8px; }
+    ul.feats li { font-size:19px; padding-left:38px; margin-bottom:18px; }
+    ul.feats li::before { top:9px; }
     main { padding:28px 16px 8px; }
     h1 { font-size:26px; }
     .lede { font-size:17px; }
