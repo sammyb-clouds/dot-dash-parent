@@ -234,9 +234,8 @@
   ul.feats li:nth-child(even) b::before { width:20px; }
   ul.feats span { display:block; color:var(--muted); line-height:1.45; }
   @media (max-width: 560px) { ul.feats { grid-template-columns:1fr; } }
-  .more { text-align:center; margin:22px 0 0; padding-top:18px; border-top:1px solid var(--rule); }
-  .more p { margin:0; }
-  .more .cta { margin-top:12px; }
+  .more { text-align:center; font-weight:700; margin:26px 0 0; }
+  .more + .cta-mid { margin-top:12px; }
 
   /* ---- Numbered steps ---- */
   ol.steps { list-style:none; counter-reset:s; padding:0; margin:0; }
@@ -342,10 +341,6 @@
       <li><b>Works with phones</b><span>Communicate with other Dot Dashes and mobile phones</span></li>
       <li><b>Games</b><span>Earn points to play arcade and 2-person games</span></li>
     </ul>
-    <div class="more">
-      <p>Want to know more?</p>
-      <div class="cta"><a class="secondary" href="/faq">Read the FAQ</a></div>
-    </div>
   </section>
 
   <section id="watch">
@@ -391,6 +386,7 @@
   <!-- The FAQ's own door, before the last section asks whether you are still
        deciding. It left the hero when "Want one?" took the single slot there,
        and stayed out when the signup box replaced that button in turn. -->
+  <p class="more">Want to know more?</p>
   <div class="cta cta-mid">
     <a class="secondary" href="/faq">Read the FAQ</a>
   </div>
