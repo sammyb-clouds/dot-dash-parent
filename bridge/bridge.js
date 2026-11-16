@@ -262,6 +262,12 @@ function parseMessage(parts, payload) {
   };
 }
 
+/** "VNOTE,<noteId>,<sender>" on a device's inbox, in parseMessage's shape. */
+export function parseInboxVoiceNote(payload) {
+  const m = /^VNOTE,([A-Za-z0-9_-]+),([^,]+)$/.exec(String(payload));
+  return m ? { msgType: 'VNOTE', text: m[1], sender: m[2] } : null;
+}
+
 /**
  * A copy of a message a child SENT, carried on doorbell/monitor/<hash>/<stamp>.
  * Payload is "TYPE,TEXT,SENDER" with the recipient's hash appended by firmware
@@ -274,7 +280,9 @@ export function parseMonitorCopy(payload) {
   const firstComma = payload.indexOf(',');
   if (firstComma < 1) return null;
   const type = payload.slice(0, firstComma);
-  if (!['TEXT', 'MORSE', 'PULSE'].includes(type)) return null;
+  // VNOTE is recorded for the Log (its text is the note id the app plays) but
+  // never notified -- parseMessage, which drives pushes, still refuses it.
+  if (!['TEXT', 'MORSE', 'PULSE', 'VNOTE'].includes(type)) return null;
 
   let rest = payload.slice(firstComma + 1);
   let target = '';
@@ -613,7 +621,9 @@ async function recordMonitorFromTopic(topic, payload) {
       type: copy.type, text: copy.text, direction: 'out', otherParty: copy.target || copy.sender,
     });
   } else {
-    const m = parseMessage(parts, payload);
+    // parseMessage only knows the notifiable types; a voice note TO a device
+    // is still history for its Log, so read that one here.
+    const m = parseMessage(parts, payload) || parseInboxVoiceNote(payload);
     if (!m) return;
     await recordMonitor(dev.uid, dev.deviceId, id, {
       type: m.msgType, text: m.text, direction: 'in', otherParty: m.sender,
