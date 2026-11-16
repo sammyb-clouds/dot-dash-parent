@@ -33,8 +33,6 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Dot Dash uses your local network to set up your device’s Wi-Fi from the app.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Dot Dash uses the microphone when you record a voice note or talk on a walkie call with a Dot Dash.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
