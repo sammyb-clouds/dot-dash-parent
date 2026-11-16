@@ -491,6 +491,10 @@ const parentHashAcls = (h) => [
   ['subscribePattern', `doorbell/msg/${h}/#`],
   ['publishClientSend', `doorbell/msg/${h}`],          // clearing a retained message once saved
   ['publishClientSend', `doorbell/msg/${h}/#`],
+  // The app's retained "1" here tells this account's walkies it can take a
+  // voice note (VOICE in their compose list). Its own marker, not
+  // score/voice: that one offers CALL, and the app cannot answer a call.
+  ['publishClientSend', `doorbell/score/vnote/${h}`],
 ];
 const deviceHashAcls = (h) => [
   ['subscribePattern', `doorbell/presence/${h}`],
@@ -745,8 +749,8 @@ const VNOTE_TOKENS_PER_10_MIN = 30;
 
 async function vnoteToken(token, rawBody, ip) {
   if (!voiceSecret) return [503, { status: 'voice_disabled' }];
-  let device;
-  try { device = JSON.parse(rawBody)?.device; } catch { return [400, { status: 'bad-request' }]; }
+  let device, send;
+  try { ({ device, send } = JSON.parse(rawBody) || {}); } catch { return [400, { status: 'bad-request' }]; }
   if (typeof device !== 'string' || !/^[0-9a-f]{64}$/.test(device)) return [400, { status: 'bad-request' }];
   const uid = await verifyIdToken(token);
   if (!uid) {
@@ -763,6 +767,13 @@ async function vnoteToken(token, rawBody, ip) {
   if (!g.devices.includes(device)) return [403, { status: 'forbidden' }];
 
   const exp = Math.floor(now / 1000) + 300;
+  if (send === true) {
+    // A SEND pass: one note from this account's own id to this one device.
+    // Needs the parent id to be this account's too (same identity check).
+    if (!g.parent) return [403, { status: 'forbidden' }];
+    log('INFO', `VNOTE SEND TOKEN uid=${uid.slice(0, 8)}.. ${short(g.parent)} -> ${short(device)}`);
+    return [200, { status: 'ok', token: signVnoteToken({ dev: g.parent, to: device, act: 'send', uid, exp }, voiceSecret), exp }];
+  }
   log('INFO', `VNOTE TOKEN uid=${uid.slice(0, 8)}.. dev=${short(device)}`);
   return [200, { status: 'ok', token: signVnoteToken({ dev: device, uid, exp }, voiceSecret), exp }];
 }

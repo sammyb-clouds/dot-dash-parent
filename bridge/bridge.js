@@ -239,8 +239,11 @@ function parseMessage(parts, payload) {
   const type = payload.slice(0, firstComma);
   const text = payload.slice(firstComma + 1, lastComma);
   const sender = payload.slice(lastComma + 1);
-  if (!['TEXT', 'MORSE', 'PULSE'].includes(type)) return null;
+  if (!['TEXT', 'MORSE', 'PULSE', 'VNOTE'].includes(type)) return null;
   if (!sender) return null;
+  // A voice note's text is the note's id on the server: never shown, never
+  // put in a notification. Anything that is not a well-formed id is dropped.
+  if (type === 'VNOTE' && !/^[A-Za-z0-9_-]{22}$/.test(text)) return null;
 
   // What was actually said, whichever way it was said. A parent glancing at a
   // lock screen wants the message, not a description of it -- and whether it
@@ -248,6 +251,7 @@ function parseMessage(parts, payload) {
   // implementation detail of the device, not something they asked about.
   let body;
   if (type === 'PULSE') body = 'Buzzed you.';
+  else if (type === 'VNOTE') body = 'Sent you a voice note.';
   else body = text || 'Sent you a message.';
 
   return {
@@ -257,15 +261,9 @@ function parseMessage(parts, payload) {
     level: 'active',
     route: 'parent',
     sender,          // the child's NAME+PIN, which is how the app labels chats
-    msgType: type,   // TEXT | MORSE | PULSE, kept raw for the stored copy
+    msgType: type,   // TEXT | MORSE | PULSE | VNOTE, kept raw for the stored copy
     text,
   };
-}
-
-/** "VNOTE,<noteId>,<sender>" on a device's inbox, in parseMessage's shape. */
-export function parseInboxVoiceNote(payload) {
-  const m = /^VNOTE,([A-Za-z0-9_-]+),([^,]+)$/.exec(String(payload));
-  return m ? { msgType: 'VNOTE', text: m[1], sender: m[2] } : null;
 }
 
 /**
@@ -280,8 +278,7 @@ export function parseMonitorCopy(payload) {
   const firstComma = payload.indexOf(',');
   if (firstComma < 1) return null;
   const type = payload.slice(0, firstComma);
-  // VNOTE is recorded for the Log (its text is the note id the app plays) but
-  // never notified -- parseMessage, which drives pushes, still refuses it.
+  // VNOTE: its text is the note id the app plays.
   if (!['TEXT', 'MORSE', 'PULSE', 'VNOTE'].includes(type)) return null;
 
   let rest = payload.slice(firstComma + 1);
@@ -621,9 +618,7 @@ async function recordMonitorFromTopic(topic, payload) {
       type: copy.type, text: copy.text, direction: 'out', otherParty: copy.target || copy.sender,
     });
   } else {
-    // parseMessage only knows the notifiable types; a voice note TO a device
-    // is still history for its Log, so read that one here.
-    const m = parseMessage(parts, payload) || parseInboxVoiceNote(payload);
+    const m = parseMessage(parts, payload);
     if (!m) return;
     await recordMonitor(dev.uid, dev.deviceId, id, {
       type: m.msgType, text: m.text, direction: 'in', otherParty: m.sender,
