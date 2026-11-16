@@ -223,12 +223,17 @@
   /* ---- "What's a Dot Dash?" list. Six facts in the page's own body
      type, same size and weight as every other section. The markers are the name itself: a dot, then a dash, alternating
      down the list -- drawn as boxes so they stay hard-edged like the type. ---- */
-  ul.feats { list-style:none; padding:0; margin:0; }
-  ul.feats li { position:relative; padding-left:38px; margin:0 0 10px; }
+  ul.feats { list-style:none; padding:0; margin:0; text-align:center; }
+  ul.feats li { margin:0 0 10px; }
   ul.feats li:last-child { margin-bottom:0; }
-  ul.feats li::before { content:""; position:absolute; left:0; top:10px;
-                        width:8px; height:8px; background:var(--accent); }
-  ul.feats li:nth-child(even)::before { width:24px; }
+  /* Both markers sit in the same 24px slot, so the dot rows and the dash
+     rows centre on the same axis. */
+  ul.feats li::before { content:""; display:inline-block; vertical-align:middle;
+                        width:8px; height:8px; margin:-2px 20px 0 8px; background:var(--accent); }
+  ul.feats li:nth-child(even)::before { width:24px; margin-left:0; margin-right:12px; }
+  .more { text-align:center; margin:22px 0 0; padding-top:18px; border-top:1px solid var(--rule); }
+  .more p { margin:0; }
+  .more .cta { margin-top:12px; }
 
   /* ---- Numbered steps ---- */
   ol.steps { list-style:none; counter-reset:s; padding:0; margin:0; }
@@ -334,6 +339,10 @@
       <li>Communicate with other Dot Dashes and mobile phones</li>
       <li>Earn points to play arcade and 2-person games</li>
     </ul>
+    <div class="more">
+      <p>Want to know more?</p>
+      <div class="cta"><a class="secondary" href="/faq">Read the FAQ</a></div>
+    </div>
   </section>
 
   <section id="watch">
