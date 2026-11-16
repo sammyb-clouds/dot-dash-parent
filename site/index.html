@@ -220,17 +220,20 @@
     .shot img { filter:brightness(.86) contrast(1.03); }
   }
 
-  /* ---- "What's a Dot Dash?" list. Six facts in the page's own body
-     type, same size and weight as every other section. The markers are the name itself: a dot, then a dash, alternating
-     down the list -- drawn as boxes so they stay hard-edged like the type. ---- */
-  ul.feats { list-style:none; padding:0; margin:0; text-align:center; }
-  ul.feats li { margin:0 0 10px; }
-  ul.feats li:last-child { margin-bottom:0; }
-  /* Both markers sit in the same 24px slot, so the dot rows and the dash
-     rows centre on the same axis. */
-  ul.feats li::before { content:""; display:inline-block; vertical-align:middle;
-                        width:8px; height:8px; margin:-2px 20px 0 8px; background:var(--accent); }
-  ul.feats li:nth-child(even)::before { width:24px; margin-left:0; margin-right:12px; }
+  /* ---- "What's a Dot Dash?" tiles. Six facts, each a short label in the
+     device face over one line of body type -- the page's own split between
+     labels and explanation. The markers are the name itself: a dot, then a
+     dash, alternating, drawn as boxes so they stay hard-edged like the type. ---- */
+  ul.feats { list-style:none; padding:0; margin:4px 0 0;
+             display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  ul.feats li { border:1px solid var(--rule); border-radius:12px; padding:14px 16px; }
+  ul.feats b { display:flex; align-items:center; gap:10px; margin:0 0 4px;
+               font-family:"Departure Mono",ui-monospace,"SF Mono",Menlo,monospace;
+               font-weight:400; font-size:16px; line-height:1.3; text-transform:uppercase; }
+  ul.feats b::before { content:""; flex:0 0 auto; width:8px; height:8px; background:var(--accent); }
+  ul.feats li:nth-child(even) b::before { width:20px; }
+  ul.feats span { display:block; color:var(--muted); line-height:1.45; }
+  @media (max-width: 560px) { ul.feats { grid-template-columns:1fr; } }
   .more { text-align:center; margin:22px 0 0; padding-top:18px; border-top:1px solid var(--rule); }
   .more p { margin:0; }
   .more .cta { margin-top:12px; }
@@ -332,12 +335,12 @@
       <h2>What’s a Dot Dash?</h2>
     </div>
     <ul class="feats">
-      <li>Hand-built, palm-sized, WiFi messenger</li>
-      <li>Simple and intuitive 2 button interface</li>
-      <li>Tiny black &amp; white display</li>
-      <li>Type using Morse code or choose pre-written messages</li>
-      <li>Communicate with other Dot Dashes and mobile phones</li>
-      <li>Earn points to play arcade and 2-person games</li>
+      <li><b>Hand-built</b><span>Palm-sized WiFi messenger</span></li>
+      <li><b>2 buttons</b><span>Simple and intuitive interface</span></li>
+      <li><b>Tiny display</b><span>B&amp;W and under 1" long</span></li>
+      <li><b>Morse code</b><span>Tap it out, or choose pre-written messages</span></li>
+      <li><b>Works with phones</b><span>Communicate with other Dot Dashes and mobile phones</span></li>
+      <li><b>Games</b><span>Earn points to play arcade and 2-person games</span></li>
     </ul>
     <div class="more">
       <p>Want to know more?</p>
