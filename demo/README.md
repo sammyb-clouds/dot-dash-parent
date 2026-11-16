@@ -42,6 +42,13 @@ Note it creates the Auth user over the Identity Toolkit REST API rather than
 `firebase-admin/auth`: that module pulls in `jwks-rsa` -> `jose`, which is ESM
 and cannot be `require()`d on the droplet's Node 18.
 
+## Walkie mode (for the microphone review)
+
+`DEMO_WALKIE=1` in `demo.env` makes the device publish the walkie marker, so
+the app shows the Voice note | Walkie buttons for the demo account. Off by
+default. Turn it on only when the build in review carries the microphone
+permission; see `docs/app-store-review.md` section 6.
+
 ## The demo identity
 
     parent    DEMO0101
@@ -78,6 +85,16 @@ collection and anyone can send a friend request to it.
 > deletion.
 >
 > Notifications are off until enabled in Settings.
+>
+> Microphone: some Dot Dash models have a microphone and speaker. For those, the
+> Chat tab shows two buttons below the message box, Voice note and Walkie. The
+> app uses the microphone only while you hold the record button (a voice note of
+> up to 10 seconds) or the talk button during a push-to-talk call with the
+> device, and it asks permission the first time. The demo device is set up as
+> one of these models, so you can record and send a voice note from Chat and it
+> will confirm that it arrived. A live call needs the physical device to answer,
+> so on the demo account a call will not connect; the attached video
+> shows a call with real hardware.
 
 **Sign-in required:** yes. Credentials from `provision-demo.mjs`.
 

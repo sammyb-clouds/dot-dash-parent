@@ -18,11 +18,12 @@ both are true, and both are checked.
 | Identifiers | User ID | The account id, and the `NAME+PIN` virtual ids messages are addressed to |
 | Identifiers | Device ID | The paired hardware's identifier, and the push notification token |
 | User Content | Other User Content | Message text, and the approved phrase lists |
+| User Content | Audio Data | Voice notes: up to 10 seconds of recorded audio, kept on the server for 7 days so the recipient can play it. Declare it from the first build that carries the microphone permission. Live walkie calls are relayed and never stored, so they are not "collected" in Apple's sense |
 | Other Data | Other Data Types | Wi-Fi **network names** saved for a device. Passwords are no longer stored — see below |
 
 Nothing under Usage Data, Diagnostics, Location, Contacts, Health, Financial,
-Browsing or Search History — the app collects none of it, and the device has no
-microphone, camera or GPS.
+Browsing or Search History — the app collects none of it. No device has a
+camera or GPS; only the walkie model has a microphone.
 
 **Under-declaring is the common rejection**, and on a children's product it is
 the bad kind. The Wi-Fi row in particular is easy to forget.
@@ -87,3 +88,23 @@ https://app.dotdashdevice.com/privacy.html.
 - `ios-port` still needs merging to `main`
 - keep `dotdash-demo.service` running through review and after — reviewers come
   back to a build weeks later
+
+## 6. Microphone (voice notes and walkie calls)
+
+Added 2026-11-16. The first build with `NSMicrophoneUsageDescription` needs all
+of these, in this order:
+
+1. **App Privacy**: add *User Content -> Audio Data* (row in section 1).
+2. **Privacy policy**: the voice-note row in section 3 and the 7-day line in
+   section 7 of `legal/privacy.html` must be LIVE at the policy URL before the
+   build is submitted.
+3. **Demo account**: restart `dotdash-demo` with `DEMO_WALKIE=1` in `demo.env`,
+   so the reviewer sees the Voice note | Walkie buttons and can trigger the
+   microphone prompt. Do this only once the build in review has the permission.
+4. **Review notes**: paste the microphone paragraph from `demo/README.md`.
+5. A short screen recording of a voice note and a call with a real walkie,
+   attached to the review notes, because the demo device does not answer calls.
+
+The prompt appears only when someone holds the record button or starts a call,
+and those buttons exist only in a chat with a walkie. An account with no walkie
+is never asked.

@@ -39,6 +39,16 @@ const childHash = sha256(CHILD_ID);
 const parentHash = sha256(PARENT_ID);
 const presenceTopic = `doorbell/presence/${childHash}`;
 
+// DEMO_WALKIE=1 makes the demo device announce itself as a walkie, with the
+// same retained marker the walkie firmware publishes. The app then shows the
+// Voice note | Walkie buttons in Chat, so a reviewer can reach the microphone
+// feature: a voice note can be recorded and sent with no hardware. A call is
+// NOT answered -- this is not a simulation of the audio path -- and the review
+// notes say so. Leave it off while the build in review has no microphone
+// permission: the buttons would be there and the mic would be refused.
+const WALKIE = process.env.DEMO_WALKIE === '1';
+const walkieTopic = `doorbell/score/voice/${childHash}`;
+
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 if (!PASS) {
@@ -77,6 +87,8 @@ function sendToParent(text) {
 client.on('connect', () => {
   log(`connected to ${HOST}:${PORT} as ${USER}`);
   client.publish(presenceTopic, 'ONLINE', { qos: 0, retain: true });
+  // Empty clears the marker, which is how the firmware says "not a walkie".
+  client.publish(walkieTopic, WALKIE ? '1' : '', { qos: 1, retain: true });
   client.subscribe(`doorbell/msg/${childHash}/#`, { qos: 1 });
   client.subscribe(`doorbell/cmd/${childHash}`, { qos: 1 });
   log(`demo child ${CHILD_ID} online`);
@@ -100,9 +112,9 @@ client.on('message', (topic, buf) => {
   const parts = payload.split(',');
   if (parts.length < 3) return;
   client.publish(topic, '', { qos: 1, retain: true });
-  log('received', JSON.stringify(parts[1]), 'from', parts[2]);
+  log('received', parts[0] === 'VNOTE' ? 'a voice note' : JSON.stringify(parts[1]), 'from', parts[2]);
 
-  const reply = parts[1] === 'HOW ARE YOU?' ? 'GREAT!' : 'OK';
+  const reply = parts[0] === 'VNOTE' ? 'GOT YOUR VOICE NOTE' : parts[1] === 'HOW ARE YOU?' ? 'GREAT!' : 'OK';
   setTimeout(() => sendToParent(reply), 4000);
 });
 
