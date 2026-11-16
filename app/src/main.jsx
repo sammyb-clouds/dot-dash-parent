@@ -24,7 +24,8 @@ import Mark from './Mark.jsx';
 // explains why any other size fringes.
 import DeviceIcon from './DeviceIcons.jsx';
 import { walkieCall } from './walkieCall.js';
-import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walkieAudio.js';
+import { isVoicePayload, int16LEToFloat, makeHighPass, highPassProcess, LinearResampler, floatToInt16LE, WIRE_RATE } from './walkieAudio.js';
+import voiceWorkletSource from './voiceWorklet.js?raw';
 
     // =========================================================================
     // ✅ YOUR FIREBASE CONFIGURATION ✅
@@ -649,24 +650,102 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
     const SpinnerIcon = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className={`${className} animate-spin`}><path d="M12 3a9 9 0 1 0 9 9"/></svg>;
     const fmtDuration = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
-    async function vnoteToken(user, deviceHash, force = false) {
-      const hit = vnoteTokens.get(deviceHash);
+    // `send` asks for the SEND pass (this account -> that device), a different
+    // pass from the play pass, so the two are cached under different keys.
+    async function vnoteToken(user, deviceHash, force = false, send = false) {
+      const key = send ? `send:${deviceHash}` : deviceHash;
+      const hit = vnoteTokens.get(key);
       if (!force && hit && Date.now() < hit.exp * 1000 - 30000) return hit.token;
+      const fail = (status) => ({ friendly: "Couldn't load this voice note.", status });
       let res;
       try {
         const idToken = await user.getIdToken();
         res = await fetch(`${VNOTE_BASE}/vnote-token`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ device: deviceHash }),
+          body: JSON.stringify(send ? { device: deviceHash, send: true } : { device: deviceHash }),
         });
-      } catch (e) { throw { friendly: "Couldn't load this voice note." }; }
-      if (res.status === 429) throw { friendly: 'Too many tries. Wait a moment and try again.' };
-      if (!res.ok) throw { friendly: "Couldn't load this voice note." };
+      } catch (e) { throw fail(0); }
+      if (res.status === 429) throw { friendly: 'Too many tries. Wait a moment and try again.', status: 429 };
+      if (!res.ok) throw fail(res.status);
       const j = await res.json().catch(() => null);
-      if (!j || !j.token) throw { friendly: "Couldn't load this voice note." };
-      vnoteTokens.set(deviceHash, { token: j.token, exp: j.exp });
+      if (!j || !j.token) throw fail(res.status);
+      vnoteTokens.set(key, { token: j.token, exp: j.exp });
       return j.token;
+    }
+
+    // ---- Recording a voice note (hold-to-record) ----
+    // Same capture chain as the walkie call (mic -> worklet -> resample to
+    // WIRE_RATE -> low cut), minus the framing. Must be started inside the tap.
+    const VNOTE_MAX_S = 10, VNOTE_MIN_S = 0.5;
+    function vnoteRecord() {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC || !navigator.mediaDevices?.getUserMedia) return null;
+      const ctx = new AC();
+      try { ctx.resume(); } catch (e) {}
+      try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
+      const mic = navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      const chunks = []; let total = 0, stream = null, nodes = [], released = false;
+      const rs = new LinearResampler(ctx.sampleRate, WIRE_RATE, { cutoffHz: 4500 });
+      const hp = makeHighPass();
+      const release = () => {
+        if (released) return; released = true;
+        nodes.forEach(n => { try { n.disconnect(); } catch (e) {} });
+        if (stream) stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+        try { ctx.close(); } catch (e) {}
+        try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+      };
+      const onChunk = (c) => {
+        if (released || total >= VNOTE_MAX_S * WIRE_RATE) return;
+        const out = highPassProcess(hp, rs.process(c));
+        chunks.push(out); total += out.length;
+      };
+      const ready = (async () => {
+        try { stream = await mic; }
+        catch (e) { release(); throw { friendly: 'Microphone access is needed to record. Allow it in your settings and try again.' }; }
+        if (released) { release(); return; }
+        const src = ctx.createMediaStreamSource(stream);
+        const sink = ctx.createGain(); sink.gain.value = 0; sink.connect(ctx.destination);
+        let node = null;
+        if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
+          try {
+            const url = URL.createObjectURL(new Blob([voiceWorkletSource], { type: 'text/javascript' }));
+            await ctx.audioWorklet.addModule(url);
+            URL.revokeObjectURL(url);
+            node = new AudioWorkletNode(ctx, 'dotdash-capture');
+            node.port.onmessage = (e) => onChunk(e.data);
+          } catch (e) { node = null; }
+        }
+        if (!node) {
+          node = ctx.createScriptProcessor(1024, 1, 1);
+          node.onaudioprocess = (e) => onChunk(new Float32Array(e.inputBuffer.getChannelData(0)));
+        }
+        if (released) { release(); return; }
+        src.connect(node); node.connect(sink);
+        nodes = [src, node, sink];
+      })();
+      const collect = () => {
+        const n = Math.min(total, VNOTE_MAX_S * WIRE_RATE);
+        const pcm = new Float32Array(n); let o = 0;
+        for (const c of chunks) { if (o >= n) break; const k = Math.min(c.length, n - o); pcm.set(c.subarray(0, k), o); o += k; }
+        return pcm;
+      };
+      return {
+        ready,
+        stop: async () => { try { await ready; } catch (e) {} release(); return collect(); },
+        abort: () => { release(); },
+      };
+    }
+    // Peak-normalise a Float32 recording to `peak`, gain capped at `maxGain`.
+    function vnoteScale(pcm, target, maxGain) {
+      let peak = 0;
+      for (let i = 0; i < pcm.length; i++) { const a = Math.abs(pcm[i]); if (a > peak) peak = a; }
+      const g = peak > 0 ? Math.min(maxGain, target / peak) : 1;
+      const out = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) { const v = pcm[i] * g; out[i] = v > 1 ? 1 : v < -1 ? -1 : v; }
+      return out;
     }
 
     async function vnoteLoad(user, deviceHash, noteId) {
@@ -751,14 +830,14 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
       return (
         <div className="flex items-center">
           <button onClick={tap} aria-label={phase === 'playing' ? 'Stop voice note' : 'Play voice note'}
-                  className="flex items-center text-ink min-h-[32px]">
+                  className="flex items-center min-h-[32px]">
             {phase === 'loading' ? <SpinnerIcon className="w-4 h-4 mr-2 shrink-0" />
               : phase === 'playing' ? <StopIcon className="w-4 h-4 mr-2 shrink-0" />
               : <PlayIcon className="w-4 h-4 mr-2 shrink-0" />}
             <span>{phase === 'loading' ? 'Loading…' : 'Voice note'}</span>
-            {dur > 0 && phase !== 'loading' && <span className="ml-2 text-muted">{fmtDuration(dur)}</span>}
+            {dur > 0 && phase !== 'loading' && <span className="ml-2 opacity-75">{fmtDuration(dur)}</span>}
           </button>
-          {err && <span className="ml-3 text-[13px] text-muted">{err}</span>}
+          {err && <span className="ml-3 text-[13px] opacity-75">{err}</span>}
         </div>
       );
     }
@@ -1767,6 +1846,9 @@ import { isVoicePayload, int16LEToFloat, makeHighPass, WIRE_RATE } from './walki
            if (parentHash) {
                mqttClient.subscribe(`doorbell/msg/${parentHash}`, { qos: 1 });
                mqttClient.subscribe(`doorbell/msg/${parentHash}/#`, { qos: 1 });
+               // Tells walkies this app can receive voice notes (not calls). Refused
+               // silently on the legacy shared login, which is fine.
+               try { mqttClient.publish(`doorbell/score/vnote/${parentHash}`, '1', { qos: 1, retain: true }); } catch (e) {}
            }
            for (const hash of deviceHashes) {
                mqttClient.subscribe(`doorbell/presence/${hash}`);
@@ -4736,6 +4818,145 @@ return (
       const callName = displayName(activeChildLabel);
       const noSelect = { WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'none' };
 
+      // ---- Voice note / Walkie toggle ----
+      const hasVoice = !!(activeDevice && deviceVoice[activeDevice.id]);
+      const [panel, setPanel] = useState('none');          // 'none' | 'voice' | 'walkie'
+      const [rec, setRec] = useState('idle');               // idle | starting | recording | recorded | sending
+      const [recMs, setRecMs] = useState(0);
+      const [recMsg, setRecMsg] = useState('');
+      const [recDone, setRecDone] = useState(null);        // { url, duration, bytes }
+      const [previewing, setPreviewing] = useState(false);
+      const hold = useRef({ ctl: null, timer: null, gen: 0 });
+      const doneRef = useRef(null);
+      const callActive = !!callingThis && ['starting', 'calling', 'active'].includes(call.phase);
+      const recBusy = rec === 'starting' || rec === 'recording' || rec === 'sending';
+      const toggleLocked = callActive || recBusy;
+
+      const stopPreview = () => {
+        if (vnoteCurrent && vnoteCurrent.preview) vnoteCurrent.stop();
+        setPreviewing(false);
+      };
+      // Throw away whatever is being recorded or waiting to send; release the mic.
+      const discardRec = (keepMsg = false) => {
+        const h = hold.current;
+        h.gen++;
+        clearInterval(h.timer); h.timer = null;
+        if (h.ctl) { h.ctl.abort(); h.ctl = null; }
+        if (vnoteCurrent && vnoteCurrent.preview) vnoteCurrent.stop();
+        if (doneRef.current) { URL.revokeObjectURL(doneRef.current.url); doneRef.current = null; }
+        setRecDone(null); setPreviewing(false); setRecMs(0); setRec('idle');
+        if (!keepMsg) setRecMsg('');
+      };
+      // Switching device or leaving the chat.
+      useEffect(() => () => { discardRec(); setPanel('none'); }, [activeDevice?.hashedId]);
+      // The row disappearing (marker lost) closes everything.
+      useEffect(() => { if (!hasVoice) { discardRec(); setPanel('none'); } }, [hasVoice]);
+      // Walkie closes when the device goes offline and no call is in progress.
+      useEffect(() => { if (!canCall && panel === 'walkie' && !callActive) setPanel('none'); }, [canCall, callActive, panel]);
+
+      const togglePanel = (which) => {
+        if (toggleLocked) return;
+        if (which === 'walkie' && !canCall) return;
+        if (panel === which) { if (which === 'voice') discardRec(); setPanel('none'); }
+        else { if (panel === 'voice') discardRec(); setPanel(which); }
+      };
+
+      const finishHold = async () => {
+        const h = hold.current;
+        const ctl = h.ctl;
+        if (!ctl) return;
+        const gen = h.gen;
+        h.ctl = null; clearInterval(h.timer); h.timer = null;
+        const pcm = await ctl.stop();
+        if (gen !== h.gen) return;
+        if (pcm.length / WIRE_RATE < VNOTE_MIN_S) { setRec('idle'); setRecMs(0); setRecMsg('Hold the button while you talk.'); return; }
+        // Wire copy: quiet on purpose (the walkie plays it with ~x12 drive). Preview copy: loud.
+        const wire = vnoteScale(pcm, 0.12, 8);
+        const preview = vnoteScale(pcm, 0.9, 16);
+        const done = { url: URL.createObjectURL(vnoteWav(preview)), duration: pcm.length / WIRE_RATE, bytes: floatToInt16LE(wire) };
+        doneRef.current = done;
+        setRecDone(done); setRec('recorded'); setRecMs(0);
+      };
+      const beginHold = (e) => {
+        e.preventDefault();
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+        if (rec !== 'idle' || callActive) return;
+        stopPreview();
+        setRecMsg('');
+        const ctl = vnoteRecord();
+        if (!ctl) { setRecMsg("This browser can't record."); return; }
+        const h = hold.current;
+        const gen = ++h.gen;
+        h.ctl = ctl;
+        setRec('starting'); setRecMs(0);
+        ctl.ready.then(() => {
+          if (gen !== h.gen || h.ctl !== ctl) return;
+          const t0 = Date.now();
+          setRec('recording');
+          h.timer = setInterval(() => {
+            const ms = Date.now() - t0;
+            setRecMs(Math.min(ms, VNOTE_MAX_S * 1000));
+            if (ms >= VNOTE_MAX_S * 1000) finishHold();
+          }, 100);
+        }, (err) => {
+          if (gen !== h.gen) return;
+          h.gen++; h.ctl = null;
+          setRec('idle'); setRecMs(0);
+          setRecMsg((err && err.friendly) || "Couldn't start recording.");
+        });
+      };
+      const playPreview = () => {
+        if (!recDone) return;
+        if (previewing) { stopPreview(); return; }
+        if (vnoteCurrent) vnoteCurrent.stop();
+        if (!vnoteEl) { vnoteEl = new Audio(); vnoteEl.setAttribute('playsinline', ''); vnoteEl.preload = 'auto'; }
+        try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+        const el = vnoteEl;
+        const handle = { preview: true, stop: () => { el.onended = null; try { el.pause(); } catch (e) {} if (vnoteCurrent === handle) vnoteCurrent = null; setPreviewing(false); } };
+        vnoteCurrent = handle;
+        el.src = recDone.url; el.currentTime = 0;
+        el.onended = () => handle.stop();
+        setPreviewing(true);
+        el.play().catch(() => handle.stop());
+      };
+      const sendVoiceNote = async () => {
+        if (!recDone || rec !== 'recorded' || !activeDevice || !mqttClient || !parentProfile?.virtualId || !user) return;
+        stopPreview();
+        const done = recDone, h = hold.current, gen = h.gen;
+        const deviceHash = activeDevice.hashedId;
+        const target = activeChildLabel;
+        setRec('sending'); setRecMsg('');
+        const post = (token) => fetch(`${VNOTE_BASE}/vnote/app-send?to=${encodeURIComponent(deviceHash)}`, {
+          method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/octet-stream' }, body: done.bytes,
+        });
+        let status = 0, id = '';
+        try {
+          let token = await vnoteToken(user, deviceHash, false, true);
+          let res = await post(token);
+          if (res.status === 401) { token = await vnoteToken(user, deviceHash, true, true); res = await post(token); }
+          status = res.status;
+          if (res.ok) id = (await res.text()).trim();
+        } catch (e) { status = (e && e.status) || 0; }
+        if (!id) {
+          if (gen !== h.gen) return;
+          setRec('recorded');
+          setRecMsg(status === 429 ? 'Too many voice notes just now. Try again in a minute.'
+            : status === 403 ? "Voice notes aren't available for this device."
+            : "Couldn't send the voice note. Try again.");
+          return;
+        }
+        // Already sent server-side; tell the walkie and show the bubble even if the panel moved on.
+        const sentAt = Date.now();
+        try { mqttClient.publish(`doorbell/msg/${deviceHash}/${sentAt}`, `VNOTE,${id},${parentProfile.virtualId}`, { qos: 1, retain: true }); } catch (e) {}
+        vnoteBuffers.set(id, { url: done.url, duration: done.duration });
+        if (doneRef.current === done) doneRef.current = null;   // the cache owns the url now
+        setMessages(prev => [...prev, {
+          id: sentAt, ts: sentAt, type: 'VNOTE', text: id, sender: parentProfile.virtualId, target, isMe: true,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
+        if (gen === h.gen) { discardRec(); setPanel('none'); }
+      };
+
       const handleSend = async (type = 'MORSE') => {
         if (!mqttClient || !parentProfile?.virtualId || !activeDevice) return;
         let payload = wireSafe(inputText).trim();
@@ -4845,7 +5066,21 @@ return (
                 <Send className="w-5 h-5 ml-0.5" />
               </button>
             </div>
-            {canCall && (
+            {hasVoice && (
+              <div role="group" aria-label="Voice note or walkie" className="mt-3 flex rounded-control border border-rule bg-sunken p-1 space-x-1">
+                <button type="button" onClick={() => togglePanel('voice')} disabled={toggleLocked} aria-pressed={panel === 'voice'}
+                  className={`flex-1 py-2.5 rounded-control font-bold transition-colors disabled:opacity-50 ${panel === 'voice' ? 'bg-accent text-accent-ink' : 'text-ink'}`}>
+                  Voice note
+                </button>
+                <button type="button" onClick={() => togglePanel('walkie')} disabled={toggleLocked || !canCall} aria-pressed={panel === 'walkie'}
+                  aria-label={canCall ? 'Walkie' : `Walkie needs ${callName} to be online`}
+                  title={canCall ? undefined : `Walkie needs ${callName} to be online`}
+                  className={`flex-1 py-2.5 rounded-control font-bold transition-colors disabled:opacity-40 ${panel === 'walkie' ? 'bg-accent text-accent-ink' : 'text-ink'}`}>
+                  Walkie
+                </button>
+              </div>
+            )}
+            {panel === 'walkie' && canCall && (
               <div className="mt-3 flex flex-col items-center space-y-2" style={noSelect}>
                 {(!callingThis || call.phase === 'idle') && (
                   <button onClick={startCall} className="w-full bg-accent text-accent-ink font-bold py-3 rounded-control active:opacity-90">
@@ -4878,6 +5113,48 @@ return (
                   </>
                 )}
                 {call.notice && <p className="text-sm text-muted text-center">{call.notice}</p>}
+              </div>
+            )}
+            {panel === 'voice' && hasVoice && (
+              <div className="mt-3 flex flex-col items-center space-y-2" style={noSelect}>
+                {(rec === 'idle' || rec === 'starting' || rec === 'recording') && (
+                  <>
+                    <button
+                      onPointerDown={beginHold}
+                      onPointerUp={finishHold}
+                      onPointerCancel={finishHold}
+                      onLostPointerCapture={finishHold}
+                      onContextMenu={(e) => e.preventDefault()}
+                      disabled={callActive}
+                      className={`w-40 h-40 rounded-full font-bold text-lg select-none disabled:opacity-40 ${rec === 'recording' ? 'bg-danger text-danger-ink' : 'bg-accent text-accent-ink'}`}
+                      style={noSelect}
+                    >
+                      {rec === 'recording' ? 'Recording...' : 'Hold to record'}
+                    </button>
+                    {rec === 'recording' && (
+                      <div className="w-full flex flex-col items-center space-y-1" role="timer" aria-label={`${Math.ceil((VNOTE_MAX_S * 1000 - recMs) / 1000)} seconds left`}>
+                        <p className="text-muted font-semibold">{Math.ceil((VNOTE_MAX_S * 1000 - recMs) / 1000)}s left</p>
+                        <div className="w-full h-2 rounded-full bg-sunken border border-rule overflow-hidden">
+                          <div className="h-full bg-danger" style={{ width: `${100 - (recMs / (VNOTE_MAX_S * 1000)) * 100}%` }} />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                {(rec === 'recorded' || rec === 'sending') && recDone && (
+                  <>
+                    <p className="text-muted font-semibold">Voice note, {fmtDuration(recDone.duration)}</p>
+                    <div className="w-full flex space-x-2">
+                      <button onClick={playPreview} disabled={rec === 'sending'} className="flex-1 bg-sunken border border-rule text-ink font-bold py-3 rounded-control disabled:opacity-50">{previewing ? 'Stop' : 'Play'}</button>
+                      <button onClick={sendVoiceNote} disabled={rec === 'sending'} className="flex-1 bg-accent text-accent-ink font-bold py-3 rounded-control disabled:opacity-60">{rec === 'sending' ? 'Sending…' : 'Send'}</button>
+                    </div>
+                    <div className="w-full flex space-x-2">
+                      <button onClick={() => discardRec()} disabled={rec === 'sending'} className="flex-1 bg-sunken border border-rule text-ink font-bold py-3 rounded-control disabled:opacity-50">Redo</button>
+                      <button onClick={() => { discardRec(); setPanel('none'); }} disabled={rec === 'sending'} className="flex-1 bg-sunken border border-rule text-ink font-bold py-3 rounded-control disabled:opacity-50">Cancel</button>
+                    </div>
+                  </>
+                )}
+                {recMsg && <p className="text-sm text-muted text-center" role="status">{recMsg}</p>}
               </div>
             )}
           </div>
