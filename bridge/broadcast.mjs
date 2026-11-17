@@ -36,6 +36,8 @@ import crypto from 'node:crypto';
 // One campaign at a time lives here. A new campaign = a new CAMPAIGN name (so its
 // sent-log starts empty) and new copy. Earlier ones are in git history:
 //   warmup-2026-11  "Another way to get a Dot Dash is coming"  sent 2026-11-10/11, 234/0
+// The header logo is site/media/email-mark.png, served from dotdashdevice.com: the
+// 48-grid pixel mark at 3x, white ground (an email card is white in every client).
 const CAMPAIGN = 'drop1-open';
 const SUBJECT = 'Buy a Dot Dash pair: Registration is open';
 // The inbox's grey line under the subject. Without one, clients show the first
@@ -84,7 +86,10 @@ const HTML = `<!doctype html>
 <tr><td align="center" style="padding:28px 12px">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="520" style="width:100%;max-width:520px;background:#ffffff;border:1px solid #d8d3cb;border-radius:18px">
 <tr><td style="padding:26px 24px 22px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1b1a18">
-<p style="margin:0 0 16px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:20px;line-height:1.2;letter-spacing:.04em">DOT DASH</p>
+<a href="https://dotdashdevice.com" style="display:block;text-align:center;text-decoration:none;color:#1b1a18;margin:0 0 20px">
+<img src="https://dotdashdevice.com/media/email-mark.png" width="96" height="64" alt="Dot Dash" style="display:block;margin:0 auto 10px;width:96px;height:64px;border:0;outline:none;image-rendering:pixelated">
+<span style="display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:20px;line-height:1.2;letter-spacing:.04em">DOT DASH</span>
+</a>
 <p style="${P}">Hi,</p>
 <p style="${P}">Last week I said another way to get a Dot Dash was coming. Here it is.</p>
 <p style="margin:0 0 8px">I&rsquo;ve built five pairs, and <strong>anyone in the world can register to buy one</strong>. More people want them than I can build right now, so instead of a race to check out, there&rsquo;s a draw:</p>
