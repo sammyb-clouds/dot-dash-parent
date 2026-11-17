@@ -146,3 +146,61 @@ that a new word is drawn on exactly the same template.
 
 Mind the strip: with `INSET` the marks start at x=64, so a six-mark letter
 ending in a dash (`!` is `-.-.--`) ends on column 127, the last there is.
+
+## Two devices -> build.py --scene pair -> site/media/buy-us.gif
+
+Two devices side by side; the left one plays BUY, then the right one plays US!.
+1600x685, 52 frames, about 10.6 s a loop, 707 KB.
+
+```
+sips -s format png pair-devices-original.jpg --out pfull.png
+sips -c 850 1984 --cropOffset 400 18 pfull.png --out pcrop.png   # h w, then y x
+sips -Z 1600 pcrop.png --out base-pair.png
+python3 build.py --scene pair "DOT DASH" 180 'BUY,US!' ../site/media/buy-us.gif
+```
+
+Crop from the PNG, not the JPEG: `sips -c` on a `.jpg` re-encodes it.
+`base-pair.png` is that derived base (deterministic from the commands above);
+`pfull` and `pcrop` are intermediates.
+
+**`--scene NAME`** takes the geometry from `scenes.py` instead of the hero's
+built-in fits; the words are comma-separated, one per device, in the order the
+scene lists them (left to right). Every number in a scene is in the original
+photograph's pixels -- the window edges as four line fits, the LED as a
+side-on dome (centre, x/y radii, the row it sits on), its lit colour, core and
+spill weights -- and `build.py` maps them through the scene's `crop` and the
+base's width, so the crop or output size can change without re-measuring. It
+refuses a base whose height does not match the crop at that width.
+
+**Why 1600 wide and not 960.** The windows in this photo are 240 px across
+against the hero's 385; at 960 one device pixel would be 0.87 px and
+`DOT DASH` at size 1 would be five pixels tall. At 1600 it is 1.42 / 1.45 px
+(left / right), close to device.gif's 1.69, and the GIF is still 665 KB
+because only the first frame is the whole picture.
+
+**The windows** are fitted to the dark glass, not the cut's front edge: the
+camera sees an inner wall of each cut (left and bottom on the left device,
+right on the right one), and the OLED is behind that wall. Both windows are
+2.95-2.98 : 1 against the hero's 2.97 : 1, so it is the same cut and clip-1's
+active-area fractions are used unchanged. A re-fit on `base-pair.png` lands
+within 0.4 px of the mapped photo fits (about 0.3 of a device pixel).
+
+**The sequence.** Before its turn a screen is left exactly as photographed --
+off -- rather than given an idle screen the firmware would not be showing.
+Each device plays its word with the timing, marks and header described above,
+its own LED keyed to its own marks. The hand-off is the firmware's own gap
+between words: the 300 ms that ends every word plus the 700 ms a space waits,
+so the pair keeps the rhythm one device would give "BUY US". The last word
+holds for the same 2.1 s as device.gif, then the loop starts again.
+
+**The LEDs** are the hero's recipe with an elliptical dome (the domes here are
+side-on) and per-LED colours: green lit (150,255,170) as before, blue lit
+(110,175,255) with core (225,238,255) and spill weights (0.70,0.85,1.0). In a
+scene the unlit LED boxes are also sampled in full for the palette -- at the
+hero's every-third-pixel rate the small green dome quantised to grey when off.
+That extra sampling is scene-only, so device.gif and drop.gif still rebuild
+byte-for-byte (both checked 2026-11-14 after the change).
+
+A new two-device photo: copy the original here, add a `SCENES` entry with its
+own measurements, derive a base with the crop you put in it, and run
+`build.py --scene` with one word per device.
