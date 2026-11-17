@@ -33,24 +33,37 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 // ------------------------------------------------------------- the message
-const CAMPAIGN = 'warmup-2026-11';
-const SUBJECT = 'Another way to get a Dot Dash is coming';
+// One campaign at a time lives here. A new campaign = a new CAMPAIGN name (so its
+// sent-log starts empty) and new copy. Earlier ones are in git history:
+//   warmup-2026-11  "Another way to get a Dot Dash is coming"  sent 2026-11-10/11, 234/0
+const CAMPAIGN = 'drop1-open';
+const SUBJECT = 'Buy a Dot Dash pair: Registration is open';
+// The inbox's grey line under the subject. Without one, clients show the first
+// words of the body, which here would be "DOT DASH Hi,".
+const PREHEADER = 'Anyone, anywhere can register free until Friday at noon ET. Five pairs, drawn at random.';
 const POSTAL = 'Dot Dash · 467 Van Buren St, Brooklyn, NY 11221';
+const DROP_URL = 'https://drop.dotdashdevice.com';
 
 const TEXT = `Hi,
 
-Thanks for being on the Dot Dash list.
+Last week I said another way to get a Dot Dash was coming. Here it is.
 
-A quick heads-up: there will be another way to get a Dot Dash soon. You'll hear about it here first.
+I've built five pairs, and anyone in the world can register to buy one. More people want them than I can build right now, so instead of a race to check out, there's a draw:
 
-So this doesn't get lost, could you do two quick things?
+1. Register by Friday, November 20 at 12:00 pm ET. It's free and takes a minute: your name, your email and one question. No card.
+2. Five names are drawn at random. There's no way to improve your odds.
+3. If you're drawn, you get a personal link and 24 hours to buy a pair for $100 plus shipping. If someone passes, their place goes to the next name on the reserve list.
 
-1. Add hello@dotdashdevice.com to your contacts.
-2. If you found this in spam or the Promotions tab, move it to your inbox and mark it "Not spam."
+Register here: ${DROP_URL}
 
-That's what tells your inbox to let the next one through.
+We ship worldwide. Standard shipping is $8 in the US, $15 to Canada, $20 to Europe, Australia and New Zealand, and $30 everywhere else, with faster options at checkout. Where your country charges import duties, they're paid on delivery.
 
-Talk soon,
+A Dot Dash is a pair of small devices that send messages to each other in Morse code. Tap out HELLO on one, and it arrives on the other, anywhere there's Wi-Fi.
+
+Two honest notes. These are beta units: they work, and early users are the reason the next version will be better. And five is a small number, so most people who register won't be drawn this time. This is the first drop, not the last.
+
+One favor: results and buying links come from drop@dotdashdevice.com. Add it to your contacts now, so your 24-hour link doesn't land in spam.
+
 Sam
 Dot Dash
 
@@ -61,25 +74,33 @@ ${POSTAL}
 `;
 
 // Same shell as the welcome email in signup.mjs, so the list sees one sender.
+const P = 'margin:0 0 12px';
 const HTML = `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f6f5f3;-webkit-text-size-adjust:100%">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${PREHEADER}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f5f3">
 <tr><td align="center" style="padding:28px 12px">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="520" style="width:100%;max-width:520px;background:#ffffff;border:1px solid #d8d3cb;border-radius:18px">
 <tr><td style="padding:26px 24px 22px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1b1a18">
 <p style="margin:0 0 16px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:20px;line-height:1.2;letter-spacing:.04em">DOT DASH</p>
-<p style="margin:0 0 12px">Hi,</p>
-<p style="margin:0 0 12px">Thanks for being on the Dot Dash list.</p>
-<p style="margin:0 0 12px">A quick heads-up: there will be another way to get a Dot Dash soon. You&rsquo;ll hear about it here first.</p>
-<p style="margin:0 0 8px">So this doesn&rsquo;t get lost, could you do two quick things?</p>
-<ol style="margin:0 0 12px;padding-left:22px">
-<li style="margin:0 0 6px">Add <strong>hello@dotdashdevice.com</strong> to your contacts.</li>
-<li style="margin:0">If you found this in spam or the Promotions tab, move it to your inbox and mark it &ldquo;Not spam.&rdquo;</li>
+<p style="${P}">Hi,</p>
+<p style="${P}">Last week I said another way to get a Dot Dash was coming. Here it is.</p>
+<p style="margin:0 0 8px">I&rsquo;ve built five pairs, and <strong>anyone in the world can register to buy one</strong>. More people want them than I can build right now, so instead of a race to check out, there&rsquo;s a draw:</p>
+<ol style="margin:0 0 16px;padding-left:22px">
+<li style="margin:0 0 6px"><strong>Register by Friday, November 20 at 12:00&nbsp;pm ET.</strong> It&rsquo;s free and takes a minute: your name, your email and one question. No card.</li>
+<li style="margin:0 0 6px"><strong>Five names are drawn at random.</strong> There&rsquo;s no way to improve your odds.</li>
+<li style="margin:0"><strong>If you&rsquo;re drawn, you get a personal link and 24 hours to buy</strong> a pair for $100 plus shipping. If someone passes, their place goes to the next name on the reserve list.</li>
 </ol>
-<p style="margin:0 0 12px">That&rsquo;s what tells your inbox to let the next one through.</p>
-<p style="margin:0">Talk soon,<br>Sam<br>Dot Dash</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px"><tr><td style="border-radius:12px;background:#2563eb">
+<a href="${DROP_URL}" style="display:inline-block;padding:13px 20px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;letter-spacing:.04em;color:#ffffff;text-decoration:none;text-transform:uppercase">Register free</a>
+</td></tr></table>
+<p style="${P}"><strong>We ship worldwide.</strong> Standard shipping is $8 in the US, $15 to Canada, $20 to Europe, Australia and New Zealand, and $30 everywhere else, with faster options at checkout. Where your country charges import duties, they&rsquo;re paid on delivery.</p>
+<p style="${P}">A Dot Dash is a pair of small devices that send messages to each other in Morse code. Tap out HELLO on one, and it arrives on the other, anywhere there&rsquo;s Wi-Fi.</p>
+<p style="${P}">Two honest notes. These are beta units: they work, and early users are the reason the next version will be better. And five is a small number, so most people who register won&rsquo;t be drawn this time. This is the first drop, not the last.</p>
+<p style="${P}">One favor: results and buying links come from <strong>drop@dotdashdevice.com</strong>. Add it to your contacts now, so your 24-hour link doesn&rsquo;t land in spam.</p>
+<p style="margin:0">Sam<br>Dot Dash</p>
 </td></tr>
 <tr><td style="padding:0 24px 20px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#55514b;border-top:1px solid #ece8e1">
 <p style="margin:14px 0 0">You&rsquo;re getting this because you joined the Dot Dash list. <a href="%UNSUB%" style="color:#2563eb">Unsubscribe</a>.</p>
