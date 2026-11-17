@@ -17,12 +17,6 @@
 // a broken image where the logo goes. icon.jpg is untouched and is still the
 // favicon, the manifest icon and the Home Screen icon.
 import Mark from './Mark.jsx';
-// The six Settings section icons are the device's OWN menu artwork, decoded
-// from dot_dash_7_3/Icons.h rather than approximated with a UI icon set: a
-// parent scrolling Settings and a child scrolling the 128x32 panel now see
-// the same drawings. Drawn at 24px, 1:1 on the 24-unit grid -- DeviceIcons.jsx
-// explains why any other size fringes.
-import DeviceIcon from './DeviceIcons.jsx';
 import { walkieCall } from './walkieCall.js';
 import { isVoicePayload, int16LEToFloat, makeHighPass, highPassProcess, LinearResampler, floatToInt16LE, WIRE_RATE } from './walkieAudio.js';
 import voiceWorkletSource from './voiceWorklet.js?raw';
@@ -494,6 +488,7 @@ import voiceWorkletSource from './voiceWorklet.js?raw';
     const Mic = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg>;
     // A handset with an aerial: the walkie, not a phone.
     const WalkieIcon = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true"><line x1="9" y1="2" x2="9" y2="7"/><rect x="6" y="7" width="12" height="15" rx="2"/><line x1="10" y1="11" x2="14" y2="11"/><circle cx="12" cy="16.5" r="2"/></svg>;
+    const Users = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
     const Phone = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>;
     const LinkIcon = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
     const ArrowRight = ({className}) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>;
@@ -4140,7 +4135,7 @@ return (
                 otherwise the only doors in once someone is signed in. */}
             {onContactMode && savedContactChats().some((c) => c.claim) && (
               <button onClick={onContactMode} className="w-full flex items-center justify-between p-4 mb-3 bg-card border border-rule rounded-card active:bg-sunken text-left">
-                <div className="flex items-center space-x-2 min-w-0">
+                <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
                   <div className="min-w-0">
                     <div className="font-bold text-ink text-base leading-tight">Dot Dash Connect</div>
@@ -4205,8 +4200,8 @@ return (
 
               {/* Approved Friends (collapsible) */}
               <button onClick={() => setOpenFriends(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openFriends ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                 <div className="flex items-center space-x-2 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><DeviceIcon name="friends" /></div>
+                 <div className="flex items-center space-x-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><Users className="w-5 h-5"/></div>
                     <div className="text-left min-w-0">
                        <div className="font-bold text-ink text-base leading-tight">Friends</div>
                        <div className="text-[13px] text-muted">{displayFriends.length === 1 ? '1 friend' : `${displayFriends.length} friends`}</div>
@@ -4319,8 +4314,8 @@ return (
 
               {/* Custom Messages (collapsible) */}
               <button onClick={() => setOpenMessages(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openMessages ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                 <div className="flex items-center space-x-2 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><DeviceIcon name="quickMessages" /></div>
+                 <div className="flex items-center space-x-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><MessageCircle className="w-5 h-5"/></div>
                     <div className="text-left min-w-0">
                        <div className="font-bold text-ink text-base leading-tight">Quick Messages</div>
                        <div className="text-[13px] text-muted">{currentPhrases.length === 1 ? '1 saved phrase' : `${currentPhrases.length} saved phrases`}</div>
@@ -4349,8 +4344,8 @@ return (
 
               {/* Wi-Fi networks (collapsible) */}
               <button onClick={() => setOpenWifi(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openWifi ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                 <div className="flex items-center space-x-2 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><DeviceIcon name="wifi" /></div>
+                 <div className="flex items-center space-x-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0"><Wifi className="w-5 h-5"/></div>
                     <div className="text-left min-w-0">
                        <div className="font-bold text-ink text-base leading-tight">Wi-Fi Networks</div>
                        <div className="text-[13px] text-muted">{wifiNets.length === 1 ? '1 network saved' : `${wifiNets.length} networks saved`}</div>
@@ -4454,9 +4449,9 @@ return (
               {activeDevice && (
                 <>
                   <button onClick={() => setOpenArcade(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openArcade ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                     <div className="flex items-center space-x-2 min-w-0">
+                     <div className="flex items-center space-x-3 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0">
-                          <DeviceIcon name="arcade" />
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/></svg>
                         </div>
                         <div className="text-left min-w-0">
                            <div className="font-bold text-ink text-base leading-tight">Arcade</div>
@@ -4529,9 +4524,9 @@ return (
               {activeDevice && (
                 <>
                   <button onClick={() => setOpenTypewriter(o => !o)} className={`w-full flex items-center justify-between p-4 bg-sunken border border-rule active:bg-rule transition-colors ${openTypewriter ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                     <div className="flex items-center space-x-2 min-w-0">
+                     <div className="flex items-center space-x-3 min-w-0">
                         <div className="w-10 h-10 rounded-full bg-accent text-accent-ink flex items-center justify-center shrink-0">
-                          <DeviceIcon name="dotDash" />
+                          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><circle cx="5" cy="12" r="2.6"/><rect x="10" y="9.4" width="11" height="5.2" rx="2.6"/></svg>
                         </div>
                         <div className="text-left min-w-0">
                            <div className="font-bold text-ink text-base leading-tight">Dot Dash Mode</div>
@@ -4581,9 +4576,9 @@ return (
                 return (
                   <>
                     <button onClick={() => setOpenAdvanced(o => !o)} className={`w-full flex items-center justify-between p-4 border transition-colors ${conflict ? 'bg-sunken border-danger active:bg-rule' : 'bg-sunken border-rule active:bg-rule'} ${openAdvanced ? 'rounded-t-card' : 'rounded-card mb-3'}`}>
-                       <div className="flex items-center space-x-2 min-w-0">
+                       <div className="flex items-center space-x-3 min-w-0">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${conflict ? 'bg-danger text-danger-ink' : 'bg-accent text-accent-ink'}`}>
-                            <DeviceIcon name="tools" />
+                            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
                           </div>
                           <div className="text-left min-w-0">
                              <div className="font-bold text-ink text-base leading-tight">Advanced settings</div>
@@ -5782,7 +5777,7 @@ return (
     const AppFriendsPanel = () => (
       <AppShot label="The Friends section of the app's Settings tab: a Call sign box beside an Add button, and MAYA0412 newly added at the top of the friends list above your own call sign">
         <div>
-          <AppSectionRow icon={<DeviceIcon name="friends" />} title="Friends" sub="2 friends" open />
+          <AppSectionRow icon={<Users className="w-5 h-5"/>} title="Friends" sub="2 friends" open />
           <div className="bg-card border border-t-0 border-rule rounded-b-card p-2.5 space-y-2">
             <div className="flex gap-2"><AppField placeholder="Call sign" /><AppBtn>Add</AppBtn></div>
             <div className="space-y-1.5">
@@ -5832,7 +5827,7 @@ return (
     const AppWifiCard = () => (
       <AppShot label="The Wi-Fi Networks section of the app's Settings tab, open, with a WiFi Disconnected? button at the top">
         <div>
-          <AppSectionRow icon={<DeviceIcon name="wifi" />} title="Wi-Fi Networks" sub="2 networks saved" open />
+          <AppSectionRow icon={<Wifi className="w-5 h-5"/>} title="Wi-Fi Networks" sub="2 networks saved" open />
           <div className="bg-card border border-t-0 border-rule rounded-b-card p-2.5 space-y-1.5">
             <div className="inline-block text-xs font-bold text-accent-ink bg-accent rounded-full px-3 py-1.5">WiFi Disconnected?</div>
             <p className="text-[11px] text-muted leading-snug">Save up to 5 networks. The device picks whichever it finds.</p>
