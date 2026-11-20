@@ -281,8 +281,8 @@
 
   /* ---- Drop banner (added 2026-11-18 for drop 1, live from noon ET). ----
      Full-width strip above <main>, the only place the accent is used as a
-     fill across the page. Remove the <a class="drop-banner"> when the drop
-     is over; this CSS can stay. */
+     fill across the page. The anchor was removed when drop 1's registration
+     closed (2026-11-20); re-add one above <main> for the next drop. */
   .drop-banner { display:block; background:var(--accent); color:var(--accent-ink);
                  text-align:center; text-decoration:none; font-size:16px; line-height:1.4;
                  padding:12px 16px; }
@@ -298,7 +298,6 @@
 </head>
 <body>
 <a class="skip" href="#what">Skip to what a Dot Dash is</a>
-<a class="drop-banner" href="https://drop.dotdashdevice.com"><b>The first Dot Dash drop is open.</b> Anyone, anywhere can register free to buy a pair until Fri Nov 20, 12 pm ET. <span>Register&nbsp;&rarr;</span></a>
 <main>
   <div class="hero">
     <svg class="logo" viewBox="0 0 48 48" role="img" aria-label="Dot Dash"
