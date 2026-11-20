@@ -400,6 +400,46 @@ pairings, same virtual contact IDs, same device side.
   `build:phones` (test.html) has both kinds of contact; `build:links` has links
   only, for the pilot; plain `build` has neither.
 
+## Voice notes with a walkie (2026-11-20)
+
+A web contact and a **walkie** swap voice notes, both ways. Nothing new on the
+walkie or on the voice-note server (`dot_dash_walkie_6_29/relay/voice_notes.py`):
+this process stands in for the contact exactly as the app stands in for its
+account.
+
+- **The pass.** With `VOICE_TOKEN_SECRET` (read from
+  `/root/dotdash_dynsec/voice.env`, the same secret enroll.mjs and the
+  voice-note server use), service.mjs signs the 5-minute `vn1.` passes itself,
+  with `dev` = the contact's virtual friend hash. A play pass has that friend's
+  rights (notes sent to it, and its own); a send pass names the one walkie.
+  The page never sees a pass: audio goes through `/chat/api/vnote`, and the
+  chat link stays the only credential. No secret = voice off, nothing offered.
+- **Walkie -> contact.** For every *active* web chat the bridge keeps a retained
+  `"1"` on `doorbell/score/vnote/<virtualHash>` (empty to withdraw), so the
+  walkie shows VOICE for the contact (Network.ino sets friendWalkie only: no
+  CALL). The walkie's `VNOTE,<id>,<sender>` is stored as a chat entry
+  `{from:'dotdash', text:'Voice note', vnote:<id>}`; the push says "Sent you a
+  voice note." `GET /chat/api/vnote/<id>` returns the raw PCM, and only for a
+  note this chat holds.
+- **Contact -> walkie.** `history` says `voice: true` when the Dot Dash is a
+  walkie, read from its own retained `doorbell/score/voice/<deviceHash>`
+  (subscribed per paired device; never cleared). `POST /chat/api/vnote` with the
+  raw PCM (16-bit LE mono, 11025 Hz, 0.25-10 s) goes to `/vnote/app-send`, then
+  the bridge publishes `VNOTE,<id>,<virtualId>` to the device, as the app does.
+  Counted against the same per-chat inbound limit as messages.
+- **The page** (`site/c/index.html`): a play control in the bubble (one `<audio>`
+  element, unlocked inside the tap; Web Audio is muted by the iPhone's silent
+  switch); a mic button beside Send, shown only when `voice` is true. Tap to
+  record, tap to stop (not hold: the first tap may open the microphone prompt),
+  then listen / Delete / Send voice note. Levels match the app: the walkie gets
+  peak 0.12, the preview plays at 0.9.
+- **Not covered:** the iOS app's contact mode (ContactApp in main.jsx) shows
+  these entries as the text "Voice note" until it gets a player.
+- **Ops:** the broker user `dotdash-sms` needs `topic write doorbell/score/vnote/+`
+  and `topic read doorbell/score/voice/+`; nginx needs the
+  `location = /chat/api/vnote` block (240k body); the unit needs the second
+  EnvironmentFile.
+
 ## Twilio setup (outside this code)
 
 1. Twilio account. Dot Dash is not yet a legal entity, so register as a **sole

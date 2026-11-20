@@ -131,6 +131,9 @@ const { server, sweep } = createService({
     SANDBOX_KEY: SANDBOX ? env.SMS_SANDBOX_KEY : null,
     // The number SMS notifications come from. Unset: the oldest active pool number.
     NOTIFY_FROM: env.NOTIFY_FROM || null,
+    // Voice notes with web contacts (the walkie's voice-note server). Off without the secret.
+    VOICE_TOKEN_SECRET: env.VOICE_TOKEN_SECRET || null,
+    VNOTE_URL: env.VNOTE_URL || 'http://127.0.0.1:8793',
   },
   log,
 });

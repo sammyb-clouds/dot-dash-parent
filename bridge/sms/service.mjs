@@ -27,7 +27,7 @@ const short = (s) => String(s).slice(0, 8);
 // (or invalid-registration-token) when the token is dead.
 // sandbox: a makeSandbox() (sandbox.mjs) when SMS_SANDBOX=1 -- `twilio` is then
 // its stand-in, and /chat/api/sandbox/ serves the sandbox phone page.
-export function createService({ db, FieldValue, client, twilio, webPush, fcm, verifyIdToken, keys, config, log, sandbox = null }) {
+export function createService({ db, FieldValue, client, twilio, webPush, fcm, verifyIdToken, keys, config, log, sandbox = null, vnoteFetch = globalThis.fetch }) {
   const { APP_ID, PUBLIC_BASE, STATE_PATH, APP_ORIGINS, TWILIO_AUTH_TOKEN } = config;
   // Where a web contact's link points: <CHAT_BASE>/c/<token>.
   const CHAT_BASE = (config.CHAT_BASE || 'https://dotdashdevice.com').replace(/\/$/, '');
@@ -92,6 +92,26 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     };
   })();
 
+  // ------------------------------------------------------------ voice notes --
+  // A web contact and a WALKIE can swap voice notes. The notes live on the
+  // voice-note server (walkie repo, relay/voice_notes.py, 127.0.0.1:8793); this
+  // process stands in for the contact there, as the app does for its account:
+  // it signs the same 5-minute "vn1." passes enroll.mjs does (VOICE_TOKEN_SECRET)
+  // with dev = the contact's virtual friend hash. So a contact has exactly a
+  // friend's rights -- play a note sent to them, send one to their walkie --
+  // and the page never holds a pass: audio goes through /chat/api/vnote.
+  // Without the secret, voice is off and nothing below is offered.
+  const VOICE_SECRET = /^[0-9a-f]{64}$/i.test(config.VOICE_TOKEN_SECRET || '') ? Buffer.from(config.VOICE_TOKEN_SECRET, 'hex') : null;
+  const VNOTE_URL = (config.VNOTE_URL || 'http://127.0.0.1:8793').replace(/\/$/, '');
+  const VNOTE_MAX_BYTES = 11025 * 2 * 10 + 8192;   // voice_notes.py MAX_BYTES
+  const VNOTE_MIN_BYTES = (11025 * 2) >> 2;        // and MIN_BYTES
+  function vnotePass(claims) {
+    const signing = 'vn1.' + Buffer.from(JSON.stringify({ ...claims, exp: Math.floor(Date.now() / 1000) + 300 })).toString('base64url');
+    return signing + '.' + crypto.createHmac('sha256', VOICE_SECRET).update(signing).digest('base64url');
+  }
+  const walkies = new Set();      // device hashes whose retained score/voice marker is "1"
+  const voiceFor = (p) => !!VOICE_SECRET && p.channel === 'web' && walkies.has(p.deviceHash);
+
   // ------------------------------------------------------------------- mqtt --
   const byVhash = new Map();      // virtual friend hash -> pairing
   const presence = new Map();     // virtual friend hash -> last presence published
@@ -110,6 +130,25 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     client.publish(`doorbell/presence/${vh}`, value, { qos: 1, retain: true });
   }
 
+  // "This friend takes voice notes": a retained "1" on doorbell/score/vnote/<vh>
+  // makes a walkie show VOICE for the contact (the same marker the app's own
+  // id carries; Network.ino sets friendWalkie only, so no CALL is offered).
+  // Only for a live web chat; an empty retained publish withdraws it.
+  const vmark = new Map();        // virtual friend hash -> marker last published
+  function publishVoiceMark(vh, on) {
+    const value = on ? '1' : '';
+    if (vmark.get(vh) === value) return;
+    vmark.set(vh, value);
+    client.publish(`doorbell/score/vnote/${vh}`, value, { qos: 1, retain: true });
+  }
+
+  // Which paired devices are walkies: their own retained score/voice marker.
+  const watchedDevices = new Set();
+  function watchDevices(hashes) {
+    for (const h of watchedDevices) if (!hashes.has(h)) { client.unsubscribe(`doorbell/score/voice/${h}`); watchedDevices.delete(h); walkies.delete(h); }
+    for (const h of hashes) if (!watchedDevices.has(h)) { client.subscribe(`doorbell/score/voice/${h}`, { qos: 1 }); watchedDevices.add(h); }
+  }
+
   function applyPairings(docs) {
     const next = new Map(docs.map((d) => [d.virtualHash, d]));
     for (const vh of byVhash.keys()) {
@@ -117,19 +156,25 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
         client.unsubscribe(`doorbell/msg/${vh}/#`);
         publishPresence(vh, '');   // removed: clear the retained presence
         presence.delete(vh);
+        publishVoiceMark(vh, false);
+        vmark.delete(vh);
       }
     }
     for (const [vh, p] of next) {
       if (!byVhash.has(vh)) client.subscribe(`doorbell/msg/${vh}/#`, { qos: 1 });
       publishPresence(vh, VIRTUAL_PRESENCE);
+      publishVoiceMark(vh, !!VOICE_SECRET && p.channel === 'web' && p.status === 'active');
     }
     byVhash.clear();
     for (const [k, v] of next) byVhash.set(k, v);
+    if (VOICE_SECRET) watchDevices(new Set([...next.values()].filter((p) => p.channel === 'web').map((p) => p.deviceHash)));
   }
 
   client.on('connect', () => {
     log('INFO', 'mqtt connected');
     presence.clear();   // retained presence may have been lost with the broker; publish it all again
+    vmark.clear();
+    for (const h of watchedDevices) client.subscribe(`doorbell/score/voice/${h}`, { qos: 1 });
     applyPairings([...byVhash.values()]);
   });
   client.on('error', (e) => log('WARN', 'mqtt:', e.message));
@@ -137,6 +182,12 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   client.on('message', (topic, buf) => onMessage(topic, buf).catch((e) => log('ERROR', `device message failed: ${e.message}`)));
 
   async function onMessage(topic, buf) {
+    // A device's walkie marker. Retained state, never a message: not cleared.
+    if (topic.startsWith('doorbell/score/voice/')) {
+      const h = topic.slice('doorbell/score/voice/'.length);
+      if (buf.length === 1 && buf[0] === 0x31) walkies.add(h); else walkies.delete(h);
+      return;
+    }
     const vh = topic.split('/')[2];
     const pairing = byVhash.get(vh);
     const payload = buf.toString();
@@ -183,16 +234,19 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   }
 
   async function deliverToWeb(pairing, msg) {
-    const text = msg.type === 'PULSE' ? '(buzz!)' : String(msg.text || '').trim().slice(0, 320);
+    if (msg.type === 'VNOTE' && !VOICE_SECRET) return log('WARN', `pairing ${short(pairing.id)}: voice note, but voice is off here -- dropped`);
+    // A voice note is kept as an entry with the note's id; its text is what a
+    // page (or an inbox row) that cannot play it shows.
+    const text = msg.type === 'PULSE' ? '(buzz!)' : msg.type === 'VNOTE' ? 'Voice note' : String(msg.text || '').trim().slice(0, 320);
     if (!text) return;
-    const entry = { at: Date.now(), from: 'dotdash', text };
+    const entry = { at: Date.now(), from: 'dotdash', text, ...(msg.type === 'VNOTE' ? { vnote: msg.text } : {}) };
     await store.addChat(pairing.id, entry);
     // A page waiting right now AND on screen means they're looking at the chat:
     // no SMS. A background tab (still polling) doesn't count.
     const watching = [...(waiters.get(pairing.id) || [])].some((fn) => fn.visible);
     wake(pairing.id);
-    log('INFO', `pairing ${short(pairing.id)}: message to web contact (${text.length} chars)`);
-    await pushTo(pairing, text);
+    log('INFO', `pairing ${short(pairing.id)}: ${msg.type === 'VNOTE' ? 'voice note' : 'message'} to web contact${msg.type === 'VNOTE' ? '' : ` (${text.length} chars)`}`);
+    await pushTo(pairing, msg.type === 'VNOTE' ? 'Sent you a voice note.' : text);
     if (watching) log('INFO', `pairing ${short(pairing.id)}: chat is open on screen -- no SMS notification`);
     else await maybeNotify(pairing.id);
   }
@@ -453,6 +507,8 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     id: p.id, contactName: p.contactName, displayName: p.displayName,
     // SMS notifications: whether to show the opt-in screen, and their state.
     notify: { asked: !!p.notifyAsked, status: p.notifyStatus || null, hint: p.notifyHint || null },
+    // Whether the page offers recording: the Dot Dash is a walkie and voice is on.
+    voice: voiceFor(p),
   });
 
   async function chatApi(req, res, url, ip) {
@@ -487,7 +543,7 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     // Being back in the chat re-arms the next SMS notification (maybeNotify).
     // A wait counts only from a page on screen (v=1), not a background tab.
     // Written only when a notification is outstanding, not on every poll.
-    const lookedAt = route === 'history' || route === 'send' || (route === 'wait' && url.searchParams.get('v') === '1');
+    const lookedAt = route === 'history' || route === 'send' || route === 'vnote' || (route === 'wait' && url.searchParams.get('v') === '1');
     if (lookedAt && p.notifySentAt && (p.notifySeenAt || 0) < p.notifySentAt) {
       await store.updatePairing(p.id, { notifySeenAt: Date.now() });
     }
@@ -572,6 +628,46 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
       wake(p.id);
       log('INFO', `pairing ${short(p.id)}: web contact message delivered to device (${text.length} chars${cut ? ', shortened' : ''})`);
       return [200, { message: entry, cut }];
+    }
+
+    // Voice notes. GET vnote/<id>: the audio of a note in THIS chat (raw 16-bit
+    // LE mono PCM at 11025 Hz), fetched as the contact. POST vnote: a recording
+    // in the same format, sent to the walkie as a voice note.
+    const vn = /^vnote\/([A-Za-z0-9_-]{22})$/.exec(route);
+    if (vn && req.method === 'GET') {
+      if (!VOICE_SECRET) throw HTTP(404, { status: 'not-found' });
+      // Only a note this chat holds: the route is no window onto other notes.
+      if (!(await store.listChat(p.id)).some((m) => m.vnote === vn[1])) throw HTTP(404, { status: 'gone' });
+      let r;
+      try { r = await vnoteFetch(`${VNOTE_URL}/vnote/play/${vn[1]}`, { headers: { Authorization: `Bearer ${vnotePass({ dev: p.virtualHash, uid: `chat:${p.id}` })}` } }); }
+      catch (e) { log('WARN', `pairing ${short(p.id)}: voice-note server unreachable (${e.message})`); throw HTTP(503, { status: 'unavailable' }); }
+      if (r.status === 404) throw HTTP(404, { status: 'gone' });
+      if (!r.ok) { log('WARN', `pairing ${short(p.id)}: voice note play refused (${r.status})`); throw HTTP(503, { status: 'unavailable' }); }
+      return [200, Buffer.from(await r.arrayBuffer()), 'audio/L16; rate=11025; channels=1'];
+    }
+    if (route === 'vnote' && req.method === 'POST') {
+      if (!voiceFor(p)) throw HTTP(409, { status: 'no-voice' });
+      if (!limits.in.allows(p.id)) throw HTTP(429, { status: 'slow-down' });
+      const pcm = await readBinary(req, VNOTE_MAX_BYTES);
+      if (pcm.length < VNOTE_MIN_BYTES) throw HTTP(400, { status: 'too-short' });
+      limits.in.take(p.id);
+      let r;
+      try {
+        r = await vnoteFetch(`${VNOTE_URL}/vnote/app-send?to=${p.deviceHash}`, {
+          method: 'POST', body: pcm,
+          headers: { Authorization: `Bearer ${vnotePass({ dev: p.virtualHash, to: p.deviceHash, act: 'send', uid: `chat:${p.id}` })}`, 'Content-Type': 'application/octet-stream' },
+        });
+      } catch (e) { log('WARN', `pairing ${short(p.id)}: voice-note server unreachable (${e.message})`); throw HTTP(503, { status: 'unavailable' }); }
+      if (r.status === 429) throw HTTP(429, { status: 'slow-down' });
+      const id = r.ok ? (await r.text()).trim() : '';
+      if (!L.VNOTE_ID_RE.test(id)) { log('WARN', `pairing ${short(p.id)}: voice note send refused (${r.status})`); throw HTTP(503, { status: 'unavailable' }); }
+      // Stored already sent; now tell the walkie, exactly as the app does.
+      client.publish(`doorbell/msg/${p.deviceHash}/${L.msgStamp()}`, `VNOTE,${id},${p.virtualId}`, { qos: 1, retain: true });
+      const entry = { at: Date.now(), from: 'contact', text: 'Voice note', vnote: id };
+      await store.addChat(p.id, entry);
+      wake(p.id);
+      log('INFO', `pairing ${short(p.id)}: web contact voice note delivered to device (${(pcm.length / 22050).toFixed(1)}s)`);
+      return [200, { message: entry }];
     }
 
     if (route === 'push' && req.method === 'POST') {
@@ -705,6 +801,17 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
     });
   }
 
+  function readBinary(req, max) {
+    return new Promise((resolve, reject) => {
+      const parts = []; let n = 0;
+      // Past the limit the rest is read and thrown away, so the 413 still
+      // reaches the page (nginx caps the body before it gets here anyway).
+      req.on('data', (c) => { n += c.length; if (n <= max) parts.push(c); });
+      req.on('end', () => (n > max ? reject(HTTP(413, { status: 'too-long' })) : resolve(Buffer.concat(parts))));
+      req.on('error', reject);
+    });
+  }
+
   const server = http.createServer(async (req, res) => {
     const extra = { 'Cache-Control': 'no-store' };
     const send = (code, obj, type = 'application/json') => {
@@ -780,5 +887,5 @@ export function createService({ db, FieldValue, client, twilio, webPush, fcm, ve
   });
 
 
-  return { server, store, sweep, inbound, applyPairings, onMessage, waiters };
+  return { server, store, sweep, inbound, applyPairings, onMessage, waiters, walkies };
 }

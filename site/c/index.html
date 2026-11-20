@@ -250,6 +250,25 @@
   .consent b { color:var(--ink); }
   .err { color:var(--danger); font-size:15px; min-height:18px; margin:-6px 0 10px; }
   [hidden] { display:none !important; }
+  /* ---- Voice notes (a walkie on the other end only). The play control sits
+          inside the bubble and takes its ink, so it reads on both bubble
+          colours; the mic button is a plain control until it records, when it
+          wears the alert pair -- a red "on air" state, plus the label. ---- */
+  .vn { display:inline-flex; align-items:center; gap:8px; background:none; border:0; color:inherit; font:inherit; font-weight:700; cursor:pointer; padding:2px 0; min-height:32px; }
+  .vn svg { width:16px; height:16px; flex-shrink:0; }
+  .vn .d { font-weight:400; opacity:.85; }
+  .vnerr { display:block; font-size:13px; opacity:.85; margin-top:2px; font-weight:400; }
+  .mic { flex-shrink:0; width:46px; height:46px; display:flex; align-items:center; justify-content:center; border-radius:var(--r-control); border:1px solid var(--rule); background:var(--card); color:var(--accent); cursor:pointer; padding:0; }
+  .mic svg { width:22px; height:22px; }
+  .mic.on { background:var(--alert); border-color:var(--alert); color:var(--alert-ink); }
+  .recbar { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:15px; color:var(--muted); flex-wrap:wrap; }
+  .recbar .grow { flex:1; min-width:0; }
+  .recbar .note { flex-basis:100%; order:9; }
+  .recbar .btn { width:auto; padding:9px 14px; }
+  .recbar .vn { color:var(--accent); }
+  .spin { animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation:none; } }
 </style>
 </head>
 <body>
@@ -302,7 +321,7 @@
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (b) { b._status = r.status; return b; }); });
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function show(html) { app.innerHTML = html; }
+  function show(html) { if (rec) discardRec(); app.innerHTML = html; }
 
   // ------------------------------------------------------------------ mark --
   // The Dot Dash mark as pixels, from brand/marks (smile.py): the enclosure
@@ -697,6 +716,7 @@
       // A chat connected before SMS notifications existed: offer them once.
       if (smsOn && cc.notify && !cc.notify.asked) return screenNotify(token);
       document.querySelector('header .who').textContent = cc.displayName;
+      showMic(cc);
       (msgs[token] || []).forEach(addBubble);
       scrollDown(); markRead(cc);
     });
@@ -711,7 +731,7 @@
       if (r._status === 410 || r._status === 401) { ended(token); return false; }
       if (r._status !== 200) return false;
       msgs[token] = r.messages || [];
-      upsert({ token: token, id: r.id, displayName: r.displayName, contactName: r.contactName, notify: r.notify });
+      upsert({ token: token, id: r.id, displayName: r.displayName, contactName: r.contactName, notify: r.notify, voice: !!r.voice });
       noteLast(token);
       return true;
     }).catch(function () { return false; });
@@ -732,7 +752,8 @@
       '<div id="log"><div class="empty" id="empty">Say hello! Your messages appear on ' + esc(c.displayName || 'the Dot Dash') + '\'s screen.</div></div>' +
       '<div id="pushArea"></div>' +
       '<footer class="compose"><div class="row"><textarea id="msg" rows="1" maxlength="400" placeholder="Message"></textarea>' +
-      '<button class="btn send" id="send">Send</button></div><div class="preview" id="preview"></div>' +
+      '<button class="mic" id="mic" aria-label="Record a voice note" hidden>' + ICON.mic + '</button>' +
+      '<button class="btn send" id="send">Send</button></div><div class="recbar" id="recbar" hidden></div><div class="preview" id="preview"></div>' +
       '<div class="links">' + (smsOn ? '<button id="sms">SMS notifications</button>·' : '') + '<a href="/privacy.html">Privacy</a>·<button id="leave">Leave this chat</button></div></footer>');
     if (many) document.getElementById('back').onclick = inbox;
     if (smsOn) document.getElementById('sms').onclick = function () { screenNotify(c.token); };
@@ -750,6 +771,8 @@
     };
     box.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) { e.preventDefault(); sendMsg(); } };
     document.getElementById('send').onclick = sendMsg;
+    document.getElementById('mic').onclick = function () { if (rec && rec.phase !== 'recorded') stopRec(); else if (!rec) startRec(); };
+    showMic(c);
     document.getElementById('leave').onclick = function () {
       if (!confirm('Leave this chat? ' + c.displayName + ' won\'t be able to message you, and this link will stop working.')) return;
       var t = c.token;
@@ -773,7 +796,7 @@
     });
   }
 
-  function key(m) { return m.at + '|' + m.from + '|' + m.text; }
+  function key(m) { return m.at + '|' + m.from + '|' + (m.vnote || m.text); }
   function addBubble(m) {
     if (shownKeys[key(m)]) return;
     shownKeys[key(m)] = 1;
@@ -786,7 +809,7 @@
     }
     var b = document.createElement('div');
     b.className = 'b ' + (m.from === 'contact' ? 'me' : 'them');
-    b.textContent = m.text;
+    if (m.vnote) noteBubble(b, m.vnote); else b.textContent = m.text;
     log.appendChild(b);
     lastShown = Math.max(lastShown, m.at);
   }
@@ -801,6 +824,268 @@
     noteLast(token);
     if (view === 'chat' && current === token) { list.forEach(addBubble); scrollDown(); if (!document.hidden) markRead(byToken(token)); }
     else if (view === 'inbox') inbox();
+  }
+
+  // ------------------------------------------------------------ voice notes --
+  // Only with a walkie on the other end (history says voice: true). The audio
+  // is what the walkie speaks: 16-bit little-endian mono PCM at 11025 Hz, ten
+  // seconds at most. It goes through /chat/api/vnote, so this page never holds
+  // a pass for the voice-note server; the chat link is the only credential.
+  //
+  // Played through ONE <audio> element, not Web Audio: on an iPhone, Web Audio
+  // is silenced by the ring/silent switch and media elements are not (the app
+  // learned this, main.jsx VoiceNotePlayer). iOS only lets an element play
+  // inside a tap, so the tap first plays a tiny silent clip on it.
+  var RATE = 11025, VN_MAX = 10, VN_MIN = 0.5;
+  var SILENCE = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQQAAAAAAAAA';
+  var ICON = {
+    mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/></svg>',
+    stop: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>',
+    spin: '<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>',
+  };
+  var vnCache = {};      // note id -> { url, dur } (a WAV blob)
+  var vnEl = null;       // the one <audio> element
+  var vnNow = null;      // { stop } of whatever is playing
+  var rec = null;        // the recording in progress, or waiting to be sent
+
+  function fmtDur(s) { s = Math.max(1, Math.round(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function wavUrl(f) {   // Float32 [-1,1] at RATE -> object URL of a WAV
+    var n = f.length, buf = new ArrayBuffer(44 + n * 2), dv = new DataView(buf), i;
+    function str(o, t) { for (var k = 0; k < t.length; k++) dv.setUint8(o + k, t.charCodeAt(k)); }
+    str(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, RATE, true); dv.setUint32(28, RATE * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    str(36, 'data'); dv.setUint32(40, n * 2, true);
+    for (i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.round(Math.max(-1, Math.min(1, f[i])) * 32767), true);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+  // The walkie's ~100 Hz low cut (walkieAudio.js makeHighPass): two one-pole
+  // high-passes, so a squeezed case's pressure thump does not get through.
+  function highPass() {
+    var A = 30900 / 32768, xa = 0, ya = 0, xb = 0, yb = 0;
+    return function (x) {
+      var y = x - xa + A * ya; xa = x; ya = y;
+      var z = y - xb + A * yb; xb = y; yb = z;
+      return z;
+    };
+  }
+  // Peak-normalise to `target`, gain capped at `maxGain` (main.jsx vnoteScale).
+  function scaled(f, target, maxGain) {
+    var peak = 0, i, out = new Float32Array(f.length);
+    for (i = 0; i < f.length; i++) peak = Math.max(peak, Math.abs(f[i]));
+    var g = peak > 0 ? Math.min(maxGain, target / peak) : 1;
+    for (i = 0; i < f.length; i++) out[i] = Math.max(-1, Math.min(1, f[i] * g));
+    return out;
+  }
+  function audioEl() {
+    if (!vnEl) { vnEl = new Audio(); vnEl.setAttribute('playsinline', ''); vnEl.preload = 'auto'; }
+    return vnEl;
+  }
+
+  // The play control inside a voice-note bubble.
+  function noteBubble(b, id) {
+    var btn = document.createElement('button'), err = document.createElement('span');
+    btn.className = 'vn'; err.className = 'vnerr';
+    function paint(phase) {
+      var d = vnCache[id] ? '<span class="d">' + fmtDur(vnCache[id].dur) + '</span>' : '';
+      btn.innerHTML = (phase === 'loading' ? ICON.spin : phase === 'playing' ? ICON.stop : ICON.play) +
+        '<span>' + (phase === 'loading' ? 'Loading…' : 'Voice note') + '</span>' + (phase === 'loading' ? '' : d);
+      btn.setAttribute('aria-label', phase === 'playing' ? 'Stop voice note' : 'Play voice note');
+      btn.dataset.phase = phase;
+    }
+    paint('idle');
+    btn.onclick = function () { playNote(id, paint, err); };
+    b.appendChild(btn); b.appendChild(err);
+  }
+
+  function playNote(id, paint, err) {
+    var c = byToken(current); if (!c) return;
+    var mine = vnNow && vnNow.id === id;
+    if (vnNow) vnNow.stop();
+    if (mine) return;               // the tap was Stop
+    err.textContent = '';
+    var el = audioEl(), cancelled = false, started = false;
+    el.onended = null;
+    if (!vnCache[id]) { el.src = SILENCE; el.play().catch(function () {}); }   // unlock, inside the tap
+    var handle = { id: id, stop: function () {
+      cancelled = true;
+      if (started) { el.onended = null; try { el.pause(); } catch (e) {} }
+      if (vnNow === handle) vnNow = null;
+      paint('idle');
+    } };
+    vnNow = handle;
+    paint('loading');
+    var load = vnCache[id] ? Promise.resolve(vnCache[id]) :
+      fetch(API + 'vnote/' + encodeURIComponent(id), { headers: { Authorization: 'Chat ' + authOf(c) } }).then(function (r) {
+        if (r.status === 404) throw new Error('This voice note has expired.');
+        if (r.status === 403) { staleClaim(c.token); throw new Error(''); }
+        if (r.status === 410) { ended(c.token); throw new Error(''); }
+        if (!r.ok) throw new Error('Couldn\'t load this voice note.');
+        return r.arrayBuffer();
+      }).then(function (raw) {
+        // The recording is quiet (the walkie plays it ~x12 with a limiter):
+        // low cut, then the peak to ~0.9 with the gain capped at 16.
+        var dv = new DataView(raw), n = raw.byteLength >> 1, f = new Float32Array(n), hp = highPass(), i;
+        if (n < 2) throw new Error('Couldn\'t load this voice note.');
+        for (i = 0; i < n; i++) f[i] = hp(dv.getInt16(i * 2, true) / 32768);
+        return (vnCache[id] = { url: wavUrl(scaled(f, 0.9, 16)), dur: n / RATE });
+      });
+    load.then(function (note) {
+      if (cancelled) return;
+      el.src = note.url; el.currentTime = 0;
+      el.onended = function () { handle.stop(); };
+      started = true;
+      return el.play().then(function () { if (!cancelled) paint('playing'); });
+    }).catch(function (e) {
+      if (vnNow === handle) vnNow = null;
+      if (cancelled) return;
+      paint('idle');
+      err.textContent = e && e.message !== undefined ? e.message : 'Couldn\'t play this voice note.';
+      if (e && e.name === 'NotAllowedError') err.textContent = 'Tap again to play.';
+    });
+  }
+
+  // ---- Recording: tap to start, tap to stop (not hold: a first tap may open
+  // the browser's microphone prompt, which a held finger cannot answer). Then
+  // listen, delete or send.
+  function showMic(c) {
+    var m = document.getElementById('mic');
+    if (m) m.hidden = !(c && c.voice);
+  }
+  function recbar(html) {
+    var b = document.getElementById('recbar'); if (!b) return null;
+    b.hidden = !html; b.innerHTML = html || '';
+    return b;
+  }
+  function micState(on) {
+    var m = document.getElementById('mic'); if (!m) return;
+    m.className = 'mic' + (on ? ' on' : '');
+    m.innerHTML = on ? ICON.stop : ICON.mic;
+    m.setAttribute('aria-label', on ? 'Stop recording' : 'Record a voice note');
+  }
+  // Linear resampler with a two-pole low-pass first (walkieAudio.js
+  // LinearResampler, cutoff 4500 Hz), state kept across chunks.
+  function resampler(from) {
+    var step = from / RATE, pos = 0, prev = 0, lp = 0, lp2 = 0, a = 1 - Math.exp(-2 * Math.PI * 4500 / from);
+    return function (input) {
+      var n = input.length, x = new Float32Array(n), out = [], i;
+      for (i = 0; i < n; i++) { lp += a * (input[i] - lp); lp2 += a * (lp - lp2); x[i] = lp2; }
+      if (!n) return x;
+      while (pos < n - 1) {
+        var i0 = Math.floor(pos), fr = pos - i0, s0 = i0 < 0 ? prev : x[i0];
+        out.push(s0 + (x[i0 + 1] - s0) * fr);
+        pos += step;
+      }
+      pos -= n; prev = x[n - 1];
+      return out;
+    };
+  }
+  function releaseRec(r) {
+    if (r.released) return; r.released = true;
+    clearInterval(r.timer);
+    [r.src, r.node, r.sink].forEach(function (n) { try { if (n) n.disconnect(); } catch (e) {} });
+    if (r.stream) r.stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+    try { r.ctx.close(); } catch (e) {}
+  }
+  function discardRec() {
+    var r = rec; rec = null;
+    if (!r) return;
+    releaseRec(r);
+    if (r.preview && !r.kept) URL.revokeObjectURL(r.preview);
+    if (vnNow && vnNow.id === 'draft') vnNow.stop();
+    micState(false); recbar('');
+  }
+  function startRec() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { recbar('<span class="grow">This browser can\'t record voice notes.</span>'); return; }
+    if (vnNow) vnNow.stop();
+    var ctx = new AC();   // inside the tap, or iOS keeps it suspended
+    try { ctx.resume(); } catch (e) {}
+    var r = rec = { phase: 'starting', ctx: ctx, chunks: [], total: 0, rs: resampler(ctx.sampleRate), hp: highPass() };
+    micState(true); recbar('<span class="grow">Starting the microphone…</span>');
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }).then(function (stream) {
+      r.stream = stream;
+      if (rec !== r) return releaseRec(r);
+      r.src = ctx.createMediaStreamSource(stream);
+      r.node = ctx.createScriptProcessor(4096, 1, 1);
+      r.sink = ctx.createGain(); r.sink.gain.value = 0;
+      r.node.onaudioprocess = function (e) {
+        if (r.phase !== 'recording') return;
+        var s = r.rs(e.inputBuffer.getChannelData(0)), out = new Float32Array(s.length), i;
+        for (i = 0; i < s.length; i++) out[i] = r.hp(s[i]);
+        r.chunks.push(out); r.total += out.length;
+        if (r.total >= VN_MAX * RATE) stopRec();
+      };
+      r.src.connect(r.node); r.node.connect(r.sink); r.sink.connect(ctx.destination);
+      r.phase = 'recording'; r.t0 = Date.now();
+      var tickRec = function () {
+        var left = Math.max(0, VN_MAX - Math.floor((Date.now() - r.t0) / 1000));
+        recbar('<span class="grow"><b>Recording</b> · ' + left + 's left. Tap the red button to stop.</span>');
+        if (Date.now() - r.t0 > (VN_MAX + 1) * 1000) stopRec();   // in case the audio stalls
+      };
+      tickRec(); r.timer = setInterval(tickRec, 250);
+    }, function () {
+      if (rec !== r) return;
+      releaseRec(r); rec = null; micState(false);
+      recbar('<span class="grow">Microphone access is needed to record. Allow it in your browser settings and try again.</span>');
+    });
+  }
+  function stopRec() {
+    var r = rec; if (!r || r.phase === 'recorded') return;
+    var wasRecording = r.phase === 'recording';
+    r.phase = 'recorded';
+    releaseRec(r); micState(false);
+    var n = Math.min(r.total, VN_MAX * RATE), pcm = new Float32Array(n), o = 0;
+    r.chunks.forEach(function (ch) { var k = Math.min(ch.length, n - o); if (k > 0) { pcm.set(ch.subarray(0, k), o); o += k; } });
+    if (!wasRecording || n < VN_MIN * RATE) { rec = null; recbar('<span class="grow">Too short. Tap the microphone, talk, then tap it again.</span>'); return; }
+    // The walkie's speaker path wants the quiet level the walkie itself sends
+    // (main.jsx: peak 0.12, gain up to 8); the preview here is played loud.
+    var wire = scaled(pcm, 0.12, 8), bytes = new ArrayBuffer(n * 2), dv = new DataView(bytes), i;
+    for (i = 0; i < n; i++) { var v = wire[i]; dv.setInt16(i * 2, v < 0 ? Math.round(v * 32768) : Math.round(v * 32767), true); }
+    r.bytes = bytes; r.dur = n / RATE; r.preview = wavUrl(scaled(pcm, 0.9, 16));
+    drawRecorded(r);
+  }
+  function drawRecorded(r, note) {
+    var b = recbar('<button class="vn" id="rplay"></button><span class="grow"></span>' + (note ? '<span class="note">' + esc(note) + '</span>' : '') +
+      '<button class="btn ghost" id="rdel">Delete</button><button class="btn" id="rsend">Send voice note</button>');
+    if (!b) return;
+    var play = document.getElementById('rplay');
+    var paint = function (phase) { play.innerHTML = (phase === 'playing' ? ICON.stop : ICON.play) + '<span>' + fmtDur(r.dur) + '</span>'; play.setAttribute('aria-label', phase === 'playing' ? 'Stop' : 'Listen before sending'); };
+    paint('idle');
+    play.onclick = function () {
+      var mine = vnNow && vnNow.id === 'draft';
+      if (vnNow) vnNow.stop();
+      if (mine) return;
+      var el = audioEl(), h = { id: 'draft', stop: function () { el.onended = null; try { el.pause(); } catch (e) {} if (vnNow === h) vnNow = null; paint('idle'); } };
+      vnNow = h; el.src = r.preview; el.currentTime = 0; el.onended = h.stop;
+      paint('playing'); el.play().catch(h.stop);
+    };
+    document.getElementById('rdel').onclick = discardRec;
+    document.getElementById('rsend').onclick = function () { sendNote(r, this); };
+  }
+  function sendNote(r, btn) {
+    var c = byToken(current); if (!c || rec !== r) return;
+    if (vnNow && vnNow.id === 'draft') vnNow.stop();
+    btn.disabled = true; btn.textContent = 'Sending…';
+    fetch(API + 'vnote', { method: 'POST', body: r.bytes, headers: { Authorization: 'Chat ' + authOf(c), 'Content-Type': 'application/octet-stream' } }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) { j._status = res.status; return j; });
+    }).then(function (j) {
+      if (j._status === 200 && j.message) {
+        r.kept = true;
+        vnCache[j.message.vnote] = { url: r.preview, dur: r.dur };   // the cache owns the URL now
+        if (rec === r) discardRec();
+        received(c.token, [j.message]);
+        return;
+      }
+      if (j._status === 410) return ended(c.token);
+      if (j._status === 403) return staleClaim(c.token);
+      if (rec !== r) return;
+      drawRecorded(r, j._status === 429 ? 'That\'s a lot at once. Wait a minute and try again.'
+        : j._status === 409 ? 'Voice notes aren\'t available for this Dot Dash right now.'
+        : 'Couldn\'t send. Try again.');
+      if (j._status === 409) { upsert({ token: c.token, voice: false }); }
+    }).catch(function () { if (rec === r) drawRecorded(r, 'Couldn\'t send. Check your connection and try again.'); });
   }
 
   function sendMsg() {

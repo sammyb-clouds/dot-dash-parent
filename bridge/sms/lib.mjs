@@ -216,16 +216,21 @@ export const isVoiceTraffic = (payload) => String(payload).startsWith('VOICE_');
  * A device's outgoing message: "TYPE,TEXT,SENDER". Split on the first and LAST
  * comma, as the push bridge does, so a sender field can never absorb text.
  */
+export const VNOTE_ID_RE = /^[A-Za-z0-9_-]{22}$/;
+
 export function parseDeviceMessage(payload) {
   const s = String(payload || '');
   const first = s.indexOf(',');
   const last = s.lastIndexOf(',');
   if (first < 1 || last <= first) return null;
   const type = s.slice(0, first);
-  if (!['TEXT', 'MORSE', 'PULSE'].includes(type)) return null;
+  if (!['TEXT', 'MORSE', 'PULSE', 'VNOTE'].includes(type)) return null;
   const sender = s.slice(last + 1).trim();
   if (!sender) return null;
-  return { type, text: s.slice(first + 1, last), sender };
+  const text = s.slice(first + 1, last);
+  // A walkie voice note: its text is the note's id on the voice-note server.
+  if (type === 'VNOTE' && !VNOTE_ID_RE.test(text)) return null;
+  return { type, text, sender };
 }
 
 // Strip the 4-digit PIN for display, as the device and app do.

@@ -18,7 +18,7 @@ const GRANDMA = '+14155552671', STRANGER = '+14155559999';
 const MAYA = 'MAYA0515', LEO = 'LEO0101';
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
-async function setup({ sandboxed = false } = {}) {
+async function setup({ sandboxed = false, voiceSecret = null, vnoteFetch } = {}) {
   const db = new FakeDB();
   const client = new FakeMqtt();
   const sandbox = sandboxed ? makeSandbox({ file: path.join(os.tmpdir(), `sms-sandbox-${crypto.randomBytes(4).toString('hex')}.json`) }) : null;
@@ -34,7 +34,7 @@ async function setup({ sandboxed = false } = {}) {
   const keys = L.makeKeys(crypto.randomBytes(32).toString('base64'));
   const logs = [];
   const svc = createService({
-    db, FieldValue, client, twilio, webPush, fcm, keys, sandbox,
+    db, FieldValue, client, twilio, webPush, fcm, keys, sandbox, vnoteFetch,
     verifyIdToken: async (t) => ({ 'tok-u1': 'u1', 'tok-u2': 'u2' }[t] || null),
     config: {
       APP_ID: 'dd', PUBLIC_BASE: BASE, TWILIO_AUTH_TOKEN: AUTH, RETRY_MS: 1, WAIT_MS: 300,
@@ -42,6 +42,7 @@ async function setup({ sandboxed = false } = {}) {
       STATE_PATH: path.join(os.tmpdir(), `sms-state-${crypto.randomBytes(4).toString('hex')}.json`),
       APP_ORIGINS: new Set(['https://app.example.test', 'capacitor://localhost']),
       SANDBOX_KEY: sandboxed ? 'k'.repeat(32) : null,
+      VOICE_TOKEN_SECRET: voiceSecret, VNOTE_URL: 'http://vnote.test',
     },
     log: (...a) => logs.push(a.join(' ')),
   });
@@ -537,4 +538,130 @@ test('SMS sandbox: captured instead of sent, replies simulated like Twilio, key-
 test('without the sandbox, its API does not exist', async () => {
   const t = await setup();
   try { assert.equal((await t.sb('GET', 'numbers')).status, 404); } finally { t.close(); }
+});
+
+// A stand-in for relay/voice_notes.py: checks the vn1 pass exactly as it does
+// (HMAC over "vn1.<payload>", dev, exp, and for app-send act/to), and keeps notes.
+function fakeVoiceServer(secretHex) {
+  const secret = Buffer.from(secretHex, 'hex');
+  const notes = new Map(), calls = [];
+  const claimsOf = (auth) => {
+    const [a, b, sig] = String(auth || '').replace(/^Bearer /, '').split('.');
+    if (a !== 'vn1') return null;
+    if (crypto.createHmac('sha256', secret).update(`${a}.${b}`).digest('base64url') !== sig) return null;
+    const c = JSON.parse(Buffer.from(b, 'base64url').toString());
+    return c.exp > Date.now() / 1000 ? c : null;
+  };
+  const reply = (status, body = '') => new Response(body, { status });
+  async function fetchFn(url, opts = {}) {
+    const u = new URL(url), c = claimsOf(opts.headers?.Authorization);
+    calls.push({ path: u.pathname, claims: c });
+    if (!c) return reply(401, 'bad-pass');
+    if (u.pathname === '/vnote/app-send') {
+      const to = u.searchParams.get('to');
+      if (c.act !== 'send' || c.to !== to) return reply(403, 'not-yours');
+      const id = crypto.randomBytes(16).toString('base64url').slice(0, 22);
+      notes.set(id, { from: c.dev, to, pcm: Buffer.from(opts.body), state: 'sent' });
+      return reply(200, id);
+    }
+    const m = /^\/vnote\/play\/(.+)$/.exec(u.pathname);
+    const n = m && notes.get(m[1]);
+    if (!n) return reply(404, 'gone');
+    if (!(n.from === c.dev || (n.to === c.dev && n.state === 'sent'))) return reply(403, 'not-yours');
+    return new Response(n.pcm, { status: 200 });
+  }
+  return { fetchFn, notes, calls };
+}
+
+test('web link voice notes: walkie marker, both directions, only this chat, off without the secret', async () => {
+  const secret = crypto.randomBytes(32).toString('hex');
+  const vs = fakeVoiceServer(secret);
+  const t = await setup({ voiceSecret: secret, vnoteFetch: vs.fetchFn });
+  try {
+    const maya = await t.addDevice('u1', 'MAC1', MAYA);
+    const add = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', contactName: 'Grandma', channel: 'web' } });
+    const c = add.body.contact, token = add.body.link.split('/c/')[1], vh = L.hashId(c.virtualId);
+    const mark = () => t.client.published.filter((m) => m.topic === `doorbell/score/vnote/${vh}`).at(-1)?.payload;
+    await tick();
+    assert.equal(mark(), '', 'a pending link must not offer VOICE');
+    const auth = `${token}.${(await t.chat('POST', 'claim', { body: { token } })).body.claim}`;
+    await tick();
+    assert.equal(mark(), '1', 'a live chat carries the voice marker');
+    assert.ok(t.client.subs.has(`doorbell/score/voice/${maya}`));
+
+    // Not a walkie (yet): no recording offered, and a send is refused.
+    const pcm = Buffer.alloc(22050, 1);   // one second
+    const postNote = (body, a = auth) => fetch(`http://127.0.0.1:${t.port}/chat/api/vnote`, {
+      method: 'POST', body, headers: { Authorization: `Chat ${a}`, 'Content-Type': 'application/octet-stream', 'X-Forwarded-For': '9.9.9.9' } });
+    assert.equal((await t.chat('GET', 'history', { auth })).body.voice, false);
+    assert.equal((await postNote(pcm)).status, 409);
+
+    // The walkie's marker arrives: now it is offered. It is not cleared.
+    const before = t.client.published.length;
+    t.client.deliver(`doorbell/score/voice/${maya}`, '1');
+    await tick();
+    assert.equal(t.client.published.length, before, 'a marker must never be cleared or answered');
+    assert.equal((await t.chat('GET', 'history', { auth })).body.voice, true);
+
+    // --- contact -> walkie
+    assert.equal((await postNote(Buffer.alloc(100))).status, 400, 'too short');
+    assert.equal((await postNote(Buffer.alloc(11025 * 2 * 11 + 9000))).status, 413, 'too long');
+    let r = await postNote(pcm);
+    assert.equal(r.status, 200);
+    const sent = (await r.json()).message;
+    assert.equal(sent.from, 'contact'); assert.equal(sent.text, 'Voice note'); assert.match(sent.vnote, L.VNOTE_ID_RE);
+    const stored = vs.notes.get(sent.vnote);
+    assert.equal(stored.from, vh); assert.equal(stored.to, maya); assert.equal(stored.pcm.length, pcm.length);
+    assert.equal(t.toDevice(maya).at(-1).payload, `VNOTE,${sent.vnote},${c.virtualId}`);
+
+    // --- walkie -> contact: a note the walkie recorded to Grandma's hash
+    const nid = 'A'.repeat(22);
+    vs.notes.set(nid, { from: maya, to: vh, pcm: Buffer.from([1, 2, 3, 4]), state: 'sent' });
+    t.webPush.sent.length = 0;
+    await t.chat('POST', 'push', { auth, body: { subscription: { endpoint: 'https://push.example/abc', keys: { p256dh: 'P', auth: 'A' } } } });
+    t.client.deliver(`doorbell/msg/${vh}/17000000000009`, `VNOTE,${nid},${MAYA}`);
+    await tick(); await tick();
+    const hist = (await t.chat('GET', 'history', { auth })).body.messages;
+    assert.deepEqual(hist.at(-1), { ...hist.at(-1), from: 'dotdash', text: 'Voice note', vnote: nid });
+    assert.equal(t.webPush.sent.at(-1).payload.body, 'Sent you a voice note.');
+    const play = (id, a = auth) => fetch(`http://127.0.0.1:${t.port}/chat/api/vnote/${id}`, { headers: { Authorization: `Chat ${a}`, 'X-Forwarded-For': '9.9.9.9' } });
+    r = await play(nid);
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get('content-type'), /audio\/L16/);
+    assert.deepEqual([...new Uint8Array(await r.arrayBuffer())], [1, 2, 3, 4]);
+    assert.equal(vs.calls.at(-1).claims.dev, vh, 'played as the contact, never as the device');
+    assert.equal((await play(sent.vnote)).status, 200, 'the contact can replay their own note');
+
+    // A note that is not in this chat is not reachable through it, even if it exists.
+    const other = 'B'.repeat(22);
+    vs.notes.set(other, { from: maya, to: vh, pcm: Buffer.from([9]), state: 'sent' });
+    assert.equal((await play(other)).status, 404);
+    // A malformed VNOTE from the device is not stored.
+    t.client.deliver(`doorbell/msg/${vh}/17000000000010`, `VNOTE,../etc,${MAYA}`);
+    await tick();
+    assert.equal((await t.chat('GET', 'history', { auth })).body.messages.filter((m) => m.vnote).length, 2);
+
+    // Leaving withdraws the marker.
+    await t.chat('POST', 'leave', { auth });
+    await tick();
+    assert.equal(mark(), '');
+  } finally { t.close(); }
+});
+
+test('web link voice notes are off without VOICE_TOKEN_SECRET', async () => {
+  const t = await setup();
+  try {
+    const maya = await t.addDevice('u1', 'MAC1', MAYA);
+    const add = await t.api('POST', '/sms/contacts', { body: { deviceId: 'MAC1', contactName: 'Grandma', channel: 'web' } });
+    const token = add.body.link.split('/c/')[1], vh = L.hashId(add.body.contact.virtualId);
+    const auth = `${token}.${(await t.chat('POST', 'claim', { body: { token } })).body.claim}`;
+    t.client.deliver(`doorbell/score/voice/${maya}`, '1');
+    await tick();
+    assert.ok(!t.client.subs.has(`doorbell/score/voice/${maya}`));
+    assert.ok(!t.client.published.some((m) => m.topic === `doorbell/score/vnote/${vh}` && m.payload === '1'));
+    assert.equal((await t.chat('GET', 'history', { auth })).body.voice, false);
+    t.client.deliver(`doorbell/msg/${vh}/17000000000011`, `VNOTE,${'C'.repeat(22)},${MAYA}`);
+    await tick();
+    assert.equal((await t.chat('GET', 'history', { auth })).body.messages.length, 0);
+  } finally { t.close(); }
 });

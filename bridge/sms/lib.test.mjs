@@ -77,6 +77,8 @@ test('toDeviceText: charset, commas, emoji, photos, length', () => {
 test('parseDeviceMessage / toSmsBody', () => {
   assert.deepEqual(L.parseDeviceMessage('TEXT,HI GRANDMA,MAYA0515'), { type: 'TEXT', text: 'HI GRANDMA', sender: 'MAYA0515' });
   assert.equal(L.parseDeviceMessage('CMD,X,Y'), null);
+  assert.deepEqual(L.parseDeviceMessage(`VNOTE,${'a'.repeat(22)},MAYA0515`), { type: 'VNOTE', text: 'a'.repeat(22), sender: 'MAYA0515' });
+  assert.equal(L.parseDeviceMessage('VNOTE,short,MAYA0515'), null);
   assert.equal(L.parseDeviceMessage('TEXT,HI'), null);
   assert.equal(L.parseDeviceMessage(''), null);
   assert.ok(L.isGameTraffic('GAME') && !L.isGameTraffic('TEXT'));

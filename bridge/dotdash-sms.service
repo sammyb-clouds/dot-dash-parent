@@ -8,6 +8,8 @@ Type=simple
 WorkingDirectory=/root/dotdash_bridge
 # Twilio credentials, SMS_DATA_KEY, MQTT_PASS. 0600, root only, never in git.
 EnvironmentFile=/root/dotdash_sms/sms.env
+# VOICE_TOKEN_SECRET, shared with enroll.mjs and the voice-note server: web contacts' voice notes.
+EnvironmentFile=-/root/dotdash_dynsec/voice.env
 ExecStart=/usr/bin/node /root/dotdash_bridge/sms.mjs
 Restart=always
 RestartSec=5
