@@ -36,35 +36,28 @@ import crypto from 'node:crypto';
 // One campaign at a time lives here. A new campaign = a new CAMPAIGN name (so its
 // sent-log starts empty) and new copy. Earlier ones are in git history:
 //   warmup-2026-11  "Another way to get a Dot Dash is coming"  sent 2026-11-10/11, 234/0
+//   drop1-open      "Buy a Dot Dash pair: Registration is open" sent 2026-11-18, 260/0
 // The header logo is site/media/email-mark.png, served from dotdashdevice.com: the
 // 48-grid pixel mark at 3x, white ground (an email card is white in every client).
-const CAMPAIGN = 'drop1-open';
-const SUBJECT = 'Buy a Dot Dash pair: Registration is open';
+const CAMPAIGN = 'drop1-lastcall';
+const SUBJECT = 'Dot Dash registration closes today at noon ET';
 // The inbox's grey line under the subject. Without one, clients show the first
 // words of the body, which here would be "DOT DASH Hi,".
-const PREHEADER = 'Anyone, anywhere can register free until Friday at noon ET. Five pairs, drawn at random.';
+const PREHEADER = 'Five pairs, drawn at random. Registering is free, and open to anyone in the world.';
 const POSTAL = 'Dot Dash · 467 Van Buren St, Brooklyn, NY 11221';
 const DROP_URL = 'https://drop.dotdashdevice.com';
 
 const TEXT = `Hi,
 
-Last week I said another way to get a Dot Dash was coming. Here it is.
+A short reminder: registration for the first Dot Dash drop closes today, Friday, at 12:00 pm ET.
 
-I've built five pairs, and anyone in the world can register to buy one. More people want them than I can build right now, so instead of a race to check out, there's a draw:
-
-1. Register by Friday, November 20 at 12:00 pm ET. It's free and takes a minute: your name, your email and one question. No card.
-2. Five names are drawn at random. There's no way to improve your odds.
-3. If you're drawn, you get a personal link and 24 hours to buy a pair for $100 plus shipping. If someone passes, their place goes to the next name on the reserve list.
+Five pairs. Five names drawn at random. If you're drawn, you get a personal link and 24 hours to buy a pair for $100 plus shipping. Registering is free, commits you to nothing, and is open to anyone in the world.
 
 Register here: ${DROP_URL}
 
-We ship worldwide. Standard shipping is $8 in the US, $15 to Canada, $20 to Europe, Australia and New Zealand, and $30 everywhere else, with faster options at checkout. Where your country charges import duties, they're paid on delivery.
-
 A Dot Dash is a pair of small devices that send messages to each other in Morse code. Tap out HELLO on one, and it arrives on the other, anywhere there's Wi-Fi.
 
-Two honest notes. These are beta units: they work, and early users are the reason the next version will be better. And five is a small number, so most people who register won't be drawn this time. This is the first drop, not the last.
-
-One favor: results and buying links come from drop@dotdashdevice.com. Add it to your contacts now, so your 24-hour link doesn't land in spam.
+Already registered? You're set, and there's nothing more to do. Everyone who registered gets a message this afternoon, drawn or not. It comes from drop@dotdashdevice.com, so check spam if you don't see it.
 
 Sam
 Dot Dash
@@ -91,20 +84,13 @@ const HTML = `<!doctype html>
 <span style="display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:20px;line-height:1.2;letter-spacing:.04em">DOT DASH</span>
 </a>
 <p style="${P}">Hi,</p>
-<p style="${P}">Last week I said another way to get a Dot Dash was coming. Here it is.</p>
-<p style="margin:0 0 8px">I&rsquo;ve built five pairs, and <strong>anyone in the world can register to buy one</strong>. More people want them than I can build right now, so instead of a race to check out, there&rsquo;s a draw:</p>
-<ol style="margin:0 0 16px;padding-left:22px">
-<li style="margin:0 0 6px"><strong>Register by Friday, November 20 at 12:00&nbsp;pm ET.</strong> It&rsquo;s free and takes a minute: your name, your email and one question. No card.</li>
-<li style="margin:0 0 6px"><strong>Five names are drawn at random.</strong> There&rsquo;s no way to improve your odds.</li>
-<li style="margin:0"><strong>If you&rsquo;re drawn, you get a personal link and 24 hours to buy</strong> a pair for $100 plus shipping. If someone passes, their place goes to the next name on the reserve list.</li>
-</ol>
+<p style="${P}">A short reminder: registration for the first Dot Dash drop closes <strong>today, Friday, at 12:00&nbsp;pm ET</strong>.</p>
+<p style="${P}">Five pairs. Five names drawn at random. If you&rsquo;re drawn, you get a personal link and 24 hours to buy a pair for $100 plus shipping. Registering is free, commits you to nothing, and is open to <strong>anyone in the world</strong>.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px"><tr><td style="border-radius:12px;background:#2563eb">
 <a href="${DROP_URL}" style="display:inline-block;padding:13px 20px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;letter-spacing:.04em;color:#ffffff;text-decoration:none;text-transform:uppercase">Register free</a>
 </td></tr></table>
-<p style="${P}"><strong>We ship worldwide.</strong> Standard shipping is $8 in the US, $15 to Canada, $20 to Europe, Australia and New Zealand, and $30 everywhere else, with faster options at checkout. Where your country charges import duties, they&rsquo;re paid on delivery.</p>
 <p style="${P}">A Dot Dash is a pair of small devices that send messages to each other in Morse code. Tap out HELLO on one, and it arrives on the other, anywhere there&rsquo;s Wi-Fi.</p>
-<p style="${P}">Two honest notes. These are beta units: they work, and early users are the reason the next version will be better. And five is a small number, so most people who register won&rsquo;t be drawn this time. This is the first drop, not the last.</p>
-<p style="${P}">One favor: results and buying links come from <strong>drop@dotdashdevice.com</strong>. Add it to your contacts now, so your 24-hour link doesn&rsquo;t land in spam.</p>
+<p style="${P}">Already registered? You&rsquo;re set, and there&rsquo;s nothing more to do. Everyone who registered gets a message this afternoon, drawn or not. It comes from <strong>drop@dotdashdevice.com</strong>, so check spam if you don&rsquo;t see it.</p>
 <p style="margin:0">Sam<br>Dot Dash</p>
 </td></tr>
 <tr><td style="padding:0 24px 20px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#55514b;border-top:1px solid #ece8e1">
