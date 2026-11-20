@@ -59,7 +59,7 @@ permission; see `docs/app-store-review.md` section 6.
 Deliberately not a real family. This identity is public in the `identities`
 collection and anyone can send a friend request to it.
 
-## App Store Connect copy
+## App Store Connect copy (in use during TestFlight)
 
 **Beta App Description**
 
@@ -100,3 +100,60 @@ collection and anyone can send a friend request to it.
 
 **Privacy policy:** https://app.dotdashdevice.com/privacy.html
 (source at `app/public/privacy.html`)
+
+## Full App Store launch copy (NOT used during TestFlight)
+
+Written 2026-11-20 for the public App Store listing. **Sam's call: during the
+TestFlight stage this is left out** and the copy above stays in use. Paste
+these in only when the app goes to the full App Store. It follows the copy
+rules: "message", never "text", and no "parent", "family" or "child".
+
+Before launch, also fix the App Store badge on the public pages (see the
+App Store notes in `docs/app-store-review.md`).
+
+**Subtitle** (30 max)
+
+> Morse code messenger companion
+
+**Promotional text** (170 max)
+
+> New: voice notes and walkie calls. With a walkie Dot Dash, send a 10-second voice note or talk live with push-to-talk, right from Chat.
+
+**Description**
+
+> Dot Dash is a palm-sized, screen-free messenger. Two buttons, a tiny display, and no camera, web browser or location tracking. It sends Morse code and pre-written messages over Wi-Fi to other Dot Dashes and to phones.
+>
+> This app is how you set it up and stay in touch:
+> • Chat with a Dot Dash from your phone
+> • Choose who it can message. Only the app can add a friend
+> • Write the pre-written messages it can send
+> • Manage its Wi-Fi networks, arcade and points
+> • See recent activity and approve new contact requests
+>
+> Walkie Dot Dash: send voice notes of up to 10 seconds, play the ones it sends you, and talk live with push-to-talk.
+>
+> Requires a Dot Dash device.
+
+**Keywords** (100 max)
+
+> morse code,messenger,walkie talkie,voice notes,screen-free,kids messenger,push to talk,pager
+
+**Beta / listing description** (replaces the Beta App Description above)
+
+> Dot Dash is the companion app for the Dot Dash, a small screen-free messenger that sends Morse code and pre-written messages over Wi-Fi. Use the app to set up a Dot Dash, choose its friends and the messages it can send, and chat with it from your phone. With a walkie Dot Dash you can also send voice notes and talk live with push-to-talk.
+
+**What's New / What to Test** (the build that first carries audio)
+
+> New in this build: voice notes and walkie calls.
+> • Voice notes: in a chat with a walkie Dot Dash, tap Voice note, hold the button to record up to 10 seconds, then play it back and tap Send. Voice notes from a walkie play right in the chat and in the Log.
+> • Walkie calls: when the walkie is online, tap Walkie, then Call. Hold the big button to talk and let go to listen.
+> • The app asks to use your microphone only the first time you record or call. A Dot Dash without a walkie never shows these buttons.
+> Also new: a Dot Dash loading screen and refreshed Settings icons.
+
+**App Review notes** (replaces the review notes above)
+
+> Dot Dash is a companion to a physical messenger device, so full use normally needs the hardware. The demo account below is already paired to a virtual Dot Dash that we run. It stays online and replies when you send it a message from the Chat tab.
+>
+> Main features: Chat sends messages and shows replies. Log shows recent activity and any new contact requests waiting for approval. Settings covers the device's friends, its pre-written messages, Wi-Fi networks, notifications and account deletion. Tutorials explains the device itself. Notifications are off until turned on in Settings.
+>
+> Microphone: the walkie model of Dot Dash has a microphone and speaker. In a chat with one, two buttons appear below the message box: Voice note and Walkie. The app uses the microphone only while you hold the record button (a voice note of up to 10 seconds) or the talk button during a push-to-talk call, and it asks permission the first time. The demo device is set up as a walkie, so you can record and send a voice note from Chat and it will reply that it arrived. A live call needs the physical device to answer, so a call will not connect on the demo account. The attached video shows a call with real hardware. Voice notes are kept on our server for 7 days so they can be played. Calls are relayed live and never recorded.
